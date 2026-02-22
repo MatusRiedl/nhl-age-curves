@@ -9,7 +9,31 @@ st.markdown("""
     <style>
         .block-container { padding-top: 2rem !important; padding-bottom: 0rem !important; }
         h1 { padding-bottom: 0px !important; margin-bottom: 0px !important; }
+        
+        /* Make global buttons full width */
         .stButton button { width: 100%; }
+        
+        /* ...but stop the red X button from expanding off the screen */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] div.stButton button {
+            width: auto !important;
+            min-width: 0 !important;
+            padding: 0.2rem 0.6rem !important;
+            float: right;
+        }
+
+        /* Lock the sidebar layout tight */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            gap: 0 !important;
+        }
+        
+        .player-name {
+            font-size: 15px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
         
         /* Make ONLY the Add to Chart button blue via anchor injection */
         div.element-container:has(#blue-btn-anchor) + div.element-container button {
@@ -22,28 +46,6 @@ st.markdown("""
             border-color: #1a569d !important;
         }
 
-        /* Lock the red X button inside the mobile sidebar */
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
-            flex-wrap: nowrap !important;
-            align-items: center !important;
-            gap: 0.2rem !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:nth-child(1) {
-            flex: 1 1 75% !important;
-            width: 75% !important;
-            overflow: hidden;
-        }
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:nth-child(2) {
-            flex: 0 0 25% !important;
-            width: 25% !important;
-        }
-        .player-name {
-            font-size: 15px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        
         /* Force the master control toggles to stay side-by-side on phones */
         @media (max-width: 768px) {
             div:has(> #master-toggles) + div [data-testid="stHorizontalBlock"] {
@@ -222,7 +224,7 @@ with st.sidebar:
     st.subheader("Players on Board")
     if st.session_state.players:
         for pid, name in list(st.session_state.players.items()):
-            c_name, c_btn = st.columns([3, 1], vertical_alignment="center")
+            c_name, c_btn = st.columns([5, 1], vertical_alignment="center", gap="small")
             with c_name: st.markdown(f"<div class='player-name'>{name}</div>", unsafe_allow_html=True)
             with c_btn:
                 if st.button("✖", key=f"drop_{pid}", type="primary"):
