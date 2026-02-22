@@ -301,11 +301,11 @@ with col_main:
             
             fig.update_layout(
                 uirevision='constant',
-                margin=dict(l=0, r=0, t=10, b=0),
+                margin=dict(l=0, r=0, t=40, b=80),
                 height=600,
                 font=dict(size=16),
                 hoverlabel=dict(font_size=18, font_family="Arial", bgcolor="#1E1E1E"),
-                legend=dict(title=None, orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                legend=dict(title=None, orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5)
             )
             
             fig.update_xaxes(dtick=1, title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
