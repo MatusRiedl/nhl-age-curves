@@ -7,7 +7,7 @@ st.set_page_config(page_title="NHL Age Curves", layout="wide", initial_sidebar_s
 
 st.markdown("""
     <style>
-        .block-container { padding-top: 3rem !important; padding-bottom: 0rem !important; }
+        .block-container { padding-top: 2rem !important; padding-bottom: 0rem !important; }
         h1 { padding-bottom: 0px !important; margin-bottom: 0px !important; }
         .stButton button { width: 100%; }
     </style>
@@ -123,21 +123,46 @@ BASELINE_CURVE = {
     26: 63, 27: 60, 28: 56, 29: 52, 30: 48, 31: 42, 32: 36, 33: 30, 34: 24, 35: 18
 }
 
-# --- HEADER: Title ---
-st.title("NHL Player Age Curves")
+@st.dialog("Season Snapshot")
+def show_season_details(player_name, age, raw_dfs_list):
+    st.markdown(f"### {player_name} at Age {age}")
+    found = False
+    for df in raw_dfs_list:
+        if not df.empty and df['BaseName'].iloc[0] == player_name:
+            season_data = df[df['Age'] == age]
+            if not season_data.empty:
+                cols_to_show = ['SeasonYear', 'GameType', 'GP', 'Points', 'Goals', 'Assists'] if st.session_state.stat_category == "Skater" else ['SeasonYear', 'GameType', 'GP', 'Wins', 'Saves', 'Shutouts']
+                st.dataframe(season_data[cols_to_show], hide_index=True, use_container_width=True)
+                found = True
+                break
+    if not found:
+        st.write("Detailed data not available for this projection or baseline.")
 
-st.markdown("---")
+# --- SIDEBAR: Player Management ---
+with st.sidebar:
+    st.title("Player Management")
+    
+    st.subheader("Global Search")
+    search_term = st.text_input("Search for any player:", placeholder="e.g., Crosby, Brodeur")
+    opts = {}
+    if search_term:
+        results = search_player(search_term)
+        if results: opts = {f"{p['name']} ({p.get('teamAbbrev') or 'FA'})": int(p['playerId']) for p in results}
+            
+    selected = st.selectbox("Select Best Match:", list(opts.keys()) if opts else ["Waiting for search..."], disabled=not bool(opts))
+    if st.button("Add to Chart", use_container_width=True, type="primary", disabled=not bool(opts)):
+        st.session_state.players[opts[selected]] = selected.split(" (")[0]
+        st.rerun()
 
-col_menu, col_main = st.columns([1, 4], gap="large")
-
-with col_menu:
+    st.markdown("---")
+    
+    st.subheader("Quick Adds")
     top_50_dict = get_top_50()
     top_selected = st.selectbox("Top 50 All-Time", list(top_50_dict.keys()))
     if st.button("Add Legend", use_container_width=True):
         st.session_state.players[top_50_dict[top_selected]] = top_selected
         st.rerun()
 
-    st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
     team_abbr = st.selectbox("Active Rosters", list(ACTIVE_TEAMS.keys()), format_func=lambda x: ACTIVE_TEAMS[x])
     if team_abbr:
         roster = get_team_roster(team_abbr)
@@ -151,8 +176,8 @@ with col_menu:
     st.subheader("Players on Board")
     if st.session_state.players:
         for pid, name in list(st.session_state.players.items()):
-            c_name, c_btn = st.columns([7, 2])
-            with c_name: st.markdown(f"<div style='margin-top: 8px; font-size: 15px;'>{name}</div>", unsafe_allow_html=True)
+            c_name, c_btn = st.columns([7, 2], vertical_alignment="center")
+            with c_name: st.markdown(f"<span style='font-size: 15px;'>{name}</span>", unsafe_allow_html=True)
             with c_btn:
                 if st.button("✖", key=f"drop_{pid}"):
                     del st.session_state.players[pid]
@@ -160,160 +185,168 @@ with col_menu:
     else:
         st.info("Board is empty")
 
-with col_main:
-    c_search_input, c_search_dropdown, c_search_btn = st.columns([6, 3, 2], vertical_alignment="bottom")
-    with c_search_input: search_term = st.text_input("Search for any player (e.g., Crosby, McDavid)")
-    opts = {}
-    if search_term:
-        results = search_player(search_term)
-        if results: opts = {f"{p['name']} ({p.get('teamAbbrev') or 'FA'})": int(p['playerId']) for p in results}
-            
-    with c_search_dropdown:
-        selected = st.selectbox("Select Best Match:", list(opts.keys()) if opts else ["Waiting for search..."], disabled=not bool(opts))
-    with c_search_btn:
-        if st.button("Add to Chart", use_container_width=True, type="primary", disabled=not bool(opts)):
-            st.session_state.players[opts[selected]] = selected.split(" (")[0]
-            st.rerun()
+# --- MAIN: Visualization ---
+st.title("NHL Player Age Curves")
+st.markdown("---")
 
-    st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
-    ctrl1, ctrl2, ctrl3, ctrl4, ctrl5, ctrl6 = st.columns(6, vertical_alignment="center")
-    with ctrl1: season_type = st.selectbox("Season", ["Regular", "Playoffs", "Both"], label_visibility="collapsed")
-    with ctrl2: do_smooth = st.toggle("Data Smoothing")
-    with ctrl3: do_era = st.toggle("Era-Adjust")
-    with ctrl4: do_cumul = st.toggle("Cumulative")
-    with ctrl5: do_base = st.toggle("Show Baseline")
-    with ctrl6: do_predict = st.toggle("Project to 40")
+# 1. Metrics & Category Selector
+c_metric, c_category = st.columns([8, 2], vertical_alignment="center")
 
-    st.markdown("<div style='margin-top: -5px;'></div>", unsafe_allow_html=True)
-    c_metric, c_category = st.columns([8, 2], vertical_alignment="center")
+with c_category:
+    st.session_state.stat_category = st.radio("Category:", ["Skater", "Goalie"], horizontal=True)
+
+with c_metric:
+    if st.session_state.stat_category == "Skater":
+        metric = st.radio("Select Metric:", 
+                            ["Points", "Goals", "Assists", "GP", "PPG", "SH%", "PIM", "TOI"], 
+                            horizontal=True, key="skater_metric",
+                            help="GP: Games Played | PPG: Points Per Game | SH%: Shooting Percentage | PIM: Penalty Minutes | TOI: Time on Ice (Avg Mins)")
+    else:
+        metric = st.radio("Select Metric:", 
+                            ["SavePct", "GAA", "Wins", "Shutouts", "GP", "Saves"], 
+                            horizontal=True, key="goalie_metric",
+                            help="SavePct: Save Percentage | GAA: Goals Against Average | GP: Games Played | Saves: Total Saves")
+
+# 2. Master Control Panel (Mobile Grid)
+st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+c1, c2, c3 = st.columns(3)
+with c1: 
+    season_type = st.selectbox("Season", ["Regular", "Playoffs", "Both"], label_visibility="collapsed")
+    do_smooth = st.toggle("Data Smoothing")
+with c2: 
+    do_era = st.toggle("Era-Adjust")
+    do_cumul = st.toggle("Cumulative")
+with c3: 
+    do_base = st.toggle("Show Baseline")
+    do_predict = st.toggle("Project to 40")
+
+# 3. Data Processing & Plotting
+if st.session_state.players:
+    processed_dfs = []
+    raw_dfs_cache = []
     
-    with c_category:
-        st.session_state.stat_category = st.radio("Category:", ["Skater", "Goalie"], horizontal=True)
-
-    with c_metric:
-        if st.session_state.stat_category == "Skater":
-            metric = st.radio("Select Metric:", 
-                              ["Points", "Goals", "Assists", "GP", "PPG", "SH%", "PIM", "TOI"], 
-                              horizontal=True, key="skater_metric",
-                              help="GP: Games Played | PPG: Points Per Game | SH%: Shooting Percentage | PIM: Penalty Minutes | TOI: Time on Ice (Avg Mins)")
-        else:
-            metric = st.radio("Select Metric:", 
-                              ["SavePct", "GAA", "Wins", "Shutouts", "GP", "Saves"], 
-                              horizontal=True, key="goalie_metric",
-                              help="SavePct: Save Percentage | GAA: Goals Against Average | GP: Games Played | Saves: Total Saves")
-
-    if st.session_state.players:
-        processed_dfs = []
+    for pid, name in st.session_state.players.items():
+        raw_df, base_name = get_player_raw_stats(pid, name)
+        if raw_df.empty: continue
         
-        for pid, name in st.session_state.players.items():
-            raw_df, base_name = get_player_raw_stats(pid, name)
-            if raw_df.empty: continue
-            
-            if season_type != "Both":
-                raw_df = raw_df[raw_df['GameType'] == season_type]
-            if raw_df.empty: continue
-            
-            if do_era and st.session_state.stat_category == "Skater":
-                raw_df['EraMult'] = raw_df['SeasonYear'].apply(get_era_multiplier)
-                raw_df['Points'] = raw_df['Points'] * raw_df['EraMult']
-                raw_df['Goals'] = raw_df['Goals'] * raw_df['EraMult']
-                raw_df['Assists'] = raw_df['Assists'] * raw_df['EraMult']
+        raw_df['BaseName'] = base_name
+        raw_dfs_cache.append(raw_df.copy())
+        
+        if season_type != "Both":
+            raw_df = raw_df[raw_df['GameType'] == season_type]
+        if raw_df.empty: continue
+        
+        if do_era and st.session_state.stat_category == "Skater":
+            raw_df['EraMult'] = raw_df['SeasonYear'].apply(get_era_multiplier)
+            raw_df['Points'] = raw_df['Points'] * raw_df['EraMult']
+            raw_df['Goals'] = raw_df['Goals'] * raw_df['EraMult']
+            raw_df['Assists'] = raw_df['Assists'] * raw_df['EraMult']
 
-            df = raw_df.groupby('Age').sum().reset_index()
-            
-            df['PPG'] = df['Points'] / df['GP']
-            df['TOI'] = df['TotalTOIMins'] / df['GP']
-            df['SH%'] = (df['Goals'] / df['Shots'] * 100).fillna(0)
-            df['SavePct'] = df['WeightedSV'] / df['GP']
-            df['GAA'] = df['WeightedGAA'] / df['GP']
-            
-            df['BaseName'] = base_name
-            df['Player'] = base_name
-            
-            if do_cumul:
-                if metric in ['Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves']:
-                    df[metric] = df[metric].cumsum()
-                else:
-                    st.warning(f"Cumulative tracking disabled: Mathematically invalid for rate stat ({metric}).")
+        df = raw_df.groupby('Age').sum(numeric_only=True).reset_index()
+        
+        df['PPG'] = df['Points'] / df['GP']
+        df['TOI'] = df['TotalTOIMins'] / df['GP']
+        df['SH%'] = (df['Goals'] / df['Shots'] * 100).fillna(0)
+        df['SavePct'] = df['WeightedSV'] / df['GP']
+        df['GAA'] = df['WeightedGAA'] / df['GP']
+        
+        df['BaseName'] = base_name
+        df['Player'] = base_name
+        
+        if do_cumul:
+            if metric in ['Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves']:
+                df[metric] = df[metric].cumsum()
+            else:
+                st.warning(f"Cumulative tracking disabled: Mathematically invalid for rate stat ({metric}).")
 
-            if do_smooth:
-                df[metric] = df[metric].rolling(window=3, min_periods=1).mean()
+        if do_smooth:
+            df[metric] = df[metric].rolling(window=3, min_periods=1).mean()
 
-            if do_predict and not do_cumul:
-                max_age = df['Age'].max()
-                if max_age < 40:
-                    last_row = df.loc[df['Age'] == max_age].copy()
-                    val = float(last_row[metric].values[0])
-                    proj_name = f"{base_name} (Proj)"
-                    proj_data = [last_row.to_dict('records')[0]]
-                    proj_data[0]['Player'] = proj_name
-                    
-                    for age in range(int(max_age) + 1, 41):
-                        if "GAA" in metric: val *= 1.05
-                        elif "SavePct" in metric: val *= 0.995
-                        elif "PIM" in metric: val *= 0.90
-                        elif metric in ["GP", "TOI", "SH%", "Saves"]: val *= 0.95
-                        else:
-                            if age <= 28: val *= 0.98
-                            elif age <= 31: val *= 0.92
-                            elif age <= 35: val *= 0.85
-                            else: val *= 0.75
-                        proj_data.append({"Age": age, metric: val, "Player": proj_name, "BaseName": base_name})
-                    
-                    df = pd.concat([df, pd.DataFrame(proj_data)], ignore_index=True)
-
-            processed_dfs.append(df)
-
-        if processed_dfs:
-            final_df = pd.concat(processed_dfs, ignore_index=True)
-            
-            if do_base and metric in ["Points", "Goals", "Assists"]:
-                base_data = []
-                cumul_val = 0
-                for age, pts in BASELINE_CURVE.items():
-                    val = pts
-                    if metric == "Goals": val = pts * 0.35
-                    if metric == "Assists": val = pts * 0.65
-                    
-                    if do_cumul:
-                        cumul_val += val
-                        val = cumul_val
-                        
-                    base_data.append({"Age": age, metric: val, "Player": "NHL Top 6 Baseline", "BaseName": "Baseline"})
-                final_df = pd.concat([final_df, pd.DataFrame(base_data)], ignore_index=True)
-
-            fig = px.line(final_df, x="Age", y=metric, color="Player", custom_data=["BaseName"], markers=True, template="plotly_dark", line_shape="spline" if do_smooth else "linear")
-            
-            for trace in fig.data:
-                if "(Proj)" in trace.name:
-                    trace.line.dash = 'dot'
-                    trace.line.color = 'gray'
-                    trace.marker.symbol = 'circle-open'
-                elif "Baseline" in trace.name:
-                    trace.line.dash = 'dash'
-                    trace.line.color = 'rgba(255, 255, 255, 0.4)'
-                    trace.marker.size = 1
-            
-            fig.update_layout(
-                uirevision='constant',
-                margin=dict(l=0, r=0, t=40, b=80),
-                height=600,
-                font=dict(size=16),
-                hoverlabel=dict(font_size=18, font_family="Arial", bgcolor="#1E1E1E"),
-                legend=dict(title=None, orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5)
-            )
-            
-            fig.update_xaxes(dtick=1, title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
-            fig.update_yaxes(title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
-            fig.update_traces(line=dict(width=4), marker=dict(size=8), hovertemplate="<b>%{customdata[0]}</b><br>Age %{x}<br>Value: %{y:.2f}<extra></extra>")
-            
-            if metric in ["SavePct", "SH%"]:
-                fig.update_yaxes(ticksuffix="%")
-                fig.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>Age %{x}<br>%{y:.1f}%<extra></extra>")
+        if do_predict and not do_cumul:
+            max_age = df['Age'].max()
+            if max_age < 40:
+                last_row = df.loc[df['Age'] == max_age].copy()
+                val = float(last_row[metric].values[0])
+                proj_name = f"{base_name} (Proj)"
                 
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No data found for the selected parameters.")
+                proj_data = [last_row.to_dict('records')[0]]
+                proj_data[0]['Player'] = proj_name
+                
+                for age in range(int(max_age) + 1, 41):
+                    if "GAA" in metric: val *= 1.05
+                    elif "SavePct" in metric: val *= 0.995
+                    elif "PIM" in metric: val *= 0.90
+                    elif metric in ["GP", "TOI", "SH%", "Saves"]: val *= 0.95
+                    else:
+                        if age <= 28: val *= 0.98
+                        elif age <= 31: val *= 0.92
+                        elif age <= 35: val *= 0.85
+                        else: val *= 0.75
+                    proj_data.append({"Age": age, metric: val, "Player": proj_name, "BaseName": base_name})
+                
+                df = pd.concat([df, pd.DataFrame(proj_data)], ignore_index=True)
+
+        processed_dfs.append(df)
+
+    if processed_dfs:
+        final_df = pd.concat(processed_dfs, ignore_index=True)
+        
+        if do_base and metric in ["Points", "Goals", "Assists"]:
+            base_data = []
+            cumul_val = 0
+            for age, pts in BASELINE_CURVE.items():
+                val = pts
+                if metric == "Goals": val = pts * 0.35
+                if metric == "Assists": val = pts * 0.65
+                
+                if do_cumul:
+                    cumul_val += val
+                    val = cumul_val
+                    
+                base_data.append({"Age": age, metric: val, "Player": "NHL Top 6 Baseline", "BaseName": "Baseline"})
+            final_df = pd.concat([final_df, pd.DataFrame(base_data)], ignore_index=True)
+
+        fig = px.line(final_df, x="Age", y=metric, color="Player", custom_data=["BaseName"], markers=True, template="plotly_dark", line_shape="spline" if do_smooth else "linear")
+        
+        for trace in fig.data:
+            if "(Proj)" in trace.name:
+                trace.line.dash = 'dot'
+                trace.line.color = 'gray'
+                trace.marker.symbol = 'circle-open'
+            elif "Baseline" in trace.name:
+                trace.line.dash = 'dash'
+                trace.line.color = 'rgba(255, 255, 255, 0.4)'
+                trace.marker.size = 1
+        
+        fig.update_layout(
+            uirevision='constant',
+            margin=dict(l=0, r=0, t=40, b=80),
+            height=600,
+            font=dict(size=16),
+            hoverlabel=dict(font_size=18, font_family="Arial", bgcolor="#1E1E1E"),
+            legend=dict(title=None, orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
+            clickmode='event+select'
+        )
+        
+        fig.update_xaxes(dtick=1, title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
+        fig.update_yaxes(title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
+        fig.update_traces(line=dict(width=4), marker=dict(size=8), hovertemplate="<b>%{customdata[0]}</b><br>Age %{x}<br>Value: %{y:.2f}<extra></extra>")
+        
+        if metric in ["SavePct", "SH%"]:
+            fig.update_yaxes(ticksuffix="%")
+            fig.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>Age %{x}<br>%{y:.1f}%<extra></extra>")
+            
+        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points")
+        
+        if event and event.selection.get("points"):
+            point = event.selection["points"][0]
+            selected_age = point["x"]
+            selected_player = point["customdata"][0]
+            if "Baseline" not in selected_player and "(Proj)" not in selected_player:
+                show_season_details(selected_player, selected_age, raw_dfs_cache)
+            
+    else:
+        st.info("No data found for the selected parameters.")
 
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: gray; font-size: 14px;'>Created by Iksperial, built by Gemini 3.1 Pro 2026. <br><em>Data is the only religion that strictly punishes you for ignoring it.</em></p>", unsafe_allow_html=True)
