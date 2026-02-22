@@ -1,4 +1,6 @@
 streamlit
-requests
 pandas
+requests
 plotly
+fastparquet
+pyarrow
