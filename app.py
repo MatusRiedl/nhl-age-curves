@@ -10,6 +10,34 @@ st.markdown("""
         .block-container { padding-top: 2rem !important; padding-bottom: 0rem !important; }
         h1 { padding-bottom: 0px !important; margin-bottom: 0px !important; }
         .stButton button { width: 100%; }
+        
+        /* Make ONLY the Add to Chart button blue via anchor injection */
+        div.element-container:has(#blue-btn-anchor) + div.element-container button {
+            background-color: #2b71c7 !important;
+            border-color: #2b71c7 !important;
+            color: white !important;
+        }
+        div.element-container:has(#blue-btn-anchor) + div.element-container button:hover {
+            background-color: #1a569d !important;
+            border-color: #1a569d !important;
+        }
+
+        /* Stop the sidebar from wrapping the red X button to the next line */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+        }
+        
+        /* Force the master control toggles to stay side-by-side on phones */
+        @media (max-width: 768px) {
+            div:has(> #master-toggles) + div [data-testid="stHorizontalBlock"] {
+                flex-wrap: nowrap !important;
+            }
+            div:has(> #master-toggles) + div [data-testid="column"] {
+                min-width: 48% !important;
+                flex: 1 1 48% !important;
+            }
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -150,6 +178,9 @@ with st.sidebar:
         if results: opts = {f"{p['name']} ({p.get('teamAbbrev') or 'FA'})": int(p['playerId']) for p in results}
             
     selected = st.selectbox("Select Best Match:", list(opts.keys()) if opts else ["Waiting for search..."], disabled=not bool(opts))
+    
+    # Anchor injection trick to specifically style the next element (the button) blue
+    st.markdown("<div id='blue-btn-anchor'></div>", unsafe_allow_html=True)
     if st.button("Add to Chart", use_container_width=True, type="primary", disabled=not bool(opts)):
         st.session_state.players[opts[selected]] = selected.split(" (")[0]
         st.rerun()
@@ -176,10 +207,10 @@ with st.sidebar:
     st.subheader("Players on Board")
     if st.session_state.players:
         for pid, name in list(st.session_state.players.items()):
-            c_name, c_btn = st.columns([7, 2], vertical_alignment="center")
-            with c_name: st.markdown(f"<span style='font-size: 15px;'>{name}</span>", unsafe_allow_html=True)
+            c_name, c_btn = st.columns([8, 2], vertical_alignment="center")
+            with c_name: st.markdown(f"<div style='font-size: 15px; margin-bottom: 0;'>{name}</div>", unsafe_allow_html=True)
             with c_btn:
-                if st.button("✖", key=f"drop_{pid}"):
+                if st.button("✖", key=f"drop_{pid}", type="primary"):
                     del st.session_state.players[pid]
                     st.rerun()
     else:
@@ -190,7 +221,8 @@ st.title("NHL Player Age Curves")
 st.markdown("---")
 
 # 1. Metrics & Category Selector
-c_metric, c_category = st.columns([8, 2], vertical_alignment="center")
+# Flipped from [8, 2] to [2.5, 7.5] so Category sits right next to the Metrics
+c_category, c_metric = st.columns([2.5, 7.5], vertical_alignment="center")
 
 with c_category:
     st.session_state.stat_category = st.radio("Category:", ["Skater", "Goalie"], horizontal=True)
@@ -207,18 +239,18 @@ with c_metric:
                             horizontal=True, key="goalie_metric",
                             help="SavePct: Save Percentage | GAA: Goals Against Average | GP: Games Played | Saves: Total Saves")
 
-# 2. Master Control Panel (Mobile Grid)
+# 2. Master Control Panel (Mobile Grid via CSS override)
 st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-c1, c2, c3 = st.columns(3)
+st.markdown("<div id='master-toggles'></div>", unsafe_allow_html=True)
+c1, c2 = st.columns(2)
 with c1: 
     season_type = st.selectbox("Season", ["Regular", "Playoffs", "Both"], label_visibility="collapsed")
     do_smooth = st.toggle("Data Smoothing")
+    do_predict = st.toggle("Project to 40")
 with c2: 
     do_era = st.toggle("Era-Adjust")
     do_cumul = st.toggle("Cumulative")
-with c3: 
     do_base = st.toggle("Show Baseline")
-    do_predict = st.toggle("Project to 40")
 
 # 3. Data Processing & Plotting
 if st.session_state.players:
