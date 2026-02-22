@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
+import os
 
 st.set_page_config(page_title="NHL Age Curves", layout="wide", initial_sidebar_state="expanded")
 
@@ -98,22 +99,90 @@ ACTIVE_TEAMS = {
 if 'players' not in st.session_state: st.session_state.players = {} 
 if 'stat_category' not in st.session_state: st.session_state.stat_category = "Skater"
 
+@st.cache_data
+def load_historical_data():
+    try:
+        if os.path.exists("nhl_historical_seasons.parquet"):
+            df = pd.read_parquet("nhl_historical_seasons.parquet")
+            df['PPG'] = df['Points'] / df['GP']
+            df['Save %'] = df['SavePct']
+            return df
+    except:
+        pass
+    return pd.DataFrame()
+
+@st.cache_data
+def build_historical_baselines(df):
+    if df.empty: return {}
+    full_time = df[df['GP'] >= 40]
+    
+    skater_base = full_time[full_time['Position'] != 'G'].groupby('Age').quantile(0.75, numeric_only=True)
+    goalie_base = full_time[full_time['Position'] == 'G'].groupby('Age').quantile(0.75, numeric_only=True)
+    
+    # Fix Survivorship Bias: Smooth the curve and force a strict monotonic decay after age 31
+    for base in [skater_base, goalie_base]:
+        base_smoothed = base.rolling(window=3, min_periods=1, center=True).mean()
+        for col in base.columns:
+            base[col] = base_smoothed[col]
+            for age in range(32, 42):
+                if age in base.index and (age-1) in base.index:
+                    if base.loc[age, col] > base.loc[age-1, col]:
+                        base.loc[age, col] = base.loc[age-1, col] * 0.92 
+                        
+    return {'Skater': skater_base, 'Goalie': goalie_base}
+
 def get_era_multiplier(year):
     if 1980 <= year <= 1992: return 0.80  
     if 1997 <= year <= 2004: return 1.15  
     if 2005 <= year <= 2017: return 1.05  
     return 1.0 
 
+@st.cache_data(ttl=3600)
+def fetch_all_time_records(category, s_type):
+    try:
+        if category == "Skater":
+            reg_url = "https://records.nhl.com/site/api/skater-career-scoring-regular-season"
+            ply_url = "https://records.nhl.com/site/api/skater-career-scoring-playoff"
+        else:
+            reg_url = "https://records.nhl.com/site/api/goalie-career-stats"
+            ply_url = "https://records.nhl.com/site/api/goalie-career-playoff-stats"
+            
+        reg_data = requests.get(reg_url, timeout=5).json().get('data', [])
+        if s_type == "Regular": return reg_data
+        
+        ply_data = requests.get(ply_url, timeout=5).json().get('data', [])
+        if s_type == "Playoffs": return ply_data
+        
+        combined = {}
+        for r in reg_data: combined[r['playerId']] = r.copy()
+        for p in ply_data:
+            pid = p['playerId']
+            if pid in combined:
+                for k in ['points', 'goals', 'assists', 'gamesPlayed', 'penaltyMinutes', 'wins', 'shutouts', 'saves', 'plusMinus']:
+                    if k in p and k in combined[pid]: combined[pid][k] += p[k]
+            else:
+                combined[pid] = p.copy()
+        return list(combined.values())
+    except: return []
+
 @st.cache_data
 def get_top_50():
     try:
-        url = "https://records.nhl.com/site/api/skater-career-scoring-regular-season?sort=points&dir=DESC&limit=50"
+        url = "https://records.nhl.com/site/api/skater-career-scoring-regular-season?sort=points&dir=DESC&limit=100"
         res = requests.get(url, timeout=5).json()
         players = {}
-        for i, p in enumerate(res.get('data', [])):
-            name = f"{i+1}. {p.get('firstName', '')} {p.get('lastName', '')}".strip()
-            if name and p.get('playerId'):
-                players[name] = int(p['playerId'])
+        added_ids = set()
+        count = 1
+        
+        for p in res.get('data', []):
+            pid = int(p['playerId'])
+            if pid not in added_ids:
+                name = f"{count}. {p.get('firstName', '')} {p.get('lastName', '')}".strip()
+                players[name] = pid
+                added_ids.add(pid)
+                count += 1
+                if count > 50: break
+                
         if players: return players
     except:
         pass
@@ -146,7 +215,9 @@ def get_player_raw_stats(player_id, base_name):
         res = requests.get(STATS_URL.format(player_id)).json()
         birth_date = str(res.get('birthDate', '2000'))
         birth_year = int(birth_date[:4]) if len(birth_date) >= 4 else 2000
+        position = res.get('position', 'S') 
         data = []
+        
         for s in res.get('seasonTotals', []):
             league = str(s.get('leagueAbbrev', '')).strip().upper()
             game_type = str(s.get('gameTypeId', ''))
@@ -169,62 +240,14 @@ def get_player_raw_stats(player_id, base_name):
                     "Shutouts": s.get('shutouts', 0), "Saves": s.get('saves', s.get('shotsAgainst', 0) - s.get('goalsAgainst', 0)),
                     "WeightedSV": float(s.get('savePctg', 0.0)) * 100 * gp, "WeightedGAA": float(s.get('goalsAgainstAvg', 0.0)) * gp
                 })
-        return pd.DataFrame(data), base_name
+        return pd.DataFrame(data), base_name, position
     except:
-        return pd.DataFrame(), base_name
-
-def get_baseline_value(metric, age):
-    pts_curve = {18: 20, 19: 35, 20: 45, 21: 52, 22: 58, 23: 62, 24: 65, 25: 65, 26: 63, 27: 60, 28: 56, 29: 52, 30: 48, 31: 42, 32: 36, 33: 30, 34: 24, 35: 18, 36: 12, 37: 8, 38: 4, 39: 2, 40: 0}
-    gp_skater = {18: 40, 19: 60, 20: 75, 21: 80, 22: 80, 23: 80, 24: 80, 25: 80, 26: 80, 27: 80, 28: 78, 29: 78, 30: 75, 31: 72, 32: 68, 33: 65, 34: 60, 35: 55, 36: 50, 37: 40, 38: 30, 39: 20, 40: 10}
-    gp_goalie = {18: 5, 19: 15, 20: 25, 21: 35, 22: 45, 23: 50, 24: 55, 25: 55, 26: 55, 27: 55, 28: 55, 29: 52, 30: 50, 31: 48, 32: 45, 33: 40, 34: 35, 35: 30, 36: 25, 37: 20, 38: 15, 39: 10, 40: 5}
-
-    pts = pts_curve.get(age, 0)
-    gps = gp_skater.get(age, 1)
-    gpg = gp_goalie.get(age, 1)
-
-    if metric == "Points": return pts
-    if metric == "Goals": return pts * 0.35
-    if metric == "Assists": return pts * 0.65
-    if metric == "+/-": return (pts * 0.2) - 8 
-    if metric == "GP": return gps if st.session_state.stat_category == "Skater" else gpg
-    if metric == "PPG": return pts / gps if gps > 0 else 0
-    if metric == "SH%": return 11.5 if age <= 32 else max(8.0, 11.5 - (age-32)*0.5)
-    if metric == "PIM": return gps * 0.5
-    if metric == "TOI": return 18.0 if age in range(21, 31) else max(10.0, 18.0 - abs(25-age)*0.3)
-    if metric == "Wins": return gpg * 0.55
-    if metric == "Saves": return gpg * 28
-    if metric == "Shutouts": return gpg * 0.08
-    if metric == "Save %": return 91.5 if age <= 32 else max(88.0, 91.5 - (age-32)*0.3)
-    if metric == "GAA": return 2.50 if age <= 32 else min(3.50, 2.50 + (age-32)*0.1)
-    return 0
+        return pd.DataFrame(), base_name, 'S'
 
 @st.cache_data(ttl=3600)
-def fetch_all_time_records(category, s_type):
-    try:
-        if category == "Skater":
-            reg_url = "https://records.nhl.com/site/api/skater-career-scoring-regular-season"
-            ply_url = "https://records.nhl.com/site/api/skater-career-scoring-playoff"
-        else:
-            reg_url = "https://records.nhl.com/site/api/goalie-career-stats"
-            ply_url = "https://records.nhl.com/site/api/goalie-career-playoff-stats"
-            
-        reg_data = requests.get(reg_url, timeout=5).json().get('data', [])
-        if s_type == "Regular": return reg_data
-        
-        ply_data = requests.get(ply_url, timeout=5).json().get('data', [])
-        if s_type == "Playoffs": return ply_data
-        
-        combined = {}
-        for r in reg_data: combined[r['playerId']] = r.copy()
-        for p in ply_data:
-            pid = p['playerId']
-            if pid in combined:
-                for k in ['points', 'goals', 'assists', 'gamesPlayed', 'penaltyMinutes', 'wins', 'shutouts', 'saves', 'plusMinus']:
-                    if k in p and k in combined[pid]: combined[pid][k] += p[k]
-            else:
-                combined[pid] = p.copy()
-        return list(combined.values())
-    except: return []
+def get_id_to_name_map(category):
+    records = fetch_all_time_records(category, "Regular")
+    return {int(r['playerId']): f"{r.get('firstName', '')} {r.get('lastName', '')}".strip() for r in records}
 
 def get_all_time_rank(category, s_type, metric, value):
     records = fetch_all_time_records(category, s_type)
@@ -238,7 +261,7 @@ def get_all_time_rank(category, s_type, metric, value):
     return len(records) + 1
 
 @st.dialog("Season Snapshot")
-def show_season_details(player_name, age, raw_dfs_list, metric, val, is_cumul, full_df, s_type):
+def show_season_details(player_name, age, raw_dfs_list, metric, val, is_cumul, full_df, s_type, ml_clones_dict):
     clean_name = player_name.replace(" (Proj)", "")
     st.markdown(f"### {player_name} at Age {age}")
     
@@ -271,6 +294,11 @@ def show_season_details(player_name, age, raw_dfs_list, metric, val, is_cumul, f
     
     if "(Proj)" in player_name:
         counting_stats = ['Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves', '+/-']
+        
+        if clean_name in ml_clones_dict and ml_clones_dict[clean_name]:
+            st.markdown("---")
+            st.markdown(f"**ML Projection Clones (Position-Matched):**<br><span style='font-size: 14px; color: gray;'>{', '.join(ml_clones_dict[clean_name])}</span>", unsafe_allow_html=True)
+            
         if metric in counting_stats:
             st.markdown("---")
             with st.spinner("Calculating Career Total & Fetching NHL Records..."):
@@ -286,7 +314,6 @@ def show_season_details(player_name, age, raw_dfs_list, metric, val, is_cumul, f
 # --- SIDEBAR: Player Management ---
 with st.sidebar:
     st.subheader("Global Search")
-    # Tying the search term into a variable to fix the zombie pop-up later
     search_term = st.text_input("Search for any player:", placeholder="e.g., Crosby, Brodeur", label_visibility="collapsed")
     opts = {}
     if search_term:
@@ -379,14 +406,22 @@ with c2:
     do_cumul = st.toggle("Cumulative")
     do_base = st.toggle("Show Baseline")
 
+# --- ML ENGINE & DATA PROCESSING ---
+hist_df = load_historical_data()
+historical_baselines = build_historical_baselines(hist_df)
+id_to_name_map = get_id_to_name_map(st.session_state.stat_category)
+
+ml_supported_metrics = ['Points', 'Goals', 'Assists', '+/-', 'GP', 'PPG', 'PIM', 'Wins', 'Shutouts', 'Saves', 'Save %', 'GAA']
+stat_caps = { "Points": 155, "Goals": 70, "Assists": 105, "+/-": 60, "GP": 82, "PPG": 1.9, "SH%": 25, "PIM": 150, "TOI": 28, "Save %": 93.5, "GAA": 1.8, "Wins": 45, "Shutouts": 10, "Saves": 2000 }
+
+ml_clones_dict = {}
+
 if st.session_state.players:
     processed_dfs = []
     raw_dfs_cache = []
     
-    stat_caps = { "Points": 155, "Goals": 70, "Assists": 105, "+/-": 60, "GP": 82, "PPG": 1.9, "SH%": 25, "PIM": 150, "TOI": 28, "Save %": 93.5, "GAA": 1.8, "Wins": 45, "Shutouts": 10, "Saves": 2000 }
-    
     for pid, name in st.session_state.players.items():
-        raw_df, base_name = get_player_raw_stats(pid, name)
+        raw_df, base_name, pos_code = get_player_raw_stats(pid, name)
         if raw_df.empty: continue
         
         is_goalie = raw_df['Saves'].sum() > 0 or raw_df['Wins'].sum() > 0
@@ -418,60 +453,117 @@ if st.session_state.players:
         if do_predict:
             max_age = df['Age'].max()
             if max_age < 40:
-                recent = df.tail(3)
-                
+                recent = df.tail(3).copy()
                 paced_recent = recent[metric].copy()
+                
                 if season_type != "Playoffs" and len(recent) > 0 and recent.iloc[-1]['SeasonYear'] >= 2024 and recent.iloc[-1]['GP'] < 82 and recent.iloc[-1]['GP'] > 0:
                     pace = 82.0 / recent.iloc[-1]['GP']
                     if metric in ['Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'Saves', '+/-', 'PIM']:
                         paced_recent.iloc[-1] *= pace
                 
-                slope = (paced_recent.iloc[-1] - paced_recent.iloc[0]) / max(1, len(recent) - 1) if len(recent) >= 2 else paced_recent.iloc[-1] * 0.05
-                
-                proj_name = f"{base_name} (Proj)"
+                match_ages = recent['Age'].tolist()
+                match_vals = paced_recent.tolist()
                 current_val = float(df.loc[df['Age'] == max_age, metric].values[0])
                 
+                use_ml = not hist_df.empty and metric in ml_supported_metrics
                 proj_data = []
-                for age in range(int(max_age) + 1, 41):
-                    # Dedicated Durability Curve for GP
-                    if metric == "GP":
-                        gp_cap = 82 if st.session_state.stat_category == "Skater" else 65
-                        if age <= 28:
-                            current_val = min(gp_cap, current_val + 1)
-                        elif age <= 32:
-                            current_val *= 0.98
-                        elif age <= 36:
-                            current_val *= 0.92
-                        else:
-                            current_val *= 0.82
+                
+                if use_ml:
+                    # Strict Position Filtering
+                    h_df = hist_df[hist_df['Position'] == pos_code]
+                    if len(h_df['PlayerID'].unique()) < 10: 
+                        cat = 'G' if st.session_state.stat_category == 'Goalie' else 'S'
+                        h_df = hist_df[hist_df['Position'] == cat] if cat == 'G' else hist_df[hist_df['Position'] != 'G']
                     
-                    # Momentum Curve for all other stats
-                    elif age <= 26:
-                        if age == int(max_age) + 1 and slope > 0:
-                            current_val = (current_val + (paced_recent.iloc[-1] + slope)) / 2
-                        elif slope > 0:
-                            current_val += slope * (0.4 ** (age - max_age)) 
-                        else:
-                            current_val += current_val * 0.03 
+                    pivot = h_df.pivot_table(index='PlayerID', columns='Age', values=metric, aggfunc='sum')
+                    valid_hist = pivot.dropna(subset=match_ages)
+                    
+                    if len(valid_hist) > 0:
+                        dist = pd.Series(0.0, index=valid_hist.index)
+                        for a, v in zip(match_ages, match_vals):
+                            dist += abs(valid_hist[a] - v)
+                        
+                        top_ids = dist.nsmallest(10).index
+                        
+                        clone_names = []
+                        for c_id in top_ids:
+                            c_name = id_to_name_map.get(int(c_id), f"Unknown (ID {c_id})")
+                            c_pos = h_df[h_df['PlayerID'] == c_id]['Position'].iloc[0] if not h_df[h_df['PlayerID'] == c_id].empty else "UNK"
+                            clone_names.append(f"{c_name} ({c_pos})")
+                        ml_clones_dict[base_name] = clone_names
+                        
+                        last_avg = valid_hist.loc[top_ids, max_age].mean() if max_age in valid_hist.columns else current_val
+                        if pd.isna(last_avg) or last_avg == 0: last_avg = current_val if current_val != 0 else 1.0
+                        
+                        for age in range(int(max_age) + 1, 41):
+                            if age in pivot.columns:
+                                next_avg = pivot.loc[top_ids, age]
+                                if metric in ['Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves', '+/-']:
+                                    next_avg = next_avg.fillna(0).mean()
+                                else:
+                                    next_avg = next_avg.mean()
+                            else:
+                                next_avg = 0
+                                
+                            if pd.isna(next_avg): next_avg = 0
+                            
+                            if metric in ['+/-', 'GAA', 'Save %']:
+                                current_val += (next_avg - last_avg)
+                            else:
+                                if last_avg > 0:
+                                    pct_change = (next_avg - last_avg) / last_avg
+                                    pct_change = max(min(pct_change, 0.5), -0.5) 
+                                    current_val += (current_val * pct_change)
+                                else:
+                                    current_val += (next_avg - last_avg) 
+                                    
+                            if metric != "+/-": current_val = max(0, current_val)
+                            
+                            if metric in stat_caps:
+                                cap = stat_caps[metric]
+                                if metric == "GP" and st.session_state.stat_category == "Goalie": cap = 65
+                                current_val = max(current_val, cap) if "GAA" in metric else min(current_val, cap)
+                                
+                            proj_data.append({"Age": age, metric: current_val, "Player": base_name, "BaseName": base_name})
+                            last_avg = next_avg
                     else:
-                        if "GAA" in metric: current_val *= 1.05
-                        elif metric == "Save %": current_val -= 0.005 
-                        elif "PIM" in metric: current_val *= 0.90
-                        elif metric in ["TOI", "SH%", "Saves"]: current_val *= 0.95
-                        elif metric == "+/-": current_val -= 2 
+                        use_ml = False 
+                        
+                if not use_ml:
+                    slope = (match_vals[-1] - match_vals[0]) / max(1, len(recent) - 1) if len(recent) >= 2 else match_vals[-1] * 0.05
+                    for age in range(int(max_age) + 1, 41):
+                        if metric == "GP":
+                            gp_cap = 82 if st.session_state.stat_category == "Skater" else 65
+                            if age <= 28: current_val = min(gp_cap, current_val + 1)
+                            elif age <= 32: current_val *= 0.98
+                            elif age <= 36: current_val *= 0.92
+                            else: current_val *= 0.82
+                        elif age <= 26:
+                            if age == int(max_age) + 1 and slope > 0:
+                                current_val = (current_val + (match_vals[-1] + slope)) / 2
+                            elif slope > 0:
+                                current_val += slope * (0.4 ** (age - max_age)) 
+                            else:
+                                current_val += current_val * 0.03 
                         else:
-                            if age <= 28: current_val *= 0.98
-                            elif age <= 31: current_val *= 0.92
-                            elif age <= 35: current_val *= 0.85
-                            else: current_val *= 0.80 
-                    
-                    if metric in stat_caps:
-                        cap = stat_caps[metric]
-                        if metric == "GP" and st.session_state.stat_category == "Goalie": cap = 65
-                        current_val = max(current_val, cap) if "GAA" in metric else min(current_val, cap)
-                    if metric != "+/-": current_val = max(0, current_val)
-                    
-                    proj_data.append({"Age": age, metric: current_val, "Player": base_name, "BaseName": base_name})
+                            if "GAA" in metric: current_val *= 1.05
+                            elif metric == "Save %": current_val -= 0.005 
+                            elif "PIM" in metric: current_val *= 0.90
+                            elif metric in ["TOI", "SH%", "Saves"]: current_val *= 0.95
+                            elif metric == "+/-": current_val -= 2 
+                            else:
+                                if age <= 28: current_val *= 0.98
+                                elif age <= 31: current_val *= 0.92
+                                elif age <= 35: current_val *= 0.85
+                                else: current_val *= 0.80 
+                        
+                        if metric in stat_caps:
+                            cap = stat_caps[metric]
+                            if metric == "GP" and st.session_state.stat_category == "Goalie": cap = 65
+                            current_val = max(current_val, cap) if "GAA" in metric else min(current_val, cap)
+                        if metric != "+/-": current_val = max(0, current_val)
+                        
+                        proj_data.append({"Age": age, metric: current_val, "Player": base_name, "BaseName": base_name})
                 
                 df = pd.concat([df, pd.DataFrame(proj_data)], ignore_index=True)
 
@@ -498,16 +590,24 @@ if st.session_state.players:
         final_df = pd.concat(processed_dfs, ignore_index=True)
         
         if do_base:
-            base_data = []
-            cumul_val = 0
-            for age in range(18, 41):
-                val = get_baseline_value(metric, age)
-                if do_cumul and metric in ['Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves', '+/-']:
-                    cumul_val += val
-                    val = cumul_val
-                role_name = "NHL Top 6 Baseline" if st.session_state.stat_category == "Skater" else "NHL Starter Baseline"
-                base_data.append({"Age": age, metric: val, "Player": role_name, "BaseName": "Baseline"})
-            final_df = pd.concat([final_df, pd.DataFrame(base_data)], ignore_index=True)
+            base_df = historical_baselines.get(st.session_state.stat_category)
+            if base_df is not None and not base_df.empty:
+                base_data = []
+                cumul_val = 0
+                for age in range(18, 41):
+                    if age in base_df.index and metric in base_df.columns:
+                        val = base_df.loc[age, metric]
+                        if pd.isna(val): val = 0
+                    else:
+                        val = 0
+                        
+                    if do_cumul and metric in ['Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves', '+/-']:
+                        cumul_val += val
+                        val = cumul_val
+                        
+                    role_name = "NHL 75th Percentile Baseline"
+                    base_data.append({"Age": age, metric: val, "Player": role_name, "BaseName": "Baseline"})
+                final_df = pd.concat([final_df, pd.DataFrame(base_data)], ignore_index=True)
 
         fig = px.line(final_df, x="Age", y=metric, color="Player", custom_data=["BaseName", "Player"], markers=True, template="plotly_dark", line_shape="spline" if do_smooth else "linear")
         
@@ -540,14 +640,12 @@ if st.session_state.players:
             fig.update_yaxes(ticksuffix="%")
             fig.update_traces(hovertemplate="<b>%{customdata[1]}</b><br>Age %{x}<br>%{y:.1f}%<extra></extra>")
         
-        # Zombie Popup Fix: We explicitly hash the text input string into the chart's unique ID.
-        # When you hit enter, the key regenerates, which violently clears the chart's memory of your last click.
         chart_key = f"chart_{hash(str(st.session_state.players))}_{metric}_{do_predict}_{do_smooth}_{search_term}"
         event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points", key=chart_key)
         
         if event and event.selection.get("points"):
             point = event.selection["points"][0]
-            show_season_details(point["customdata"][1], point["x"], raw_dfs_cache, metric, point["y"], do_cumul, final_df, season_type)
+            show_season_details(point["customdata"][1], point["x"], raw_dfs_cache, metric, point["y"], do_cumul, final_df, season_type, ml_clones_dict)
             
     else:
         st.info("No data found for the selected parameters.")
