@@ -8,12 +8,37 @@ st.set_page_config(page_title="NHL Age Curves", layout="wide", initial_sidebar_s
 st.markdown("""
     <style>
         .block-container { padding-top: 2rem !important; padding-bottom: 0rem !important; }
-        h1 { padding-bottom: 0px !important; margin-bottom: 0px !important; }
+        
+        /* The Sweeping Gradient Title */
+        .animated-title { 
+            background: linear-gradient(to right, #c0c0c0, #2b71c7, #ff4b4b, #c0c0c0);
+            background-size: 300% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: sweep 6s linear infinite;
+        }
+        
+        @keyframes sweep {
+            to { background-position: 300% center; }
+        }
+
+        /* The Spinning, Pulsating NHL Logo */
+        .nhl-logo {
+            height: 45px;
+            margin-right: 15px;
+            animation: spin-pulse 4s infinite ease-in-out;
+        }
+
+        @keyframes spin-pulse {
+            0% { transform: rotateY(0deg) scale(1); }
+            50% { transform: rotateY(180deg) scale(1.15); }
+            100% { transform: rotateY(360deg) scale(1); }
+        }
         
         /* Make global buttons full width */
         .stButton button { width: 100%; }
         
-        /* ...but stop the red X button from expanding off the screen */
+        /* Stop the red X button from expanding off the screen */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] div.stButton button {
             width: auto !important;
             min-width: 0 !important;
@@ -35,7 +60,7 @@ st.markdown("""
             text-overflow: ellipsis;
         }
         
-        /* Make ONLY the Add to Chart button blue via anchor injection */
+        /* Make ONLY the Add to Chart button blue */
         div.element-container:has(#blue-btn-anchor) + div.element-container button {
             background-color: #2b71c7 !important;
             border-color: #2b71c7 !important;
@@ -46,7 +71,7 @@ st.markdown("""
             border-color: #1a569d !important;
         }
 
-        /* Force the master control toggles to stay side-by-side on phones */
+        /* Force master toggles side-by-side on mobile */
         @media (max-width: 768px) {
             div:has(> #master-toggles) + div [data-testid="stHorizontalBlock"] {
                 flex-wrap: nowrap !important;
@@ -112,9 +137,13 @@ def get_team_roster(team_abbr):
     try:
         res = requests.get(ROSTER_URL.format(team_abbr)).json()
         players = {}
-        for pos in ['forwards', 'defensemen', 'goalies']:
-            for p in res.get(pos, []):
-                name = f"{p['firstName']['default']} {p['lastName']['default']}"
+        pos_map = {'C': 'C', 'L': 'LW', 'R': 'RW', 'D': 'D', 'G': 'G'}
+        
+        for pos_group in ['forwards', 'defensemen', 'goalies']:
+            for p in res.get(pos_group, []):
+                raw_pos = p.get('positionCode', '?')
+                clean_pos = pos_map.get(raw_pos, raw_pos)
+                name = f"[{clean_pos}] {p['firstName']['default']} {p['lastName']['default']}"
                 players[name] = int(p['id'])
         return dict(sorted(players.items()))
     except: return {}
@@ -152,6 +181,7 @@ def get_player_raw_stats(player_id, base_name):
                     "Goals": s.get('goals', 0),
                     "Assists": s.get('assists', 0),
                     "PIM": s.get('pim', 0) or s.get('penaltyMinutes', 0),
+                    "+/-": s.get('plusMinus', 0),
                     "Shots": s.get('shots', 0),
                     "TotalTOIMins": toi_val * gp,
                     "Wins": s.get('wins', 0),
@@ -166,7 +196,8 @@ def get_player_raw_stats(player_id, base_name):
 
 BASELINE_CURVE = {
     18: 20, 19: 35, 20: 45, 21: 52, 22: 58, 23: 62, 24: 65, 25: 65,
-    26: 63, 27: 60, 28: 56, 29: 52, 30: 48, 31: 42, 32: 36, 33: 30, 34: 24, 35: 18
+    26: 63, 27: 60, 28: 56, 29: 52, 30: 48, 31: 42, 32: 36, 33: 30, 34: 24, 35: 18,
+    36: 12, 37: 8, 38: 4, 39: 2, 40: 0
 }
 
 @st.dialog("Season Snapshot")
@@ -177,7 +208,7 @@ def show_season_details(player_name, age, raw_dfs_list):
         if not df.empty and df['BaseName'].iloc[0] == player_name:
             season_data = df[df['Age'] == age]
             if not season_data.empty:
-                cols_to_show = ['SeasonYear', 'GameType', 'GP', 'Points', 'Goals', 'Assists'] if st.session_state.stat_category == "Skater" else ['SeasonYear', 'GameType', 'GP', 'Wins', 'Saves', 'Shutouts']
+                cols_to_show = ['SeasonYear', 'GameType', 'GP', 'Points', 'Goals', 'Assists', '+/-'] if st.session_state.stat_category == "Skater" else ['SeasonYear', 'GameType', 'GP', 'Wins', 'Saves', 'Shutouts']
                 st.dataframe(season_data[cols_to_show], hide_index=True, use_container_width=True)
                 found = True
                 break
@@ -186,20 +217,22 @@ def show_season_details(player_name, age, raw_dfs_list):
 
 # --- SIDEBAR: Player Management ---
 with st.sidebar:
-    st.title("Player Management")
-    
     st.subheader("Global Search")
-    search_term = st.text_input("Search for any player:", placeholder="e.g., Crosby, Brodeur")
+    search_term = st.text_input("Search for any player:", placeholder="e.g., Crosby, Brodeur", label_visibility="collapsed")
     opts = {}
     if search_term:
         results = search_player(search_term)
-        if results: opts = {f"{p['name']} ({p.get('teamAbbrev') or 'FA'})": int(p['playerId']) for p in results}
+        if results:
+            for p in results:
+                tm = p.get('teamAbbrev')
+                label = f"[{tm}] {p['name']}" if tm else p['name']
+                opts[label] = int(p['playerId'])
             
     selected = st.selectbox("Select Best Match:", list(opts.keys()) if opts else ["Waiting for search..."], disabled=not bool(opts))
     
     st.markdown("<div id='blue-btn-anchor'></div>", unsafe_allow_html=True)
     if st.button("Add to Chart", use_container_width=True, type="primary", disabled=not bool(opts)):
-        st.session_state.players[opts[selected]] = selected.split(" (")[0]
+        st.session_state.players[opts[selected]] = selected.split("] ")[-1] if "]" in selected else selected
         st.rerun()
 
     st.markdown("---")
@@ -211,13 +244,15 @@ with st.sidebar:
         st.session_state.players[top_50_dict[top_selected]] = top_selected
         st.rerun()
 
-    team_abbr = st.selectbox("Active Rosters", list(ACTIVE_TEAMS.keys()), format_func=lambda x: ACTIVE_TEAMS[x])
+    team_abbr = st.selectbox("Active Rosters", list(ACTIVE_TEAMS.keys()), format_func=lambda x: f"{x} - {ACTIVE_TEAMS[x]}")
     if team_abbr:
+        st.markdown(f"<div style='text-align: center; margin-bottom: 5px;'><img src='https://assets.nhle.com/logos/nhl/svg/{team_abbr}_light.svg' height='40'></div>", unsafe_allow_html=True)
         roster = get_team_roster(team_abbr)
         if roster:
             roster_player = st.selectbox("Select Player:", list(roster.keys()), label_visibility="collapsed")
             if st.button("Add Roster Player", use_container_width=True):
-                st.session_state.players[roster[roster_player]] = roster_player
+                clean_name = roster_player.split("] ")[-1] if "]" in roster_player else roster_player
+                st.session_state.players[roster[roster_player]] = clean_name
                 st.rerun()
                 
     st.markdown("---")
@@ -234,7 +269,13 @@ with st.sidebar:
         st.info("Board is empty")
 
 # --- MAIN: Visualization ---
-st.title("NHL Player Age Curves")
+# Ripped out st.title and built a custom HTML container for the animated logo and sweeping text
+st.markdown("""
+    <h1 style='display: flex; align-items: center; padding-bottom: 0; margin-bottom: 0;'>
+        <img src='https://assets.nhle.com/logos/nhl/svg/NHL_light.svg' class='nhl-logo'>
+        <span class='animated-title'>NHL Player Age Curves</span>
+    </h1>
+""", unsafe_allow_html=True)
 st.markdown("---")
 
 c_category, c_metric = st.columns([2.5, 7.5], vertical_alignment="center")
@@ -245,9 +286,9 @@ with c_category:
 with c_metric:
     if st.session_state.stat_category == "Skater":
         metric = st.radio("Select Metric:", 
-                            ["Points", "Goals", "Assists", "GP", "PPG", "SH%", "PIM", "TOI"], 
+                            ["Points", "Goals", "Assists", "+/-", "GP", "PPG", "SH%", "PIM", "TOI"], 
                             horizontal=True, key="skater_metric",
-                            help="GP: Games Played | PPG: Points Per Game | SH%: Shooting Percentage | PIM: Penalty Minutes | TOI: Time on Ice (Avg Mins)")
+                            help="+/-: Plus/Minus Differential | GP: Games Played | PPG: Points Per Game | SH%: Shooting Percentage | PIM: Penalty Minutes | TOI: Time on Ice (Avg Mins)")
     else:
         metric = st.radio("Select Metric:", 
                             ["SavePct", "GAA", "Wins", "Shutouts", "GP", "Saves"], 
@@ -274,6 +315,10 @@ if st.session_state.players:
         raw_df, base_name = get_player_raw_stats(pid, name)
         if raw_df.empty: continue
         
+        is_goalie = raw_df['Saves'].sum() > 0 or raw_df['Wins'].sum() > 0
+        if st.session_state.stat_category == "Skater" and is_goalie: continue
+        if st.session_state.stat_category == "Goalie" and not is_goalie: continue
+        
         raw_df['BaseName'] = base_name
         raw_dfs_cache.append(raw_df.copy())
         
@@ -299,7 +344,7 @@ if st.session_state.players:
         df['Player'] = base_name
         
         if do_cumul:
-            if metric in ['Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves']:
+            if metric in ['Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves', '+/-']:
                 df[metric] = df[metric].cumsum()
             else:
                 st.warning(f"Cumulative tracking disabled: Mathematically invalid for rate stat ({metric}).")
@@ -322,11 +367,12 @@ if st.session_state.players:
                     elif "SavePct" in metric: val *= 0.995
                     elif "PIM" in metric: val *= 0.90
                     elif metric in ["GP", "TOI", "SH%", "Saves"]: val *= 0.95
+                    elif metric == "+/-": val *= 0.95 
                     else:
                         if age <= 28: val *= 0.98
                         elif age <= 31: val *= 0.92
                         elif age <= 35: val *= 0.85
-                        else: val *= 0.75
+                        else: val *= 0.85 
                     proj_data.append({"Age": age, metric: val, "Player": proj_name, "BaseName": base_name})
                 
                 df = pd.concat([df, pd.DataFrame(proj_data)], ignore_index=True)
