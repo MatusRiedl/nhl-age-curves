@@ -22,10 +22,26 @@ st.markdown("""
             border-color: #1a569d !important;
         }
 
-        /* Stop the sidebar from wrapping the red X button to the next line */
+        /* Lock the red X button inside the mobile sidebar */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
             align-items: center !important;
+            gap: 0.2rem !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:nth-child(1) {
+            flex: 1 1 75% !important;
+            width: 75% !important;
+            overflow: hidden;
+        }
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > [data-testid="column"]:nth-child(2) {
+            flex: 0 0 25% !important;
+            width: 25% !important;
+        }
+        .player-name {
+            font-size: 15px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
         /* Force the master control toggles to stay side-by-side on phones */
@@ -179,7 +195,6 @@ with st.sidebar:
             
     selected = st.selectbox("Select Best Match:", list(opts.keys()) if opts else ["Waiting for search..."], disabled=not bool(opts))
     
-    # Anchor injection trick to specifically style the next element (the button) blue
     st.markdown("<div id='blue-btn-anchor'></div>", unsafe_allow_html=True)
     if st.button("Add to Chart", use_container_width=True, type="primary", disabled=not bool(opts)):
         st.session_state.players[opts[selected]] = selected.split(" (")[0]
@@ -207,8 +222,8 @@ with st.sidebar:
     st.subheader("Players on Board")
     if st.session_state.players:
         for pid, name in list(st.session_state.players.items()):
-            c_name, c_btn = st.columns([8, 2], vertical_alignment="center")
-            with c_name: st.markdown(f"<div style='font-size: 15px; margin-bottom: 0;'>{name}</div>", unsafe_allow_html=True)
+            c_name, c_btn = st.columns([3, 1], vertical_alignment="center")
+            with c_name: st.markdown(f"<div class='player-name'>{name}</div>", unsafe_allow_html=True)
             with c_btn:
                 if st.button("✖", key=f"drop_{pid}", type="primary"):
                     del st.session_state.players[pid]
@@ -220,8 +235,6 @@ with st.sidebar:
 st.title("NHL Player Age Curves")
 st.markdown("---")
 
-# 1. Metrics & Category Selector
-# Flipped from [8, 2] to [2.5, 7.5] so Category sits right next to the Metrics
 c_category, c_metric = st.columns([2.5, 7.5], vertical_alignment="center")
 
 with c_category:
@@ -239,7 +252,6 @@ with c_metric:
                             horizontal=True, key="goalie_metric",
                             help="SavePct: Save Percentage | GAA: Goals Against Average | GP: Games Played | Saves: Total Saves")
 
-# 2. Master Control Panel (Mobile Grid via CSS override)
 st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 st.markdown("<div id='master-toggles'></div>", unsafe_allow_html=True)
 c1, c2 = st.columns(2)
@@ -252,7 +264,6 @@ with c2:
     do_cumul = st.toggle("Cumulative")
     do_base = st.toggle("Show Baseline")
 
-# 3. Data Processing & Plotting
 if st.session_state.players:
     processed_dfs = []
     raw_dfs_cache = []
