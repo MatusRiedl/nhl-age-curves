@@ -7,7 +7,6 @@ st.set_page_config(page_title="NHL Age Curves", layout="wide", initial_sidebar_s
 
 st.markdown("""
     <style>
-        /* Pushed the top padding down to 3rem so the header buttons don't get cut off */
         .block-container { padding-top: 3rem !important; padding-bottom: 0rem !important; }
         h1 { padding-bottom: 0px !important; margin-bottom: 0px !important; }
         .stButton button { width: 100%; }
@@ -111,6 +110,7 @@ def get_player_raw_stats(player_id, base_name):
                     "TotalTOIMins": toi_val * gp,
                     "Wins": s.get('wins', 0),
                     "Shutouts": s.get('shutouts', 0),
+                    "Saves": s.get('saves', s.get('shotsAgainst', 0) - s.get('goalsAgainst', 0)),
                     "WeightedSV": float(s.get('savePctg', 0.0)) * 100 * gp,
                     "WeightedGAA": float(s.get('goalsAgainstAvg', 0.0)) * gp
                 })
@@ -131,7 +131,6 @@ st.markdown("---")
 col_menu, col_main = st.columns([1, 4], gap="large")
 
 with col_menu:
-    # 1. Top 50 is perfectly aligned with Search Text Input
     top_50_dict = get_top_50()
     top_selected = st.selectbox("Top 50 All-Time", list(top_50_dict.keys()))
     if st.button("Add Legend", use_container_width=True):
@@ -162,7 +161,6 @@ with col_menu:
         st.info("Board is empty")
 
 with col_main:
-    # 2. Main Search Bar aligns natively with Top 50 selectbox
     c_search_input, c_search_dropdown, c_search_btn = st.columns([6, 3, 2], vertical_alignment="bottom")
     with c_search_input: search_term = st.text_input("Search for any player (e.g., Crosby, McDavid)")
     opts = {}
@@ -177,7 +175,6 @@ with col_main:
             st.session_state.players[opts[selected]] = selected.split(" (")[0]
             st.rerun()
 
-    # 3. Master Control Panel
     st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
     ctrl1, ctrl2, ctrl3, ctrl4, ctrl5, ctrl6 = st.columns(6, vertical_alignment="center")
     with ctrl1: season_type = st.selectbox("Season", ["Regular", "Playoffs", "Both"], label_visibility="collapsed")
@@ -187,7 +184,6 @@ with col_main:
     with ctrl5: do_base = st.toggle("Show Baseline")
     with ctrl6: do_predict = st.toggle("Project to 40")
 
-    # 4. Metrics & Category Selector
     st.markdown("<div style='margin-top: -5px;'></div>", unsafe_allow_html=True)
     c_metric, c_category = st.columns([8, 2], vertical_alignment="center")
     
@@ -202,11 +198,10 @@ with col_main:
                               help="GP: Games Played | PPG: Points Per Game | SH%: Shooting Percentage | PIM: Penalty Minutes | TOI: Time on Ice (Avg Mins)")
         else:
             metric = st.radio("Select Metric:", 
-                              ["SavePct", "GAA", "Wins", "Shutouts", "GP"], 
+                              ["SavePct", "GAA", "Wins", "Shutouts", "GP", "Saves"], 
                               horizontal=True, key="goalie_metric",
-                              help="SavePct: Save Percentage | GAA: Goals Against Average | GP: Games Played")
+                              help="SavePct: Save Percentage | GAA: Goals Against Average | GP: Games Played | Saves: Total Saves")
 
-    # 5. Data Processing & Plotting
     if st.session_state.players:
         processed_dfs = []
         
@@ -236,7 +231,7 @@ with col_main:
             df['Player'] = base_name
             
             if do_cumul:
-                if metric in ['Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM']:
+                if metric in ['Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves']:
                     df[metric] = df[metric].cumsum()
                 else:
                     st.warning(f"Cumulative tracking disabled: Mathematically invalid for rate stat ({metric}).")
@@ -257,7 +252,7 @@ with col_main:
                         if "GAA" in metric: val *= 1.05
                         elif "SavePct" in metric: val *= 0.995
                         elif "PIM" in metric: val *= 0.90
-                        elif metric in ["GP", "TOI", "SH%"]: val *= 0.95
+                        elif metric in ["GP", "TOI", "SH%", "Saves"]: val *= 0.95
                         else:
                             if age <= 28: val *= 0.98
                             elif age <= 31: val *= 0.92
