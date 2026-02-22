@@ -2,6 +2,9 @@
 
 An interactive, web-based analytics dashboard built in Python that visualizes the aging curves and career trajectories of NHL players using live data.
 
+## Available online here
+https://nhl-age-curves.streamlit.app/
+
 ## Features
 * **Live API Integration:** Pulls real-time, unstructured JSON data directly from the NHL's undocumented web API.
 * **Era-Adjusted Scoring:** Includes a mathematical modifier to normalize points across different NHL eras (e.g., the high-scoring 80s vs. the Dead Puck era).
