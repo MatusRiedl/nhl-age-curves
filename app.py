@@ -108,6 +108,12 @@ CURRENT_SEASON_YEAR = _now.year if _now.month >= 9 else _now.year - 1
 
 if 'players' not in st.session_state: st.session_state.players = {}
 if 'stat_category' not in st.session_state: st.session_state.stat_category = "Skater"
+if 'season_type' not in st.session_state: st.session_state.season_type = "Regular"
+if 'do_smooth' not in st.session_state: st.session_state.do_smooth = False
+if 'do_predict' not in st.session_state: st.session_state.do_predict = False
+if 'do_era' not in st.session_state: st.session_state.do_era = False
+if 'do_cumul_toggle' not in st.session_state: st.session_state.do_cumul_toggle = False
+if 'do_base' not in st.session_state: st.session_state.do_base = False
 
 @st.cache_data
 def load_historical_data():
@@ -489,7 +495,6 @@ with st.sidebar:
     st.markdown("<div class='blue-btn-anchor'></div>", unsafe_allow_html=True)
     if st.button("Add to Chart", use_container_width=True, disabled=not bool(opts)):
         st.session_state.players[opts[selected]] = selected.split("] ")[-1] if "]" in selected else selected
-        st.rerun()
 
     st.markdown("---")
 
@@ -500,7 +505,6 @@ with st.sidebar:
     st.markdown("<div class='blue-btn-anchor'></div>", unsafe_allow_html=True)
     if st.button("Add Legend", use_container_width=True):
         st.session_state.players[top_50_dict[top_selected]] = top_selected.split(". ")[-1]
-        st.rerun()
 
     team_abbr = st.selectbox("Active Rosters", list(ACTIVE_TEAMS.keys()), format_func=lambda x: f"{x} - {ACTIVE_TEAMS[x]}")
     if team_abbr:
@@ -513,7 +517,6 @@ with st.sidebar:
             if st.button("Add Roster Player", use_container_width=True):
                 clean_name = roster_player.split("] ")[-1] if "]" in roster_player else roster_player
                 st.session_state.players[roster[roster_player]] = clean_name
-                st.rerun()
 
     st.markdown("---")
     st.subheader("Players on Board")
@@ -524,7 +527,6 @@ with st.sidebar:
             with c_btn:
                 if st.button("✖", key=f"drop_{pid}", type="primary"):
                     del st.session_state.players[pid]
-                    st.rerun()
     else:
         st.info("Board is empty")
 
@@ -543,7 +545,7 @@ st.markdown("---")
 with st.expander("📊 Category & Metric", expanded=True):
     c_category, c_metric = st.columns([2, 8], vertical_alignment="center")
     with c_category:
-        st.session_state.stat_category = st.radio("Category:", ["Skater", "Goalie"], horizontal=True)
+        st.radio("Category:", ["Skater", "Goalie"], horizontal=True, key="stat_category")
     with c_metric:
         if st.session_state.stat_category == "Skater":
             metric = st.radio("Select Metric:",
@@ -561,18 +563,17 @@ with st.expander("⚙️ View Options", expanded=True):
     st.markdown("<div id='master-toggles'></div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([2, 3, 3])
     with c1:
-        season_type = st.selectbox("Season Type", ["Regular", "Playoffs", "Both"])
+        st.selectbox("Season Type", ["Regular", "Playoffs", "Both"], key="season_type")
     with c2:
-        do_smooth  = st.toggle("Data Smoothing")
-        do_predict = st.toggle("Project to 40")
+        st.toggle("Data Smoothing", key="do_smooth")
+        st.toggle("Project to 40", key="do_predict")
     with c3:
-        do_era = st.toggle("Era-Adjust")
-        # FIX #7: Force cumulative off for rate stats silently so all downstream code is safe.
-        _raw_cumul = st.toggle("Cumulative")
-        do_cumul = _raw_cumul and metric not in RATE_STATS
-        if _raw_cumul and metric in RATE_STATS:
+        st.toggle("Era-Adjust", key="do_era")
+        st.toggle("Cumulative", key="do_cumul_toggle")
+        if st.session_state.do_cumul_toggle and metric in RATE_STATS:
             st.caption(f"⚠️ Cumulative disabled — {metric} is a rate stat.")
-        do_base = st.toggle("Show Baseline")
+        st.toggle("Show Baseline", key="do_base")
+        do_cumul = st.session_state.do_cumul_toggle and metric not in RATE_STATS
 
 # --- ML ENGINE & DATA PROCESSING ---
 hist_df = load_historical_data()
@@ -603,11 +604,11 @@ if st.session_state.players:
         raw_df['BaseName'] = base_name
         raw_dfs_cache.append(raw_df.copy())
 
-        if season_type != "Both":
-            raw_df = raw_df[raw_df['GameType'] == season_type]
+        if st.session_state.season_type != "Both":
+            raw_df = raw_df[raw_df['GameType'] == st.session_state.season_type]
         if raw_df.empty: continue
 
-        if do_era and st.session_state.stat_category == "Skater":
+        if st.session_state.do_era and st.session_state.stat_category == "Skater":
             raw_df['EraMult'] = raw_df['SeasonYear'].apply(get_era_multiplier)
             # FIX #4: Adjust Goals and Assists independently, not just Points.
             # Previously only Points was adjusted, making Assists = Points - Goals
@@ -632,14 +633,14 @@ if st.session_state.players:
         df['BaseName'] = base_name
         df['Player'] = base_name
 
-        if do_predict:
+        if st.session_state.do_predict:
             max_age = df['Age'].max()
             if max_age < 40:
                 recent = df.tail(3).copy()
                 paced_recent = recent[metric].copy()
 
                 # FIX #3: Use dynamic CURRENT_SEASON_YEAR instead of hardcoded 2024.
-                if (season_type != "Playoffs"
+                if (st.session_state.season_type != "Playoffs"
                         and len(recent) > 0
                         and recent.iloc[-1]['SeasonYear'] >= CURRENT_SEASON_YEAR
                         and recent.iloc[-1]['GP'] < 82
@@ -801,10 +802,10 @@ if st.session_state.players:
             # do_cumul is already False for rate stats due to FIX #7 above.
             df[metric] = df[metric].cumsum()
 
-        if do_smooth:
+        if st.session_state.do_smooth:
             df[metric] = df[metric].rolling(window=3, min_periods=1).mean()
 
-        if do_predict and df['Age'].max() > max_age:
+        if st.session_state.do_predict and df['Age'].max() > max_age:
             real_part = df[df['Age'] <= max_age].copy()
             proj_part = df[df['Age'] >= max_age].copy()
             proj_part['Player'] = f"{base_name} (Proj)"
@@ -817,7 +818,7 @@ if st.session_state.players:
     if processed_dfs:
         final_df = pd.concat(processed_dfs, ignore_index=True)
 
-        if do_base:
+        if st.session_state.do_base:
             base_df = historical_baselines.get(st.session_state.stat_category)
             if base_df is not None and not base_df.empty:
                 base_data = []
@@ -837,7 +838,7 @@ if st.session_state.players:
                     base_data.append({"Age": age, metric: val, "Player": role_name, "BaseName": "Baseline"})
                 final_df = pd.concat([final_df, pd.DataFrame(base_data)], ignore_index=True)
 
-        fig = px.line(final_df, x="Age", y=metric, color="Player", custom_data=["BaseName", "Player"], markers=True, template="plotly_dark", line_shape="spline" if do_smooth else "linear")
+        fig = px.line(final_df, x="Age", y=metric, color="Player", custom_data=["BaseName", "Player"], markers=True, template="plotly_dark", line_shape="spline" if st.session_state.do_smooth else "linear")
 
         for trace in fig.data:
             if "(Proj)" in trace.name:
@@ -869,12 +870,12 @@ if st.session_state.players:
             fig.update_traces(hovertemplate="<b>%{customdata[1]}</b><br>Age %{x}<br>%{y:.1f}%<extra></extra>")
 
         safe_roster = roster_player if 'roster_player' in locals() else ""
-        chart_key = f"chart_{hash(str(st.session_state.players))}_{metric}_{do_predict}_{do_smooth}_{search_term}_{top_selected}_{team_abbr}_{safe_roster}"
+        chart_key = f"chart_{hash(str(st.session_state.players))}_{metric}_{st.session_state.do_predict}_{st.session_state.do_smooth}_{search_term}_{top_selected}_{team_abbr}_{safe_roster}"
         event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points", key=chart_key)
 
         if event and event.selection.get("points"):
             point = event.selection["points"][0]
-            show_season_details(point["customdata"][1], point["x"], raw_dfs_cache, metric, point["y"], do_cumul, final_df, season_type, ml_clones_dict, historical_baselines)
+            show_season_details(point["customdata"][1], point["x"], raw_dfs_cache, metric, point["y"], do_cumul, final_df, st.session_state.season_type, ml_clones_dict, historical_baselines)
 
     else:
         st.info("No data found for the selected parameters.")
