@@ -291,25 +291,31 @@ def get_clone_details_map(category):
         team = r.get('lastTeamAbbrev', '') or r.get('activeTeamAbbrevs', '') or ''
         if ',' in str(team):
             team = str(team).split(',')[-1].strip()
-        if category == "Skater":
-            details[pid] = {
-                'name': f"{r.get('firstName', '')} {r.get('lastName', '')}".strip(),
-                'team': team,
-                'gp': int(r.get('gamesPlayed', 0) or 0),
-                'pts': int(r.get('points', 0) or 0),
-                'g': int(r.get('goals', 0) or 0),
-                'a': int(r.get('assists', 0) or 0),
-                'pm': int(r.get('plusMinus', 0) or 0),
-            }
-        else:
-            details[pid] = {
-                'name': f"{r.get('firstName', '')} {r.get('lastName', '')}".strip(),
-                'team': team,
-                'gp': int(r.get('gamesPlayed', 0) or 0),
-                'w': int(r.get('wins', 0) or 0),
-                'sv': int(r.get('saves', 0) or 0),
-                'so': int(r.get('shutouts', 0) or 0),
-            }
+            
+        gp = int(r.get('gamesPlayed', 0) or 0)
+        
+        # The API returns franchise sub-totals and a grand total. 
+        # Only overwrite if this row has more games played (filters out the franchise fragments).
+        if pid not in details or gp > details[pid]['gp']:
+            if category == "Skater":
+                details[pid] = {
+                    'name': f"{r.get('firstName', '')} {r.get('lastName', '')}".strip(),
+                    'team': team,
+                    'gp': gp,
+                    'pts': int(r.get('points', 0) or 0),
+                    'g': int(r.get('goals', 0) or 0),
+                    'a': int(r.get('assists', 0) or 0),
+                    'pm': int(r.get('plusMinus', 0) or 0),
+                }
+            else:
+                details[pid] = {
+                    'name': f"{r.get('firstName', '')} {r.get('lastName', '')}".strip(),
+                    'team': team,
+                    'gp': gp,
+                    'w': int(r.get('wins', 0) or 0),
+                    'sv': int(r.get('saves', 0) or 0),
+                    'so': int(r.get('shutouts', 0) or 0),
+                }
     return details
 
 def get_all_time_rank(category, s_type, metric, value):
@@ -862,7 +868,8 @@ if st.session_state.players:
             fig.update_yaxes(ticksuffix="%")
             fig.update_traces(hovertemplate="<b>%{customdata[1]}</b><br>Age %{x}<br>%{y:.1f}%<extra></extra>")
 
-        chart_key = f"chart_{hash(str(st.session_state.players))}_{metric}_{do_predict}_{do_smooth}_{search_term}"
+        safe_roster = roster_player if 'roster_player' in locals() else ""
+        chart_key = f"chart_{hash(str(st.session_state.players))}_{metric}_{do_predict}_{do_smooth}_{search_term}_{top_selected}_{team_abbr}_{safe_roster}"
         event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points", key=chart_key)
 
         if event and event.selection.get("points"):
