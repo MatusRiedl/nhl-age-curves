@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import pandas as pd
 import plotly.express as px
@@ -91,7 +92,7 @@ st.markdown("""
             }
         }
 
-        /* Plotly modebar — always visible, larger tap targets for mobile */
+        /* Plotly modebar — always visible, fit on one row */
         .js-plotly-plot .plotly .modebar {
             opacity: 1 !important;
         }
@@ -99,6 +100,10 @@ st.markdown("""
         .js-plotly-plot .plotly .modebar-btn::after {
             display: none !important;
             content: none !important;
+        }
+        .js-plotly-plot .plotly .modebar-group {
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
         }
         .js-plotly-plot .plotly .modebar-btn {
             padding: 8px 10px !important;
@@ -109,11 +114,11 @@ st.markdown("""
         }
         @media (max-width: 768px) {
             .js-plotly-plot .plotly .modebar-btn {
-                padding: 12px 14px !important;
+                padding: 3px 5px !important;
             }
             .js-plotly-plot .plotly .modebar-btn svg {
-                width: 28px !important;
-                height: 28px !important;
+                width: 14px !important;
+                height: 14px !important;
             }
         }
     </style>
@@ -302,17 +307,51 @@ def get_era_multiplier(year):
     if 2013 <= year <= 2017: return 1.12  # Analytics/trap era (~2.72 GF/GP); 3.05/2.72=1.121
     return 1.00  # 2018+ scoring renaissance (~3.05 GF/GP — the baseline)
 
-def apply_era_to_hist(df, do_era):
-    """Return hist_df with Points/Goals/Assists era-adjusted using the app's 8-period
-    multiplier when do_era is True. Used to keep KNN and ranking comparisons consistent
-    with whatever era-adjustment state the live player data is in."""
+# League-average Save% by era (0-1 scale). Ordered so the first threshold >= year wins.
+_GOALIE_ERA_LEAGUE_AVG_SV = {
+    1967: 0.878,   # Original Six — stand-up goalies, no masks
+    1979: 0.871,   # Expansion + WHA — offense-heavy, basic equipment
+    1992: 0.873,   # Gretzky peak scoring — butterfly just emerging (Patrick Roy 1984+)
+    1996: 0.890,   # Transitional — butterfly spreading, larger pads, obstruction era
+    2004: 0.902,   # Dead puck — full butterfly, neutral-zone trap defense
+    2012: 0.908,   # Post-lockout — interference crackdown, technique refinement
+    2017: 0.912,   # Analytics era — systematic goalie training, peak equipment size
+}
+_GOALIE_SV_MODERN_BASELINE = 0.9110  # 2018+ league average (equipment size limits enforced)
+
+def get_goalie_era_sv_offset(year):
+    """Additive offset (0-1 scale) to normalize goalie Save% to the 2018+ baseline.
+    Preserves each goalie's deviation from their era's league average and expresses it
+    in modern-era terms. Add the result to a raw Save% value to shift it to the baseline.
+    Example: .890 in 1985 (era avg .873) -> .890 + (.911 - .873) = .928 modern equivalent.
+    """
+    for threshold, avg in _GOALIE_ERA_LEAGUE_AVG_SV.items():
+        if year <= threshold:
+            return _GOALIE_SV_MODERN_BASELINE - avg
+    return 0.0  # 2018+ — modern baseline, no adjustment needed
+
+def apply_era_to_hist(df, do_era, is_goalie=False):
+    """Return hist_df with era-adjusted stats matching the live player's adjustment state.
+    Skaters: Points/Goals/Assists multiplied by era multiplier.
+    Goalies: GAA multiplied by era mult, Save% shifted by additive era offset (0-1 scale),
+    Shutouts divided by era mult (inverse — harder to record in high-scoring eras).
+    Used to keep KNN and ranking comparisons consistent with the live player's adjustment."""
     if not do_era:
         return df
     d = df.copy()
     mult = d['SeasonYear'].apply(get_era_multiplier)
-    for col in ['Points', 'Goals', 'Assists']:
-        if col in d.columns:
-            d[col] = d[col] * mult
+    if not is_goalie:
+        for col in ['Points', 'Goals', 'Assists']:
+            if col in d.columns:
+                d[col] = d[col] * mult
+    else:
+        if 'GAA' in d.columns:
+            d['GAA'] = (d['GAA'] * mult).clip(lower=0)
+        if 'Save %' in d.columns:
+            sv_offsets = d['SeasonYear'].apply(get_goalie_era_sv_offset)
+            d['Save %'] = (d['Save %'] + sv_offsets).clip(0, 1)
+        if 'Shutouts' in d.columns:
+            d['Shutouts'] = d['Shutouts'] / mult
     return d
 
 def _paginate_records(base_url):
@@ -381,6 +420,28 @@ def get_top_50():
     except Exception:
         pass
     return { "1. Wayne Gretzky": 8447400, "2. Jaromir Jagr": 8448208, "3. Sidney Crosby": 8471675, "4. Alexander Ovechkin": 8471214 }
+
+@st.cache_data
+def get_top_50_goalies():
+    try:
+        url = "https://records.nhl.com/site/api/goalie-career-stats?sort=wins&dir=DESC&limit=100"
+        res = requests.get(url, timeout=5).json()
+        players = {}
+        added_ids = set()
+        count = 1
+        for p in res.get('data', []):
+            pid = int(p['playerId'])
+            if pid not in added_ids:
+                name = f"{count}. {p.get('firstName', '')} {p.get('lastName', '')}".strip()
+                players[name] = pid
+                added_ids.add(pid)
+                count += 1
+                if count > 50: break
+        if players: return players
+    except Exception:
+        pass
+    return {"1. Martin Brodeur": 8455710, "2. Patrick Roy": 8451033,
+            "3. Marc-Andre Fleury": 8471679, "4. Roberto Luongo": 8466141}
 
 # FIX #9: Added ttl=3600 so stale team labels (mid-season trades) expire automatically.
 @st.cache_data(ttl=3600)
@@ -759,8 +820,14 @@ with st.sidebar:
 
         st.markdown("---")
 
-        top_50_dict = get_top_50()
-        top_selected = st.selectbox("Top 50 All-Time", list(top_50_dict.keys()))
+        _is_goalie_mode = st.session_state.stat_category == "Goalie"
+        if _is_goalie_mode:
+            top_50_dict = get_top_50_goalies()
+            top_50_label = "Top 50 All-Time Goalies"
+        else:
+            top_50_dict = get_top_50()
+            top_50_label = "Top 50 All-Time Skaters"
+        top_selected = st.selectbox(top_50_label, list(top_50_dict.keys()))
 
         st.markdown("<div class='blue-btn-anchor'></div>", unsafe_allow_html=True)
         if st.button("Add Legend", use_container_width=True):
@@ -770,6 +837,8 @@ with st.sidebar:
         if team_abbr:
             st.markdown(f"<div style='text-align: center; margin-bottom: 5px;'><img src='https://assets.nhle.com/logos/nhl/svg/{team_abbr}_light.svg' height='40'></div>", unsafe_allow_html=True)
             roster = get_team_roster(team_abbr)
+            if _is_goalie_mode:
+                roster = {k: v for k, v in roster.items() if k.startswith("[G]")}
             if roster:
                 roster_player = st.selectbox("Select Player:", list(roster.keys()), label_visibility="collapsed")
 
@@ -874,7 +943,7 @@ with st.expander("📊 Category & Metric", expanded=True):
                                 help="+/-: Plus/Minus Differential | GP: Games Played | PPG: Points Per Game | SH%: Shooting Percentage | PIM: Penalty Minutes | TOI: Time on Ice (Avg Mins)")
         elif st.session_state.stat_category == "Goalie":
             metric = st.radio("Select Metric:",
-                                ["Save %", "GAA", "Wins", "Shutouts", "GP", "Saves"],
+                                ["Wins", "Save %", "GAA", "Shutouts", "GP", "Saves"],
                                 horizontal=True, key="goalie_metric",
                                 help="Save %: Save Percentage | GAA: Goals Against Average | GP: Games Played | Saves: Total Saves")
         else:
@@ -1050,6 +1119,29 @@ elif st.session_state.players:
                 raw_df.loc[_nhl_mask, 'Goals']   = raw_df.loc[_nhl_mask, 'Goals']   * _era_mults.values
                 raw_df.loc[_nhl_mask, 'Assists']  = raw_df.loc[_nhl_mask, 'Assists']  * _era_mults.values
 
+        if st.session_state.do_era and is_goalie:
+            # Era-normalize goalie stats to the 2018+ baseline (NHL rows only).
+            # Must target WeightedGAA and WeightedSV — the GP-weighted pre-groupby sums —
+            # because Save % and GAA don't exist in raw_df until post-groupby (lines ~1134-1135).
+            # Shutouts adjusted inversely: harder to record in high-scoring eras.
+            _nhl_mask = raw_df['League'] == 'NHL'
+            if _nhl_mask.any():
+                _era_mults  = raw_df.loc[_nhl_mask, 'SeasonYear'].apply(get_era_multiplier)
+                _sv_offsets = raw_df.loc[_nhl_mask, 'SeasonYear'].apply(get_goalie_era_sv_offset)
+                _gp_nhl     = raw_df.loc[_nhl_mask, 'GP']
+                # GAA: multiply the GP-weighted sum — mathematically equivalent to multiplying the rate
+                raw_df.loc[_nhl_mask, 'WeightedGAA'] = (
+                    raw_df.loc[_nhl_mask, 'WeightedGAA'] * _era_mults.values
+                ).clip(lower=0)
+                # Save%: offset is 0-1 units; WeightedSV is (savePct * 100 * GP), scale offset to match
+                raw_df.loc[_nhl_mask, 'WeightedSV'] = (
+                    raw_df.loc[_nhl_mask, 'WeightedSV'] + _sv_offsets.values * 100 * _gp_nhl.values
+                ).clip(lower=0)
+                # Shutouts: inverse mult — a 1985 shutout is harder than a dead-puck era shutout
+                raw_df.loc[_nhl_mask, 'Shutouts'] = (
+                    raw_df.loc[_nhl_mask, 'Shutouts'] / _era_mults.values
+                )
+
         if games_mode:
             # GAMES MODE: X = cumulative career GP, Y = cumulative totals (or career-avg rates).
             # Group by SeasonYear first to collapse Regular+Playoffs into one row per season
@@ -1175,7 +1267,7 @@ elif st.session_state.players:
 
                 if use_ml:
                     # Era-adjust hist_df to match the live player's adjustment state.
-                    knn_hist = apply_era_to_hist(hist_df, st.session_state.do_era)
+                    knn_hist = apply_era_to_hist(hist_df, st.session_state.do_era, is_goalie=is_goalie)
                     # Strict Position Filtering
                     h_df = knn_hist[knn_hist['Position'] == pos_code]
                     if len(h_df['PlayerID'].unique()) < 10:
@@ -1453,6 +1545,17 @@ if processed_dfs:
         x_col = "Age"
         custom_cols = ["BaseName", "Player"]
 
+    # Data bounds for axis range constraints and JS pan clamping
+    _x_vals = final_df[x_col].dropna()
+    _y_vals = final_df[metric].dropna()
+    _x_pad = (_x_vals.max() - _x_vals.min()) * 0.02 + 0.5
+    _y_pad = float(_y_vals.max()) * 0.05
+    _x_min = float(_x_vals.min()) - _x_pad
+    _x_max = float(_x_vals.max()) + _x_pad
+    _y_min = max(0.0, float(_y_vals.min()))
+    _y_max = float(_y_vals.max()) + _y_pad
+    _is_age_mode = (x_col == "Age")
+
     fig = px.line(final_df, x=x_col, y=metric, color="Player", custom_data=custom_cols, markers=True, template="plotly_dark", line_shape="spline" if st.session_state.do_smooth else "linear")
 
     for trace in fig.data:
@@ -1480,15 +1583,15 @@ if processed_dfs:
         # Season Year x-axis — no dtick (seasons are annual but not guaranteed contiguous for all teams)
         fig.update_traces(connectgaps=True, line=dict(width=4, shape='spline', smoothing=0.6), marker=dict(size=8),
                           hovertemplate=f"<b>%{{customdata[1]}}</b><br>Season %{{x}}<br>{metric}: %{{y:{_val_fmt}}}<extra></extra>")
-        fig.update_xaxes(title_text="Season Year", title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
+        fig.update_xaxes(title_text="Season Year", tickangle=0, automargin=True, title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
     elif games_mode:
         fig.update_traces(connectgaps=True, line=dict(width=4, shape='spline', smoothing=0.6), marker=dict(size=8),
                           hovertemplate=f"<b>%{{customdata[1]}}</b><br>{'Career Game' if not team_mode else 'Season GP'} %{{x}}<br>Value: %{{y:{_val_fmt}}}<extra></extra>")
-        fig.update_xaxes(title_text="Games Played", title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
+        fig.update_xaxes(title_text="Games Played", tickangle=0, automargin=True, title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
     else:
         fig.update_traces(connectgaps=True, line=dict(width=4, shape='spline', smoothing=0.6), marker=dict(size=8),
                           hovertemplate=f"<b>%{{customdata[1]}}</b><br>Age %{{x}}<br>Value: %{{y:{_val_fmt}}}<extra></extra>")
-        fig.update_xaxes(dtick=1, title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
+        fig.update_xaxes(dtick=1, tickangle=0, automargin=True, title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
 
     fig.update_yaxes(title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
 
@@ -1512,6 +1615,59 @@ if processed_dfs:
         "displaylogo": False,
     }
     event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points", key=chart_key, config=plotly_config)
+
+    components.html(f"""<script>
+(function() {{
+    var X_MIN = {_x_min:.4f};
+    var X_MAX = {_x_max:.4f};
+    var Y_MIN = {_y_min:.4f};
+    var Y_MAX = {_y_max:.4f};
+    var IS_AGE_MODE = {'true' if _is_age_mode else 'false'};
+
+    function applySettings(plot, Plotly) {{
+        var isMobile = window.parent.innerWidth < 768;
+        var updates = {{}};
+        if (IS_AGE_MODE) {{
+            updates['xaxis.dtick'] = isMobile ? 5 : 1;
+        }}
+        updates['xaxis.tickangle'] = 0;
+        Plotly.relayout(plot, updates);
+
+        // Clamp pan/zoom to data region
+        var _clamping = false;
+        plot.on('plotly_relayout', function(evt) {{
+            if (_clamping) return;
+            var clamps = {{}};
+            var needs = false;
+            var r0 = evt['xaxis.range[0]'], r1 = evt['xaxis.range[1]'];
+            var y0 = evt['yaxis.range[0]'], y1 = evt['yaxis.range[1]'];
+            if (r0 !== undefined && r0 < X_MIN) {{ clamps['xaxis.range[0]'] = X_MIN; needs = true; }}
+            if (r1 !== undefined && r1 > X_MAX) {{ clamps['xaxis.range[1]'] = X_MAX; needs = true; }}
+            if (y0 !== undefined && y0 < Y_MIN) {{ clamps['yaxis.range[0]'] = Y_MIN; needs = true; }}
+            if (y1 !== undefined && y1 > Y_MAX) {{ clamps['yaxis.range[1]'] = Y_MAX; needs = true; }}
+            if (needs) {{ _clamping = true; Plotly.relayout(plot, clamps); _clamping = false; }}
+        }});
+    }}
+
+    function init() {{
+        var parent = window.parent;
+        var Plotly = parent.Plotly;
+        if (!Plotly) {{ setTimeout(init, 200); return; }}
+        var plots = parent.document.querySelectorAll('.js-plotly-plot');
+        if (!plots.length) {{ setTimeout(init, 200); return; }}
+        plots.forEach(function(p) {{ applySettings(p, Plotly); }});
+
+        parent.addEventListener('resize', function() {{
+            var isMobile = parent.innerWidth < 768;
+            parent.document.querySelectorAll('.js-plotly-plot').forEach(function(p) {{
+                if (IS_AGE_MODE) Plotly.relayout(p, {{'xaxis.dtick': isMobile ? 5 : 1}});
+            }});
+        }});
+    }}
+
+    setTimeout(init, 500);
+}})();
+</script>""", height=0)
 
     if not team_mode and event and event.selection.get("points"):
         point = event.selection["points"][0]

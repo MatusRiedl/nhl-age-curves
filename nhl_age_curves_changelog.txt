@@ -478,6 +478,78 @@ v0.32.3 - Mobile-Friendly Chart Toolbar
   autoscale. Kept: zoom in/out, pan, reset axes, download PNG.
 - REMOVED: Plotly logo from modebar.
 
+v0.33.0 - Goalie-Specific Sidebar
+---------------------------------------------------------
+- ADDED: get_top_50_goalies() fetches top 50 NHL goalies by career wins from records.nhl.com.
+- CHANGED: Sidebar Top 50 list now branches on category: "Top 50 All-Time Skaters" for Skater
+  mode, "Top 50 All-Time Goalies" for Goalie mode.
+- CHANGED: Active Roster dropdown in Goalie mode filters to [G] positions only.
+- UNCHANGED: Global Search remains category-agnostic; pipeline filters downstream as before.
+
+v0.34.0 - GSAx (Goals Saved Above Expected) Goalie Metric
+---------------------------------------------------------
+- ADDED: fetch_gsax_lookup() fetches all goalie seasons from MoneyPuck (2009-present),
+  keyed by (player_id, season_year). Cached ttl=3600. GSAx = xGoalsAgainst - goalsAgainst.
+- ADDED: build_gsax_baseline() computes 75th-pct GSAx by age from MoneyPuck + parquet.
+  Called per render; cached ttl=3600. Used as the Baseline overlay for GSAx metric.
+- ADDED: "GSAx" to goalie metric radio as third option (after Wins, Save %).
+- ADDED: GSAx injected into raw_df before groupby for each goalie (Regular-season rows
+  only; playoff rows stay NaN). groupby uses min_count=1 so pre-2009 ages stay NaN,
+  not zero — the line naturally starts from the first season with data.
+- ADDED: GSAx handled in both games-mode (cumsum) and age-mode (per-season) pipelines.
+- ADDED: "GSAx": 25 cap in stat_caps (defensive guard; projection is disabled anyway).
+- CHANGED: Projection ("Project to 40") is disabled for GSAx — the xG model changes
+  year to year and career GSAx is a zero-sum stat that doesn't extrapolate meaningfully.
+- CHANGED: Goalie metric "Wins" moved to first position to reflect career ranking basis.
+- UNCHANGED: Era adjustment does not apply to GSAx (already era-normalized by design).
+- UNCHANGED: KNN not updated for GSAx (parquet doesn't have GSAx; deferred to scraper).
+
+v0.34.1 - Revert GSAx (MoneyPuck integration removed)
+---------------------------------------------------------
+- REVERTED: All v0.34.0 GSAx code removed. MoneyPuck data never rendered due to
+  runtime fetch failures; integration deemed unreliable for this use case.
+- REMOVED: fetch_gsax_lookup(), build_gsax_baseline() functions.
+- REMOVED: GSAx from goalie metric radio, stat_caps, pipeline injection, baseline block,
+  cumulative list, projection guards, and hover format.
+- UNCHANGED: Goalie metric order (Wins first) from v0.33.0 retained.
+
+v0.35.0 - Goalie Era Adjustment
+---------------------------------------------------------
+- ADDED: get_goalie_era_sv_offset(year) — returns additive Save% offset (0-1 scale) to
+  normalize goalie Save% to the 2018+ league-average baseline (0.9110). Uses an 8-period
+  lookup table of historical NHL league-average Save% values (0.871 expansion era to
+  0.912 analytics era peak). Preserves each goalie's deviation above/below their era mean.
+- ADDED: Goalie era adjustment block in player pipeline (NHL rows only, pre-groupby).
+  Targets WeightedGAA and WeightedSV (the GP-weighted sums), not the post-groupby derived
+  columns Save % and GAA, which don't exist in raw_df at adjustment time.
+  - GAA: WeightedGAA * era_multiplier (same GF/GP multipliers as skaters — GAA scales
+    directly with league scoring; 3.50 in 1985 x 0.80 = 2.80 normalized).
+  - Save%: WeightedSV + (sv_offset * 100 * GP) — offset scaled to WeightedSV units.
+  - Shutouts: raw / era_multiplier — inverse mult gives more credit for high-scoring eras
+    (10 SO in 1985 / 0.80 = 12.5 adjusted).
+  - Wins: not adjusted (too team-dependent for reliable era normalization).
+- UPDATED: apply_era_to_hist() now accepts is_goalie=False. Goalie branch adjusts GAA,
+  Save% (0-1 scale in hist_df), and Shutouts in historical parquet data so KNN clone
+  matching stays consistent with the displayed era-adjusted player curve.
+- UPDATED: apply_era_to_hist call site passes is_goalie=is_goalie.
+- Era-Adjust toggle was already visible for goalies; now it actually does something.
+
+v0.36.0 - Mobile Chart UX: Toolbar, Axis Labels, Pan Limits
+---------------------------------------------------------
+- FIXED: Modebar buttons were enlarged on mobile (28px) due to inverted CSS media query.
+  Now shrunk on mobile to 14px icons / 3px padding so all buttons fit on one row.
+- ADDED: modebar-group flex nowrap + overflow-x auto to prevent button wrapping on
+  narrow screens.
+- ADDED: tickangle=0 and automargin=True to all three fig.update_xaxes() branches
+  (Age, Games Played, Season Year) so labels are always horizontal and never auto-rotated.
+- ADDED: Responsive dtick via JS injection (st.components.v1.html, height=0). On mobile
+  (innerWidth < 768) the Age x-axis shows every 5 years (18, 23, 28, 33, 38); desktop
+  shows every 1 year. A resize listener toggles dtick dynamically.
+- ADDED: Pan/zoom clamping via JS plotly_relayout listener. Computes x/y data bounds
+  from final_df after x_col is determined; passes X_MIN/X_MAX/Y_MIN/Y_MAX as JS constants.
+  User cannot pan the chart into empty space on either axis.
+- ADDED: import streamlit.components.v1 as components (previously unused).
+
 =========================================================
 END OF DOCUMENT
 =========================================================
