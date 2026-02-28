@@ -5,20 +5,38 @@ An interactive analytics dashboard built in Python that visualizes aging curves 
 https://nhl-age-curves.streamlit.app/
 
 ## Features
-* **Live API Integration:** Pulls real time data directly from the NHL's undocumented public API including player stats, team rosters, and all time records leaderboards.
-* **KNN Machine Learning Projections:** Projects player performance to age 40 using a K-Nearest Neighbors algorithm that finds the 10 most statistically similar historical players (position matched) and maps their career trajectories onto the current player.
-* **Era Adjusted Scoring:** Normalizes points across NHL eras the high scoring 80s, the Dead Puck era, and the modern game so historical comparisons are apples to apples.
-* **75th Percentile Baseline:** Toggle a "Top 6 Forward / Starting Goalie" reference curve built from a historical database of all NHL seasons, with survivorship bias correction applied after age 31.
-* **Dual Class Architecture:** Natively supports and separates skaters from goaltenders, rendering entirely different metrics (e.g., Save Percentage vs. Points Per Game).
-* **Cumulative Tracking:** Toggle a race chart view to see cumulative career stats by age rather than single season points.
-* **Season Snapshot:** Click any data point on the chart to see that player's exact season stats at that age and their projected all time career rank.
+
+* **Live API Integration:** Pulls real-time data directly from the NHL's undocumented public API — player stats, team rosters, and all-time records leaderboards.
+
+* **KNN Machine Learning Projections:** Projects player performance to age 40 using a K-Nearest Neighbors algorithm. Matches against a database of ~8,500 NHL careers using full-career shape (not just recent seasons). An elite-tier pre-filter ensures top players are compared against historically similar talent levels — McDavid clones from Gretzky/Lemieux/Crosby, not role players.
+
+* **Era-Adjusted Scoring:** Normalizes Points, Goals, and Assists independently across 8 NHL eras — the high-scoring 80s, the Dead Puck era, the modern game, etc. — using historical goals-per-game data so comparisons across generations are apples-to-apples.
+
+* **75th Percentile Baseline:** Toggle a "Top 6 Forward / Starting Goalie" reference curve built from historical parquet data, with survivorship bias correction applied after age 31 (flat-or-rising baselines are overridden with a monotonic decay).
+
+* **Multi-League NHLe Support:** Include non-NHL seasons (KHL, SHL, AHL, NCAA, OHL, WHL, and more) with automatic NHLe conversion factors applied to Points, Goals, and Assists before entering the pipeline.
+
+* **Games Played X-Axis Mode:** Switch the X-axis from Age to career Games Played. Every player shares a common (0, 0) origin so you can directly compare players at the same point in career experience, normalizing for injuries and missed time.
+
+* **Dual Class Architecture:** Natively separates skaters from goaltenders, rendering entirely different metric sets (Save Percentage vs. Points Per Game, etc.).
+
+* **Cumulative Tracking:** Toggle a race chart view to see cumulative career stats rather than single-season values.
+
+* **Season Snapshot:** Click any data point to see that player's exact season stats at that age and their projected all-time career rank.
+
+* **Dynamic Search:** Type a player's first or last name to get live results. Selecting a match immediately adds them to the chart — no separate button required.
+
+* **Mobile-Friendly Layout:** Controls are organized into collapsible expander sections so the chart stays front-and-center on smaller screens.
+
+* **Player Headshots:** Each active roster entry in the sidebar shows the player's circular headshot thumbnail pulled from the NHL API.
 
 ## Tech Stack
 * **Frontend/Framework:** Streamlit
-* **Data & ML:** Pandas, custom KNN implementation
-* **Visualization:** Plotly Express
+* **Data & ML:** Pandas, PyArrow, custom KNN implementation
+* **Visualization:** Plotly
 * **Networking:** Requests (REST API)
-* **Local Database:** Parquet via `pyarrow` or `fastparquet`
+* **AI:** Anthropic SDK (`claude-opus-4-6`)
+* **Local Database:** Parquet (`nhl_historical_seasons.parquet`)
 
 ## How to Run Locally
 1. Clone this repository.
