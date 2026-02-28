@@ -96,6 +96,8 @@ st.markdown("""
 SEARCH_URL = "https://search.d3.nhle.com/api/v1/search/player"
 STATS_URL = "https://api-web.nhle.com/v1/player/{}/landing"
 ROSTER_URL = "https://api-web.nhle.com/v1/roster/{}/current"
+TEAM_STATS_URL = "https://api.nhle.com/stats/rest/en/team/summary"
+TEAM_LIST_URL  = "https://api.nhle.com/stats/rest/en/team"
 
 ACTIVE_TEAMS = {
     "ANA": "Anaheim Ducks", "BOS": "Boston Bruins", "BUF": "Buffalo Sabres",
@@ -114,6 +116,10 @@ ACTIVE_TEAMS = {
 # --- Rate stats require mean aggregation; counting stats use sum ---
 RATE_STATS = {'PPG', 'Save %', 'GAA', 'SH%', 'TOI'}
 
+# --- Team mode constants ---
+TEAM_RATE_STATS = {'GF/G', 'GA/G', 'Win%', 'PP%', 'PPG'}
+TEAM_METRICS    = ["Points", "Wins", "Win%", "Goals", "GF/G", "GA/G", "PP%", "PPG"]
+
 # --- NHLe (NHL Equivalency) multipliers — 2024 research values (Bacon/Chatel model) ---
 # Points, Goals, Assists for non-NHL rows are multiplied by these before entering the pipeline.
 # Leagues not listed are dropped (noise filter). Keys are uppercase to match API leagueAbbrev.
@@ -130,6 +136,7 @@ _now = datetime.now()
 CURRENT_SEASON_YEAR = _now.year if _now.month >= 9 else _now.year - 1
 
 if 'players' not in st.session_state: st.session_state.players = {}
+if 'teams' not in st.session_state: st.session_state.teams = {}
 if 'stat_category' not in st.session_state: st.session_state.stat_category = "Skater"
 if 'season_type' not in st.session_state: st.session_state.season_type = "Regular"
 if 'do_smooth' not in st.session_state: st.session_state.do_smooth = False
@@ -139,6 +146,7 @@ if 'do_cumul_toggle' not in st.session_state: st.session_state.do_cumul_toggle =
 if 'do_base' not in st.session_state: st.session_state.do_base = False
 if 'x_axis_mode' not in st.session_state: st.session_state.x_axis_mode = "Age"
 if 'league_filter' not in st.session_state: st.session_state.league_filter = ['NHL']
+if 'team_sel_abbr' not in st.session_state: st.session_state.team_sel_abbr = list(ACTIVE_TEAMS.keys())[0]
 
 @st.cache_data
 def load_historical_data():
@@ -181,6 +189,77 @@ def build_historical_baselines(df):
                         base.loc[age, col] = prev * 0.85
 
     return {'Skater': skater_base, 'Goalie': goalie_base}
+
+@st.cache_data
+def load_all_team_seasons():
+    """Fetch all team-season records from the NHL stats REST API.
+    The summary endpoint returns regular-season data with powerPlayPct included.
+    teamAbbrev (triCode) is joined from the separate team-list endpoint.
+    Permanently cached — historical records don't change."""
+    try:
+        # --- Build teamId -> triCode map from team list ---
+        team_list = requests.get(TEAM_LIST_URL, timeout=15).json().get("data", [])
+        id_to_tricode = {t["id"]: t["triCode"] for t in team_list if "id" in t and "triCode" in t}
+
+        # --- Fetch all team-season summary rows ---
+        resp = requests.get(TEAM_STATS_URL, params={"limit": -1}, timeout=30)
+        resp.raise_for_status()
+        summary_rows = resp.json().get("data", [])
+        if not summary_rows:
+            return pd.DataFrame()
+        df = pd.DataFrame(summary_rows)
+
+        # Attach teamAbbrev from the triCode map
+        df["teamAbbrev"] = df["teamId"].map(id_to_tricode)
+        # Tag as regular season (this endpoint serves regular-season data by default)
+        df["gameTypeId"] = 2
+
+        # --- Derive columns ---
+        df["SeasonYear"] = df["seasonId"] // 10000
+        df["GP"]     = df["gamesPlayed"]
+        df["Wins"]   = df["wins"]
+        df["Points"] = df["points"]
+        if "pointPct" in df.columns:
+            df["Win%"] = (df["pointPct"] * 100).round(1)
+        else:
+            df["Win%"] = (df["points"] / (df["gamesPlayed"] * 2) * 100).round(1)
+        df["GF/G"]   = df["goalsForPerGame"].round(3)
+        df["GA/G"]   = df["goalsAgainstPerGame"].round(3)
+        df["Goals"]  = df["goalsFor"]
+        df["PPG"]    = (df["goalsFor"] / df["gamesPlayed"] * 2.7).round(3)
+        # powerPlayPct is already in the summary response
+        df["PP%"]    = (df["powerPlayPct"] * 100).round(1) if "powerPlayPct" in df.columns else float("nan")
+
+        keep = ["teamId", "teamFullName", "teamAbbrev", "seasonId", "gameTypeId",
+                "SeasonYear", "GP", "Wins", "Points", "Win%",
+                "Goals", "GF/G", "GA/G", "PPG", "PP%"]
+        return df[[c for c in keep if c in df.columns]].reset_index(drop=True)
+    except Exception:
+        return pd.DataFrame()
+
+@st.cache_data
+def build_team_baselines(all_team_df):
+    """Compute 75th-percentile team baseline per SeasonYear for each TEAM_METRICS column.
+    Uses regular-season rows only (gameTypeId == 2).
+    Returns dict: {season_year (int): {metric (str): value (float)}}."""
+    if all_team_df.empty:
+        return {}
+    # Filter to regular season; fall back to all rows if column absent
+    if "gameTypeId" in all_team_df.columns:
+        reg = all_team_df[all_team_df["gameTypeId"] == 2].copy()
+    else:
+        reg = all_team_df.copy()
+    if reg.empty:
+        reg = all_team_df.copy()
+    result = {}
+    for sy, grp in reg.groupby("SeasonYear"):
+        entry = {}
+        for m in TEAM_METRICS:
+            if m in grp.columns:
+                vals = grp[m].dropna()
+                entry[m] = float(vals.quantile(0.75)) if not vals.empty else None
+        result[int(sy)] = entry
+    return result
 
 def get_era_multiplier(year):
     """Era-adjust scoring to normalize across NHL rule/style changes.
@@ -585,101 +664,156 @@ def show_season_details(player_name, age, raw_dfs_list, metric, val, is_cumul, f
             table_html += "</table>"
             st.markdown(table_html, unsafe_allow_html=True)
 
-# --- SIDEBAR: Player Management ---
+# --- SIDEBAR: Player or Team Management ---
+_sidebar_team_mode = st.session_state.stat_category == "Team"
+# Variables referenced later in chart_key — set defaults so they always exist
+search_term = ""
+top_selected = ""
+team_abbr = ""
+roster_player = ""
+
 with st.sidebar:
-    st.subheader("Global Search")
+    if not _sidebar_team_mode:
+        # ---- PLAYER MODE SIDEBAR ----
+        st.subheader("Global Search")
 
-    if 'search_ver' not in st.session_state:
-        st.session_state.search_ver = 0
-    if 'search_opts' not in st.session_state:
-        st.session_state.search_opts = {}
+        if 'search_ver' not in st.session_state:
+            st.session_state.search_ver = 0
+        if 'search_opts' not in st.session_state:
+            st.session_state.search_opts = {}
 
-    def _on_player_select():
-        ver = st.session_state.search_ver
-        sel = st.session_state.get(f"_player_pick_{ver}")
-        _SENT = "— select a player —"
-        if not sel or sel == _SENT:
-            return
-        pid = st.session_state.search_opts.get(sel)
-        if pid is None:
-            return
-        name = sel.split("] ")[-1] if "]" in sel else sel
-        st.session_state.players[pid] = name
-        st.session_state.search_ver = ver + 1
-        st.session_state.search_opts = {}
+        def _on_player_select():
+            ver = st.session_state.search_ver
+            sel = st.session_state.get(f"_player_pick_{ver}")
+            _SENT = "— select a player —"
+            if not sel or sel == _SENT:
+                return
+            pid = st.session_state.search_opts.get(sel)
+            if pid is None:
+                return
+            name = sel.split("] ")[-1] if "]" in sel else sel
+            st.session_state.players[pid] = name
+            st.session_state.search_ver = ver + 1
+            st.session_state.search_opts = {}
 
-    search_term = st.text_input(
-        "Search player:",
-        placeholder="e.g., McDavid, Crosby, Connor…",
-        label_visibility="collapsed",
-        key=f"search_input_{st.session_state.search_ver}"
-    )
-
-    opts = {}
-    if search_term:
-        results = search_player(search_term)
-        for p in results:
-            tm = p.get('teamAbbrev')
-            label = f"[{tm}] {p['name']}" if tm else p['name']
-            opts[label] = int(p['playerId'])
-        local = search_local_by_first_name(search_term, st.session_state.stat_category)
-        for label, pid in local.items():
-            if pid not in opts.values():
-                opts[label] = pid
-
-    st.session_state.search_opts = opts
-
-    if opts:
-        _SENT = "— select a player —"
-        st.selectbox(
-            "Results:",
-            [_SENT] + list(opts.keys()),
-            key=f"_player_pick_{st.session_state.search_ver}",
-            on_change=_on_player_select,
+        search_term = st.text_input(
+            "Search player:",
+            placeholder="e.g., McDavid, Crosby, Connor…",
             label_visibility="collapsed",
+            key=f"search_input_{st.session_state.search_ver}"
         )
-    elif search_term:
-        st.caption("No players found")
 
-    st.markdown("---")
+        opts = {}
+        if search_term:
+            results = search_player(search_term)
+            for p in results:
+                tm = p.get('teamAbbrev')
+                label = f"[{tm}] {p['name']}" if tm else p['name']
+                opts[label] = int(p['playerId'])
+            local = search_local_by_first_name(search_term, st.session_state.stat_category)
+            for label, pid in local.items():
+                if pid not in opts.values():
+                    opts[label] = pid
 
-    top_50_dict = get_top_50()
-    top_selected = st.selectbox("Top 50 All-Time", list(top_50_dict.keys()))
+        st.session_state.search_opts = opts
 
-    st.markdown("<div class='blue-btn-anchor'></div>", unsafe_allow_html=True)
-    if st.button("Add Legend", use_container_width=True):
-        st.session_state.players[top_50_dict[top_selected]] = top_selected.split(". ")[-1]
+        if opts:
+            _SENT = "— select a player —"
+            st.selectbox(
+                "Results:",
+                [_SENT] + list(opts.keys()),
+                key=f"_player_pick_{st.session_state.search_ver}",
+                on_change=_on_player_select,
+                label_visibility="collapsed",
+            )
+        elif search_term:
+            st.caption("No players found")
 
-    team_abbr = st.selectbox("Active Rosters", list(ACTIVE_TEAMS.keys()), format_func=lambda x: f"{x} - {ACTIVE_TEAMS[x]}")
-    if team_abbr:
-        st.markdown(f"<div style='text-align: center; margin-bottom: 5px;'><img src='https://assets.nhle.com/logos/nhl/svg/{team_abbr}_light.svg' height='40'></div>", unsafe_allow_html=True)
-        roster = get_team_roster(team_abbr)
-        if roster:
-            roster_player = st.selectbox("Select Player:", list(roster.keys()), label_visibility="collapsed")
+        st.markdown("---")
 
-            st.markdown("<div class='blue-btn-anchor'></div>", unsafe_allow_html=True)
-            if st.button("Add Roster Player", use_container_width=True):
-                clean_name = roster_player.split("] ")[-1] if "]" in roster_player else roster_player
-                st.session_state.players[roster[roster_player]] = clean_name
+        top_50_dict = get_top_50()
+        top_selected = st.selectbox("Top 50 All-Time", list(top_50_dict.keys()))
 
-    st.markdown("---")
-    if st.session_state.players:
-        for pid, name in list(st.session_state.players.items()):
-            c_name, c_btn = st.columns([5, 1], vertical_alignment="center", gap="small")
-            with c_name:
-                headshot = get_player_headshot(pid)
-                img_html = f"<img src='{headshot}' style='width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;'>" if headshot else ""
-                st.markdown(f"""
-                    <div style='display:flex;align-items:center;gap:8px;'>
-                        {img_html}
-                        <div class='player-name'>{name}</div>
-                    </div>
-                """, unsafe_allow_html=True)
-            with c_btn:
-                if st.button("✖", key=f"drop_{pid}", type="primary"):
-                    del st.session_state.players[pid]
+        st.markdown("<div class='blue-btn-anchor'></div>", unsafe_allow_html=True)
+        if st.button("Add Legend", use_container_width=True):
+            st.session_state.players[top_50_dict[top_selected]] = top_selected.split(". ")[-1]
+
+        team_abbr = st.selectbox("Active Rosters", list(ACTIVE_TEAMS.keys()), format_func=lambda x: f"{x} - {ACTIVE_TEAMS[x]}")
+        if team_abbr:
+            st.markdown(f"<div style='text-align: center; margin-bottom: 5px;'><img src='https://assets.nhle.com/logos/nhl/svg/{team_abbr}_light.svg' height='40'></div>", unsafe_allow_html=True)
+            roster = get_team_roster(team_abbr)
+            if roster:
+                roster_player = st.selectbox("Select Player:", list(roster.keys()), label_visibility="collapsed")
+
+                st.markdown("<div class='blue-btn-anchor'></div>", unsafe_allow_html=True)
+                if st.button("Add Roster Player", use_container_width=True):
+                    clean_name = roster_player.split("] ")[-1] if "]" in roster_player else roster_player
+                    st.session_state.players[roster[roster_player]] = clean_name
+
+        st.markdown("---")
+        if st.session_state.players:
+            for pid, name in list(st.session_state.players.items()):
+                c_name, c_btn = st.columns([5, 1], vertical_alignment="center", gap="small")
+                with c_name:
+                    headshot = get_player_headshot(pid)
+                    img_html = f"<img src='{headshot}' style='width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;'>" if headshot else ""
+                    st.markdown(f"""
+                        <div style='display:flex;align-items:center;gap:8px;'>
+                            {img_html}
+                            <div class='player-name'>{name}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                with c_btn:
+                    if st.button("✖", key=f"drop_{pid}", type="primary"):
+                        del st.session_state.players[pid]
+        else:
+            st.info("Board is empty")
+
     else:
-        st.info("Board is empty")
+        # ---- TEAM MODE SIDEBAR ----
+        st.subheader("Team Comparison")
+
+        # Logo shown ABOVE the dropdown — updates live on selection change
+        _logo_abbr = st.session_state.get("team_sel_abbr", list(ACTIVE_TEAMS.keys())[0])
+        st.markdown(
+            f"<div style='text-align:center;margin-bottom:5px;'>"
+            f"<img src='https://assets.nhle.com/logos/nhl/svg/{_logo_abbr}_light.svg' height='40'>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+        st.selectbox(
+            "Select Team:",
+            list(ACTIVE_TEAMS.keys()),
+            format_func=lambda x: f"{x} — {ACTIVE_TEAMS[x]}",
+            key="team_sel_abbr",
+            label_visibility="collapsed"
+        )
+
+        st.markdown("<div class='blue-btn-anchor'></div>", unsafe_allow_html=True)
+        if st.button("Add Team", use_container_width=True):
+            _sel = st.session_state.team_sel_abbr
+            st.session_state.teams[_sel] = ACTIVE_TEAMS[_sel]
+
+        st.markdown("---")
+
+        if st.session_state.teams:
+            for _abbr, _name in list(st.session_state.teams.items()):
+                c_name, c_btn = st.columns([5, 1], vertical_alignment="center", gap="small")
+                with c_name:
+                    _logo_url = f"https://assets.nhle.com/logos/nhl/svg/{_abbr}_light.svg"
+                    st.markdown(
+                        f"<div style='display:flex;align-items:center;gap:8px;'>"
+                        f"<img src='{_logo_url}' style='width:32px;height:32px;object-fit:contain;flex-shrink:0;'>"
+                        f"<div class='player-name'>{_name}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+                with c_btn:
+                    if st.button("✖", key=f"drop_team_{_abbr}", type="primary"):
+                        del st.session_state.teams[_abbr]
+        else:
+            st.info("Board is empty")
 
 # --- MAIN: Visualization ---
 st.markdown("""
@@ -691,40 +825,56 @@ st.markdown("""
 st.markdown("---")
 
 
+# --- x_axis_mode guard: keep mode valid when switching between player and team categories ---
+_tm = st.session_state.stat_category == "Team"
+if _tm and st.session_state.x_axis_mode == "Age":
+    st.session_state.x_axis_mode = "Season Year"
+elif not _tm and st.session_state.x_axis_mode == "Season Year":
+    st.session_state.x_axis_mode = "Age"
+
 # --- EXPANDER 1: Category & Metric ---
 # expanded=True ships open on desktop; mobile users can tap the header to collapse it.
 with st.expander("📊 Category & Metric", expanded=True):
     c_category, c_metric = st.columns([2, 8], vertical_alignment="center")
     with c_category:
-        st.radio("Category:", ["Skater", "Goalie"], horizontal=True, key="stat_category")
+        st.radio("Category:", ["Skater", "Goalie", "Team"], horizontal=True, key="stat_category")
     with c_metric:
         if st.session_state.stat_category == "Skater":
             metric = st.radio("Select Metric:",
                                 ["Points", "Goals", "Assists", "+/-", "GP", "PPG", "SH%", "PIM", "TOI"],
                                 horizontal=True, key="skater_metric",
                                 help="+/-: Plus/Minus Differential | GP: Games Played | PPG: Points Per Game | SH%: Shooting Percentage | PIM: Penalty Minutes | TOI: Time on Ice (Avg Mins)")
-        else:
+        elif st.session_state.stat_category == "Goalie":
             metric = st.radio("Select Metric:",
                                 ["Save %", "GAA", "Wins", "Shutouts", "GP", "Saves"],
                                 horizontal=True, key="goalie_metric",
                                 help="Save %: Save Percentage | GAA: Goals Against Average | GP: Games Played | Saves: Total Saves")
+        else:
+            metric = st.radio("Select Metric:", TEAM_METRICS,
+                                horizontal=True, key="team_metric",
+                                help="Points: standings pts | Wins: wins per season | Win%: pts pct | Goals: team GF | GF/G: goals for/game | GA/G: goals against/game | PP%: power play % | PPG: team scoring pts/game (est.)")
+    _x_opts = ["Season Year", "Games Played"] if st.session_state.stat_category == "Team" else ["Age", "Games Played"]
     c_xaxis, c_league, _ = st.columns([3, 4, 3])
     with c_xaxis:
-        st.selectbox("X-Axis", ["Age", "Games Played"], key="x_axis_mode",
-                     help="Age: plot by player age (default). Games Played: plot by career game number — normalizes for injuries and missed time.")
+        st.selectbox("X-Axis", _x_opts, key="x_axis_mode",
+                     help="Season Year: plot by NHL season (teams). Age: plot by player age. Games Played: cumulative game number.")
     with c_league:
-        st.multiselect(
-            "Leagues",
-            options=list(NHLE_MULTIPLIERS.keys()),
-            default=["NHL"],
-            key="league_filter",
-            help="NHL only by default. Select additional leagues to include non-NHL seasons. Stats are multiplied by NHLe equivalency factors (Points, Goals, Assists only; GP kept raw)."
-        )
-        _non_nhl = [l for l in (st.session_state.league_filter or ['NHL']) if l != 'NHL']
-        if _non_nhl:
-            st.caption(f"NHLe-adjusted: {', '.join(_non_nhl)}")
+        if st.session_state.stat_category != "Team":
+            st.multiselect(
+                "Leagues",
+                options=list(NHLE_MULTIPLIERS.keys()),
+                default=["NHL"],
+                key="league_filter",
+                help="NHL only by default. Select additional leagues to include non-NHL seasons. Stats are multiplied by NHLe equivalency factors (Points, Goals, Assists only; GP kept raw)."
+            )
+            _non_nhl = [l for l in (st.session_state.league_filter or ['NHL']) if l != 'NHL']
+            if _non_nhl:
+                st.caption(f"NHLe-adjusted: {', '.join(_non_nhl)}")
+        else:
+            st.caption("Team mode: NHL data only.")
 
 # --- EXPANDER 2: View Options & Toggles ---
+team_mode  = st.session_state.stat_category == "Team"
 games_mode = st.session_state.x_axis_mode == "Games Played"
 with st.expander("⚙️ View Options", expanded=True):
     st.markdown("<div id='master-toggles'></div>", unsafe_allow_html=True)
@@ -733,22 +883,31 @@ with st.expander("⚙️ View Options", expanded=True):
         st.selectbox("Season Type", ["Regular", "Playoffs", "Both"], key="season_type")
     with c2:
         st.toggle("3-Season Rolling Avg", key="do_smooth")
-        st.toggle("Project to 40", key="do_predict", disabled=games_mode)
+        st.toggle("Project to 40", key="do_predict", disabled=games_mode or team_mode)
     with c3:
-        st.toggle("Era-Adjust", key="do_era")
+        st.toggle("Era-Adjust", key="do_era", disabled=team_mode)
+        _cumul_rate_set = TEAM_RATE_STATS if team_mode else RATE_STATS
         st.toggle("Cumulative", key="do_cumul_toggle", disabled=games_mode)
-        if st.session_state.do_cumul_toggle and metric in RATE_STATS and not games_mode:
+        if st.session_state.do_cumul_toggle and metric in _cumul_rate_set and not games_mode:
             st.caption(f"⚠️ Cumulative disabled — {metric} is a rate stat.")
         if games_mode:
-            st.caption("ℹ️ Cumulative, Projection & Baseline unavailable in Games mode.")
+            _gm_note = "ℹ️ Cumulative & Baseline unavailable in Games mode." if team_mode else "ℹ️ Cumulative, Projection & Baseline unavailable in Games mode."
+            st.caption(_gm_note)
+        if team_mode:
+            st.caption("ℹ️ Projection & Era-Adjust not applicable to teams.")
         st.toggle("Show Baseline", key="do_base", disabled=games_mode)
-        do_cumul = st.session_state.do_cumul_toggle and metric not in RATE_STATS and not games_mode
+        do_cumul = st.session_state.do_cumul_toggle and metric not in _cumul_rate_set and not games_mode
 
 # --- ML ENGINE & DATA PROCESSING ---
 hist_df = load_historical_data()
 historical_baselines = build_historical_baselines(hist_df)
-id_to_name_map = get_id_to_name_map(st.session_state.stat_category)
-clone_details_map = get_clone_details_map(st.session_state.stat_category)
+# id_to_name_map and clone_details_map are only used by the KNN engine (player mode)
+if not team_mode:
+    id_to_name_map = get_id_to_name_map(st.session_state.stat_category)
+    clone_details_map = get_clone_details_map(st.session_state.stat_category)
+else:
+    id_to_name_map = {}
+    clone_details_map = {}
 
 # GP is intentionally excluded from ML — it uses the dedicated durability decay curve below.
 # KNN would fillna(0) for retired players, causing a false nosedive for young players.
@@ -758,8 +917,65 @@ stat_floors = { "+/-": -60 }  # FIX #1: Floor cap for +/- to mirror ceiling
 
 ml_clones_dict = {}
 peak_info = {}  # key=base_name, value={x, y, age, season_year, pid}
+raw_dfs_cache = []  # used by click handler; always defined
+processed_dfs = []  # populated by whichever pipeline runs
 
-if st.session_state.players:
+if team_mode:
+    # =========================================================
+    # TEAM PIPELINE — completely separate from player pipeline
+    # =========================================================
+    all_team_df   = load_all_team_seasons()
+    team_baselines = build_team_baselines(all_team_df)
+    processed_dfs  = []
+
+    if all_team_df.empty or "teamAbbrev" not in all_team_df.columns:
+        st.warning("Team stats could not be loaded — NHL API may be temporarily unavailable. Try refreshing.")
+        all_team_df = pd.DataFrame(columns=["teamAbbrev"])  # prevents KeyError below
+
+    for _abbr, _name in st.session_state.teams.items():
+        df = all_team_df[all_team_df["teamAbbrev"] == _abbr].copy()
+        if df.empty:
+            continue
+
+        # Season type filter (gameTypeId 2=regular, 3=playoffs)
+        _stype = st.session_state.season_type
+        if "gameTypeId" in df.columns:
+            if _stype == "Regular":
+                df = df[df["gameTypeId"] == 2]
+            elif _stype == "Playoffs":
+                df = df[df["gameTypeId"] == 3]
+            # "Both" — keep all rows
+
+        if df.empty:
+            continue
+
+        df = df.sort_values("SeasonYear").reset_index(drop=True)
+
+        # Guard: metric column must exist (PP% absent for old seasons is OK — NaN renders as gap)
+        if metric not in df.columns:
+            continue
+
+        # Cumulative
+        if do_cumul and metric not in TEAM_RATE_STATS:
+            df[metric] = df[metric].cumsum()
+
+        # Smoothing
+        if st.session_state.do_smooth:
+            df[metric] = df[metric].rolling(window=3, min_periods=1).mean()
+
+        # Games Played x-axis
+        if games_mode:
+            df["CumGP"] = df["GP"].cumsum()
+
+        df["Player"]   = _name
+        df["BaseName"] = _abbr
+
+        _keep_cols = ["SeasonYear", "GP", metric, "Player", "BaseName"]
+        if games_mode:
+            _keep_cols.append("CumGP")
+        processed_dfs.append(df[[c for c in _keep_cols if c in df.columns]])
+
+elif st.session_state.players:
     processed_dfs = []
     raw_dfs_cache = []
 
@@ -1160,10 +1376,25 @@ if st.session_state.players:
 
         processed_dfs.append(final_player_df)
 
-    if processed_dfs:
-        final_df = pd.concat(processed_dfs, ignore_index=True)
+# =========================================================
+# CHART RENDERING — shared by team and player pipelines
+# =========================================================
+if processed_dfs:
+    final_df = pd.concat(processed_dfs, ignore_index=True)
 
-        if st.session_state.do_base and not games_mode:
+    if st.session_state.do_base and not games_mode:
+        if team_mode:
+            # Team baseline: 75th pct of all teams per season year
+            base_data = []
+            for _sy in sorted(team_baselines.keys()):
+                _val = team_baselines[_sy].get(metric)
+                if _val is not None and not pd.isna(_val):
+                    base_data.append({"SeasonYear": _sy, metric: _val,
+                                       "Player": "NHL Team 75th Pct Baseline", "BaseName": "Baseline"})
+            if base_data:
+                final_df = pd.concat([final_df, pd.DataFrame(base_data)], ignore_index=True)
+        else:
+            # Player baseline: 75th pct by age from parquet
             base_df = historical_baselines.get(st.session_state.stat_category)
             if base_df is not None and not base_df.empty:
                 base_data = []
@@ -1183,55 +1414,80 @@ if st.session_state.players:
                     base_data.append({"Age": age, metric: val, "Player": role_name, "BaseName": "Baseline"})
                 final_df = pd.concat([final_df, pd.DataFrame(base_data)], ignore_index=True)
 
-        x_col = "CumGP" if games_mode else "Age"
-        custom_cols = ["BaseName", "Player", "Age"] if games_mode else ["BaseName", "Player"]
-        fig = px.line(final_df, x=x_col, y=metric, color="Player", custom_data=custom_cols, markers=True, template="plotly_dark", line_shape="spline" if st.session_state.do_smooth else "linear")
+    # Determine x-axis column
+    if team_mode and not games_mode:
+        x_col = "SeasonYear"
+        custom_cols = ["BaseName", "Player"]
+    elif games_mode:
+        x_col = "CumGP"
+        custom_cols = ["BaseName", "Player", "Age"] if not team_mode else ["BaseName", "Player"]
+    else:
+        x_col = "Age"
+        custom_cols = ["BaseName", "Player"]
 
-        for trace in fig.data:
-            if "(Proj)" in trace.name:
-                trace.line.dash = 'dot'
-                trace.line.color = 'gray'
-                trace.marker.symbol = 'circle-open'
-            elif "Baseline" in trace.name:
-                trace.line.dash = 'dash'
-                trace.line.color = 'rgba(255, 255, 255, 0.4)'
-                trace.marker.size = 1
+    fig = px.line(final_df, x=x_col, y=metric, color="Player", custom_data=custom_cols, markers=True, template="plotly_dark", line_shape="spline" if st.session_state.do_smooth else "linear")
 
-        fig.update_layout(
-            uirevision='constant',
-            margin=dict(l=0, r=0, t=40, b=80),
-            height=600,
-            font=dict(size=16),
-            hoverlabel=dict(font_size=18, font_family="Arial", bgcolor="#1E1E1E"),
-            legend=dict(title=None, orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
-            clickmode='event+select'
-        )
+    for trace in fig.data:
+        if "(Proj)" in trace.name:
+            trace.line.dash = 'dot'
+            trace.line.color = 'gray'
+            trace.marker.symbol = 'circle-open'
+        elif "Baseline" in trace.name:
+            trace.line.dash = 'dash'
+            trace.line.color = 'rgba(255, 255, 255, 0.4)'
+            trace.marker.size = 1
 
-        _val_fmt = ".2f" if metric in RATE_STATS else ".0f"
-        if games_mode:
-            fig.update_traces(connectgaps=True, line=dict(width=4, shape='spline', smoothing=0.6), marker=dict(size=8), hovertemplate=f"<b>%{{customdata[1]}}</b><br>Career Game %{{x}}<br>Value: %{{y:{_val_fmt}}}<extra></extra>")
-            fig.update_xaxes(title_text="Games Played", title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
+    fig.update_layout(
+        uirevision='constant',
+        margin=dict(l=0, r=0, t=40, b=80),
+        height=600,
+        font=dict(size=16),
+        hoverlabel=dict(font_size=18, font_family="Arial", bgcolor="#1E1E1E"),
+        legend=dict(title=None, orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
+        clickmode='event+select'
+    )
+
+    _val_fmt = ".2f" if (team_mode and metric in TEAM_RATE_STATS) or (not team_mode and metric in RATE_STATS) else ".0f"
+    if team_mode and not games_mode:
+        # Season Year x-axis — no dtick (seasons are annual but not guaranteed contiguous for all teams)
+        fig.update_traces(connectgaps=True, line=dict(width=4, shape='spline', smoothing=0.6), marker=dict(size=8),
+                          hovertemplate=f"<b>%{{customdata[1]}}</b><br>Season %{{x}}<br>{metric}: %{{y:{_val_fmt}}}<extra></extra>")
+        fig.update_xaxes(title_text="Season Year", title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
+    elif games_mode:
+        fig.update_traces(connectgaps=True, line=dict(width=4, shape='spline', smoothing=0.6), marker=dict(size=8),
+                          hovertemplate=f"<b>%{{customdata[1]}}</b><br>{'Career Game' if not team_mode else 'Season GP'} %{{x}}<br>Value: %{{y:{_val_fmt}}}<extra></extra>")
+        fig.update_xaxes(title_text="Games Played", title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
+    else:
+        fig.update_traces(connectgaps=True, line=dict(width=4, shape='spline', smoothing=0.6), marker=dict(size=8),
+                          hovertemplate=f"<b>%{{customdata[1]}}</b><br>Age %{{x}}<br>Value: %{{y:{_val_fmt}}}<extra></extra>")
+        fig.update_xaxes(dtick=1, title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
+
+    fig.update_yaxes(title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
+
+    if metric in ["Save %", "SH%", "Win%", "PP%"]:
+        fig.update_yaxes(ticksuffix="%")
+        if team_mode and not games_mode:
+            fig.update_traces(hovertemplate=f"<b>%{{customdata[1]}}</b><br>Season %{{x}}<br>%{{y:.1f}}%<extra></extra>")
         else:
-            fig.update_traces(connectgaps=True, line=dict(width=4, shape='spline', smoothing=0.6), marker=dict(size=8), hovertemplate=f"<b>%{{customdata[1]}}</b><br>Age %{{x}}<br>Value: %{{y:{_val_fmt}}}<extra></extra>")
-            fig.update_xaxes(dtick=1, title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
-
-        fig.update_yaxes(title_font=dict(size=25, family='Arial Black'), tickfont=dict(size=18, family='Arial Black'))
-
-        if metric in ["Save %", "SH%"]:
-            fig.update_yaxes(ticksuffix="%")
             x_label = "Career Game" if games_mode else "Age"
             fig.update_traces(hovertemplate=f"<b>%{{customdata[1]}}</b><br>{x_label} %{{x}}<br>%{{y:.1f}}%<extra></extra>")
 
+    if team_mode:
+        chart_key = f"chart_team_{hash(str(st.session_state.teams))}_{metric}_{st.session_state.do_smooth}_{st.session_state.x_axis_mode}"
+    else:
         safe_roster = roster_player if 'roster_player' in locals() else ""
         chart_key = f"chart_{hash(str(st.session_state.players))}_{metric}_{st.session_state.do_predict}_{st.session_state.do_smooth}_{search_term}_{top_selected}_{team_abbr}_{safe_roster}_{st.session_state.x_axis_mode}"
-        event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points", key=chart_key)
+    event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points", key=chart_key)
 
-        if event and event.selection.get("points"):
-            point = event.selection["points"][0]
-            cd = point.get("customdata", [])
-            age_for_detail = int(cd[2]) if games_mode else point["x"]
-            show_season_details(cd[1], age_for_detail, raw_dfs_cache, metric, point["y"], do_cumul, final_df, st.session_state.season_type, ml_clones_dict, historical_baselines)
+    if not team_mode and event and event.selection.get("points"):
+        point = event.selection["points"][0]
+        cd = point.get("customdata", [])
+        age_for_detail = int(cd[2]) if games_mode else point["x"]
+        show_season_details(cd[1], age_for_detail, raw_dfs_cache, metric, point["y"], do_cumul, final_df, st.session_state.season_type, ml_clones_dict, historical_baselines)
 
+else:
+    if team_mode:
+        st.info("Add teams from the sidebar to compare their historical performance.")
     else:
         st.info("No data found for the selected parameters.")
 
