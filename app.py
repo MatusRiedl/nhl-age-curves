@@ -95,6 +95,11 @@ st.markdown("""
         .js-plotly-plot .plotly .modebar {
             opacity: 1 !important;
         }
+        .js-plotly-plot .plotly .modebar-btn::before,
+        .js-plotly-plot .plotly .modebar-btn::after {
+            display: none !important;
+            content: none !important;
+        }
         .js-plotly-plot .plotly .modebar-btn {
             padding: 8px 10px !important;
         }
