@@ -599,3 +599,50 @@ v0.37.2 - Per-Season View in Games Played Mode
   since Step 6a handles cumulation for that branch.
 - CHANGED: Controls caption updated from "Cumulative unavailable in Games mode" to
   "Projection & Baseline unavailable in Games mode" (reflecting that cumulative is now available).
+
+
+v0.37.3 - Single-Click Player/Team Removal Fix
+-----------------------------------------------
+- FIXED: Clicking the X button to remove a player or team from the board now removes
+  the sidebar row and updates the chart in a single click. Previously, the chart updated
+  immediately but the player name and X button lingered in the sidebar until a second click.
+- FIXED: Root cause was Streamlit render timing -- the player row was already drawn to
+  the sidebar before the del statement executed, requiring a second rerun to clear it.
+  Added st.rerun() after each del in nhl/sidebar.py so the current render is aborted and
+  a fresh rerun starts with the updated state, removing the entry immediately.
+
+v0.38.0 - Right-Column Player Comparison Panel
+-----------------------------------------------
+- NEW: "Show Player Stats Panel" toggle added between controls and chart (player mode only,
+  hidden when board is empty). Activating it splits the main area 65/35 into chart and stats
+  panel. Toggling off returns chart to full width. Columns stack vertically on mobile.
+- NEW: nhl/comparison.py module -- render_comparison_panel() renders one card per selected
+  player stacked vertically. Each card shows: full-body hero image (NHL CDN heroImage field),
+  player name with current team logo inline, career counting stats (G/A/Pts/GP for skaters,
+  W/SO/SV/GP for goalies), all-time career rank, and best season highlight for the active
+  metric.
+- NEW: get_player_hero_image(pid) in data_loaders.py -- returns heroImage URL from the NHL
+  landing page API; falls back to headshot if heroImage is absent (common for retired players).
+- NEW: get_player_current_team(pid) in data_loaders.py -- returns currentTeamAbbrev from
+  the NHL landing page API; returns empty string for free agents and retired players.
+- NEW: get_player_career_rank(pid, category, s_type) in data_loaders.py -- returns a
+  player's exact all-time career rank by playerId lookup in the sorted records list.
+- NEW: show_stats_panel session state key (default False).
+- CHANGED: process_players() 4th return (peak_info dict) now captured in app.py instead of
+  discarded as _. peak_info passed to render_comparison_panel for best season display.
+- CHANGED: nhl/__init__.py module directory updated to document the new comparison module.
+
+v0.38.1 - Rank Fix, Green Rank Color, Tight Card Spacing
+----------------------------------------------------------
+- FIXED: All-time rank showed wrong position (Crosby #10 instead of #8). Root cause: old
+  code used get_all_time_rank() which compares a career total value against the records list.
+  Float accumulation in the pipeline sum and extra players in the raw API data (not shown on
+  the official top-10 page) placed additional entries ahead of the matched position. Replaced
+  with get_player_career_rank() which looks up the player by playerId in the sorted list --
+  exact rank, no value drift. Players not in the records list (rookies, non-NHL careers)
+  return None and the rank line is omitted.
+- CHANGED: All-time rank line color changed from amber (#f0a500) to green (#4caf50).
+- CHANGED: Eliminated large vertical gaps between name, stats, rank, and best season lines
+  within each card. Previously four separate st.markdown() calls each produced a <p> element
+  with default 16px top/bottom margin. All four rows now rendered in a single HTML block with
+  line-height:1.6 and margin:0, removing the inter-paragraph whitespace.

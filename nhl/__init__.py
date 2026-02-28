@@ -15,4 +15,5 @@ This package splits the single-file app.py into focused modules:
     sidebar         — player and team sidebar UI (Streamlit UI)
     dialog          — @st.dialog season-detail popup
     chart           — Plotly chart rendering + JS pan-clamp injection
+    comparison      — right-column player stat cards (hero image, career totals, best season)
 """

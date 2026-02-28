@@ -95,6 +95,18 @@ _CSS = """
             }
         }
 
+        /* Comparison panel cards */
+        .comparison-card {
+            padding: 0.5rem 0.25rem;
+        }
+        .comparison-card b {
+            font-size: 15px;
+        }
+        .comparison-card small {
+            color: #aaa;
+            font-size: 12px;
+        }
+
         /* Plotly modebar — always visible, fit on one row */
         .js-plotly-plot .plotly .modebar {
             opacity: 1 !important;

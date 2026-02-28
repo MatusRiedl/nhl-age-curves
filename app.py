@@ -15,6 +15,7 @@ Module responsibilities:
     nhl.player_pipeline — process_players(): full per-player data pipeline
     nhl.team_pipeline   — process_teams(): per-team data pipeline
     nhl.chart           — render_chart(): Plotly figure + JS clamping + click dialog
+    nhl.comparison      — render_comparison_panel(): right-column player stat cards
 """
 
 import streamlit as st
@@ -24,6 +25,7 @@ from nhl.baselines import build_historical_baselines, build_team_baselines
 from nhl.chart import render_chart
 from nhl.constants import ACTIVE_TEAMS
 from nhl.controls import render_controls
+from nhl.comparison import render_comparison_panel
 from nhl.data_loaders import (
     get_clone_details_map,
     get_id_to_name_map,
@@ -62,6 +64,7 @@ if 'x_axis_mode'    not in st.session_state: st.session_state.x_axis_mode    = "
 if 'league_filter'  not in st.session_state: st.session_state.league_filter  = ['NHL']
 if 'team_sel_abbr'  not in st.session_state:
     st.session_state.team_sel_abbr = list(ACTIVE_TEAMS.keys())[0]
+if 'show_stats_panel' not in st.session_state: st.session_state.show_stats_panel = False
 
 # =============================================================================
 # Sidebar — renders player/team board and returns keys for chart cache-busting
@@ -102,6 +105,10 @@ metric, do_cumul = render_controls()
 team_mode  = st.session_state.stat_category == "Team"
 games_mode = st.session_state.x_axis_mode == "Games Played"
 
+# Stats panel toggle — player mode only, hidden when no players are on the board
+if not team_mode and st.session_state.players:
+    st.toggle("Show Player Stats Panel", key="show_stats_panel")
+
 # =============================================================================
 # Shared data: historical parquet + baselines
 # Cached permanently — only recomputed when the parquet file changes.
@@ -123,6 +130,7 @@ else:
 processed_dfs  = []
 raw_dfs_cache  = []
 ml_clones_dict = {}
+peak_info      = {}
 team_baselines = {}
 
 if team_mode:
@@ -149,7 +157,7 @@ if team_mode:
 
 elif st.session_state.players:
     # ── Player pipeline ────────────────────────────────────────────────
-    processed_dfs, raw_dfs_cache, ml_clones_dict, _ = process_players(
+    processed_dfs, raw_dfs_cache, ml_clones_dict, peak_info = process_players(
         players           = st.session_state.players,
         metric            = metric,
         hist_df           = hist_df,
@@ -167,23 +175,48 @@ elif st.session_state.players:
 
 # =============================================================================
 # Chart rendering (shared by both pipelines)
+# When the stats panel is toggled on, split main area 65/35; otherwise full width.
 # =============================================================================
-render_chart(
-    processed_dfs        = processed_dfs,
-    metric               = metric,
-    team_mode            = team_mode,
-    games_mode           = games_mode,
-    do_cumul             = do_cumul,
-    do_base              = st.session_state.do_base,
-    do_smooth            = st.session_state.do_smooth,
-    stat_category        = st.session_state.stat_category,
-    historical_baselines = historical_baselines,
-    team_baselines       = team_baselines,
-    raw_dfs_cache        = raw_dfs_cache,
-    ml_clones_dict       = ml_clones_dict,
-    season_type          = st.session_state.season_type,
-    sidebar_keys         = sidebar_keys,
+_show_panel = (
+    st.session_state.show_stats_panel
+    and not team_mode
+    and bool(processed_dfs)
 )
+
+if _show_panel:
+    col_chart, col_stats = st.columns([65, 35], gap="medium")
+else:
+    col_chart = st.container()
+    col_stats = None
+
+with col_chart:
+    render_chart(
+        processed_dfs        = processed_dfs,
+        metric               = metric,
+        team_mode            = team_mode,
+        games_mode           = games_mode,
+        do_cumul             = do_cumul,
+        do_base              = st.session_state.do_base,
+        do_smooth            = st.session_state.do_smooth,
+        stat_category        = st.session_state.stat_category,
+        historical_baselines = historical_baselines,
+        team_baselines       = team_baselines,
+        raw_dfs_cache        = raw_dfs_cache,
+        ml_clones_dict       = ml_clones_dict,
+        season_type          = st.session_state.season_type,
+        sidebar_keys         = sidebar_keys,
+    )
+
+if col_stats is not None:
+    with col_stats:
+        render_comparison_panel(
+            processed_dfs = processed_dfs,
+            players       = st.session_state.players,
+            peak_info     = peak_info,
+            metric        = metric,
+            stat_category = st.session_state.stat_category,
+            season_type   = st.session_state.season_type,
+        )
 
 # =============================================================================
 # Footer

@@ -396,6 +396,48 @@ def get_player_headshot(player_id: int) -> str:
         return ''
 
 
+@st.cache_data
+def get_player_current_team(player_id: int) -> str:
+    """Return the current team abbreviation for an active NHL player.
+
+    Fetches the player landing page and returns the currentTeamAbbrev field.
+    Active players return a tricode (e.g. 'EDM'). Retired players and free
+    agents return an empty string, which callers should treat as "no logo".
+
+    Args:
+        player_id: Numeric NHL player ID.
+
+    Returns:
+        Three-letter team abbreviation string, or '' if inactive/unavailable.
+    """
+    try:
+        res = requests.get(STATS_URL.format(player_id), timeout=5).json()
+        return res.get('currentTeamAbbrev', '') or ''
+    except Exception:
+        return ''
+
+
+@st.cache_data
+def get_player_hero_image(player_id: int) -> str:
+    """Return the full-body hero image URL for a player from the NHL stats API.
+
+    The heroImage field is a full-body action render with transparent background,
+    available for current and recent players. Falls back to the headshot URL if
+    heroImage is absent (common for retired players).
+
+    Args:
+        player_id: Numeric NHL player ID.
+
+    Returns:
+        URL string for heroImage or headshot fallback, or '' on failure.
+    """
+    try:
+        res = requests.get(STATS_URL.format(player_id), timeout=5).json()
+        return res.get('heroImage', res.get('headshot', ''))
+    except Exception:
+        return ''
+
+
 # ---------------------------------------------------------------------------
 # Per-player raw stats
 # ---------------------------------------------------------------------------
@@ -602,3 +644,34 @@ def get_all_time_rank(
         if value >= record.get(key, 0):
             return i + 1
     return len(records) + 1
+
+
+def get_player_career_rank(pid: int, category: str, s_type: str) -> int | None:
+    """Return a player's exact all-time career rank looked up by player ID.
+
+    Unlike get_all_time_rank (value comparison), this matches the player's
+    record by playerId in the sorted list, eliminating float drift and API
+    ordering discrepancies that cause off-by-N errors.
+
+    Args:
+        pid:      Numeric NHL player ID.
+        category: 'Skater' or 'Goalie'.
+        s_type:   'Regular', 'Playoffs', or 'Both'.
+
+    Returns:
+        1-based integer rank (1 = all-time leader), or None if the player is
+        not found in the records list (rookie, non-NHL career, etc.).
+    """
+    records = fetch_all_time_records(category, s_type)
+    if not records:
+        return None
+    rank_key = "wins" if category == "Goalie" else "points"
+    sorted_records = sorted(
+        [r for r in records if r.get(rank_key) is not None],
+        key=lambda x: x.get(rank_key, 0),
+        reverse=True,
+    )
+    for i, r in enumerate(sorted_records):
+        if int(r.get('playerId', -1)) == pid:
+            return i + 1
+    return None
