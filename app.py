@@ -90,6 +90,27 @@ st.markdown("""
                 flex: 1 1 48% !important;
             }
         }
+
+        /* Plotly modebar — always visible, larger tap targets for mobile */
+        .js-plotly-plot .plotly .modebar {
+            opacity: 1 !important;
+        }
+        .js-plotly-plot .plotly .modebar-btn {
+            padding: 8px 10px !important;
+        }
+        .js-plotly-plot .plotly .modebar-btn svg {
+            width: 22px !important;
+            height: 22px !important;
+        }
+        @media (max-width: 768px) {
+            .js-plotly-plot .plotly .modebar-btn {
+                padding: 12px 14px !important;
+            }
+            .js-plotly-plot .plotly .modebar-btn svg {
+                width: 28px !important;
+                height: 28px !important;
+            }
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -360,14 +381,14 @@ def get_top_50():
 @st.cache_data(ttl=3600)
 def search_player(query):
     if not query: return []
-    try: return requests.get(SEARCH_URL, params={"culture": "en-us", "limit": 20, "q": query}).json()
+    try: return requests.get(SEARCH_URL, params={"culture": "en-us", "limit": 40, "q": query}).json()
     except Exception: return []
 
-def search_local_by_first_name(query, category):
-    """Supplement d3 API results with first-name matches from the local records cache.
-    The d3 search API only indexes last names / full-name prefixes, so 'Connor' won't
-    find McDavid. This function fills that gap by matching the query against first names
-    in id_to_name_map (which has full 'First Last' strings from the records API)."""
+def search_local_players(query, category):
+    """Supplement d3 API results with first- or last-name matches from the local records cache.
+    The d3 search API does full-name prefix matching, so 'Bedard' won't find Connor Bedard
+    (his name starts with 'Connor', not 'Bedard'). This function fills that gap by matching
+    the query against both first and last names in id_to_name_map."""
     q = query.lower().strip()
     if len(q) < 2:
         return {}
@@ -379,9 +400,7 @@ def search_local_by_first_name(query, category):
         if len(parts) < 2:
             continue
         first, last = parts[0], parts[-1]
-        # Only match on first name; skip if query also matches the last name
-        # (the d3 API already handles last-name queries well)
-        if first.startswith(q) and not last.startswith(q):
+        if first.startswith(q) or last.startswith(q):
             team = (details.get(pid) or {}).get('team', '') or ''
             if not team:
                 # clone_details_map often has no team for active players because the
@@ -394,7 +413,7 @@ def search_local_by_first_name(query, category):
                         break
             label = f"[{team}] {full_name}" if team else full_name
             results[label] = pid
-        if len(results) >= 10:
+        if len(results) >= 20:
             break
     return results
 
@@ -710,10 +729,14 @@ with st.sidebar:
                 tm = p.get('teamAbbrev')
                 label = f"[{tm}] {p['name']}" if tm else p['name']
                 opts[label] = int(p['playerId'])
-            local = search_local_by_first_name(search_term, st.session_state.stat_category)
+            local = search_local_players(search_term, st.session_state.stat_category)
             for label, pid in local.items():
                 if pid not in opts.values():
                     opts[label] = pid
+            # Active players (have [TEAM] prefix) first, retired/free agents below
+            active_opts   = {k: v for k, v in opts.items() if k.startswith("[")}
+            inactive_opts = {k: v for k, v in opts.items() if not k.startswith("[")}
+            opts = {**active_opts, **inactive_opts}
 
         st.session_state.search_opts = opts
 
@@ -1477,7 +1500,13 @@ if processed_dfs:
     else:
         safe_roster = roster_player if 'roster_player' in locals() else ""
         chart_key = f"chart_{hash(str(st.session_state.players))}_{metric}_{st.session_state.do_predict}_{st.session_state.do_smooth}_{search_term}_{top_selected}_{team_abbr}_{safe_roster}_{st.session_state.x_axis_mode}"
-    event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points", key=chart_key)
+    plotly_config = {
+        "displayModeBar": True,
+        "modeBarButtonsToRemove": ["lasso2d", "select2d", "toggleSpikelines",
+                                   "hoverCompareCartesian", "hoverClosestCartesian", "autoScale2d"],
+        "displaylogo": False,
+    }
+    event = st.plotly_chart(fig, use_container_width=True, on_select="rerun", selection_mode="points", key=chart_key, config=plotly_config)
 
     if not team_mode and event and event.selection.get("points"):
         point = event.selection["points"][0]

@@ -454,6 +454,30 @@ v0.32.1 - Fix Team Mode Data Loading
   (4) tag all rows gameTypeId=2 (regular season default), (5) compute derived cols.
 - CHANGED: Pipeline empty-DataFrame guard still in place for API unavailability.
 
+v0.32.2 - Fix Global Search Last-Name Lookup + Active Players First
+---------------------------------------------------------
+- FIXED: Searching by last name only (e.g. "Bedard") returned no results. Root cause:
+  the d3 NHL search API does full-name prefix matching, so "Bedard" never matched
+  "Connor Bedard". The local fallback search_local_by_first_name also skipped last-name
+  matches by design, leaving last-name-only queries with zero results.
+- FIXED: Renamed search_local_by_first_name to search_local_players and changed the
+  matching condition from first-name-only (first.startswith(q) and not last.startswith(q))
+  to first-or-last-name (first.startswith(q) or last.startswith(q)). Local result cap
+  increased from 10 to 20.
+- CHANGED: d3 API result limit increased from 20 to 40 to reduce first-name queries
+  (e.g. "Connor") truncating active players like Bedard out of the list.
+- ADDED: Search result dropdown now sorts active players (those with a [TEAM] label)
+  above retired/inactive players so current NHL players are easier to find.
+
+v0.32.3 - Mobile-Friendly Chart Toolbar
+---------------------------------------------------------
+- CHANGED: Plotly modebar now always visible (was hover-only, unusable on touchscreens).
+- CHANGED: Modebar buttons enlarged via CSS (22px icons desktop, 28px on mobile screens).
+- CHANGED: Tap target padding increased for modebar buttons (12px x 14px on mobile).
+- REMOVED: Clutter buttons from modebar: lasso, select, spike lines, hover compare,
+  autoscale. Kept: zoom in/out, pan, reset axes, download PNG.
+- REMOVED: Plotly logo from modebar.
+
 =========================================================
 END OF DOCUMENT
 =========================================================
