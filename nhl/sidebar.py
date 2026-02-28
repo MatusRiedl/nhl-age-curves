@@ -189,6 +189,7 @@ def _render_player_sidebar() -> dict:
             with c_btn:
                 if st.button("✖", key=f"drop_{pid}", type="primary"):
                     del st.session_state.players[pid]
+                    st.rerun()
     else:
         st.info("Board is empty")
 
@@ -255,6 +256,7 @@ def _render_team_sidebar() -> dict:
             with c_btn:
                 if st.button("✖", key=f"drop_team_{_abbr}", type="primary"):
                     del st.session_state.teams[_abbr]
+                    st.rerun()
     else:
         st.info("Board is empty")
 
