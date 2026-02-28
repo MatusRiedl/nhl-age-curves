@@ -215,8 +215,6 @@ v0.25.0 - Peak Season Star Marker & Season Ranking Popup
   Star custom_data layout: [player_name, peak_age, season_year, pid, 'peak'].
   Click handler routes to show_peak_ranking() when custom_data[4] == 'peak'.
 
----------------------------------------------------------
-
 v0.26.0 - Peak Ranking Fallback & KNN Elite Tier Matching
 ---------------------------------------------------------
 - FIXED: Peak Season Ranking now works even when the player's PlayerID is absent
@@ -236,8 +234,6 @@ v0.26.0 - Peak Ranking Fallback & KNN Elite Tier Matching
   actually played at each future age set the trend. Early retirees no longer flood
   the average with zeros, and long-career greats (Jagr, Chelios) properly anchor
   the late-career tail.
-
----------------------------------------------------------
 
 v0.26.1 - Season Label Fix, Top-5 Injection, KNN Partial Matching & Projection Tail
 ---------------------------------------------------------
@@ -261,8 +257,6 @@ v0.26.1 - Season Label Fix, Top-5 Injection, KNN Partial Matching & Projection T
   per-step pct decline from the buffer is extrapolated (capped at -12%/yr, no growth).
   Slafkovski and similar young players now get a smoothly declining tail instead of a
   plateau at the stat floor.
-
----------------------------------------------------------
 
 v0.27.0 - Star Click Fix, Scraper Overhaul, Era Consistency, Green Highlight
 ---------------------------------------------------------
@@ -289,56 +283,6 @@ v0.27.0 - Star Click Fix, Scraper Overhaul, Era Consistency, Green Highlight
 - CHANGED: Peak Season Ranking "← you" indicator is now rendered in green
   (:green[← **you**]) instead of plain arrow text.
 
----------------------------------------------------------
-Known issues in current base:
-  None confirmed.
----------------------------------------------------------
-
-v0.29.2 - Games Mode X-Axis Origin Alignment
----------------------------------------------------------
-- FIXED: In Games Played mode, each player's line started at the end of their first
-  season (e.g. Crosby at x=50, McDavid at x=45) rather than at career game 0. This
-  made direct comparison impossible — game 100 for Crosby and game 100 for McDavid
-  appeared at different visual positions.
-- Added a CumGP=0 / metric=0 origin row prepended to every player's games-mode
-  dataframe. All players now share a common (0, 0) anchor so any x-position on the
-  chart represents the same career game number for every player. Rate stats (PPG,
-  GAA, etc.) use NaN at game 0 to avoid a false zero anchor on non-counting metrics.
-
-v0.29.1 - Baseline Cliff Fix at Ages 38-40
----------------------------------------------------------
-- FIXED: NHL 75th Percentile Baseline crashed to 0 at ages 38-40. Root cause: very
-  few players in the parquet played 40+ GP at those ages, so the raw 75th percentile
-  of that sparse pool collapsed to near-zero.
-- ADDED: Complementary decay cap to the survivorship rule — if the baseline drops
-  more than 15% year-over-year after age 31, it is clamped to 0.85× the previous
-  year (max 15% annual drop). This mirrors the existing rise cap (0.92×) and keeps
-  the baseline visible and realistic through age 40.
-
-v0.29.0 - Smoother KNN Projection Decline
----------------------------------------------------------
-- CHANGED: pct_change clamp tightened from ±0.5 to [-0.12, +0.25]. Old ±50% annual
-  limit allowed unrealistic cliff drops for elite players (e.g. McDavid 100→50 pts
-  in a single projected year). Max 12% annual decline is still a meaningful decay
-  while respecting that top players age more gracefully than average clones suggest.
-- CHANGED: Clone average now blended 70% raw mean / 30% previous year's avg before
-  computing pct_change. Late-career clone pools shrink to 3-4 players, making one
-  injury year whipsaw the mean. The blend damps that noise without biasing the trend.
-- CHANGED: Fallback extrapolation rate floor tightened from -0.12 to -0.08 to stay
-  consistent with the live-clone clamp.
-
-v0.28.1 - Integer Hover Values for Counting Stats
----------------------------------------------------------
-- FIXED: Hover tooltip showed "Value: 153.00" for counting stats (Points, Goals, etc.).
-  Hovertemplate now uses %.0f for non-rate stats and %.2f for rate stats (PPG, GAA,
-  Save %, SH%, TOI). Save %/SH% override already used %.1f%, which is unchanged.
-
-v0.28.0 - Remove Peak Season Star & Ranking
----------------------------------------------------------
-- REMOVED: Gold star markers and connector lines from the chart (show_peak_ranking
-  dialog, star trace, dotted connector trace, and 'peak' sentinel click branch all deleted).
-  Feature was not working correctly and displayed inaccurate ranking data.
-
 v0.27.1 - Clone Names, Peak Ranking Names/Count, Star Connector
 ---------------------------------------------------------
 - FIXED: ML Projection Clone names showed "Unknown (ID #)" and all stats were 0.
@@ -362,18 +306,50 @@ v0.27.1 - Clone Names, Peak Ranking Names/Count, Star Connector
 - ADDED: Faint dotted gold connector line from each player's peak data point up to their
   star marker, making the peak annotation visually anchored to the line.
 
+v0.28.0 - Remove Peak Season Star & Ranking
 ---------------------------------------------------------
-Known issues in current base:
-  None confirmed.
+- REMOVED: Gold star markers and connector lines from the chart (show_peak_ranking
+  dialog, star trace, dotted connector trace, and 'peak' sentinel click branch all deleted).
+  Feature was not working correctly and displayed inaccurate ranking data.
+
+v0.28.1 - Integer Hover Values for Counting Stats
 ---------------------------------------------------------
-v0.30.1 - Fix Missing Team Prefix on First-Name Search Results
+- FIXED: Hover tooltip showed "Value: 153.00" for counting stats (Points, Goals, etc.).
+  Hovertemplate now uses %.0f for non-rate stats and %.2f for rate stats (PPG, GAA,
+  Save %, SH%, TOI). Save %/SH% override already used %.1f%, which is unchanged.
+
+v0.29.0 - Smoother KNN Projection Decline
 ---------------------------------------------------------
-- FIXED: Players found via local first-name search (e.g. Connor McDavid when typing
-  "Connor") showed no [TEAM] prefix. Root cause: the NHL records API omits
-  activeTeamAbbrevs for active players, so clone_details_map returned team=''. Fix:
-  when team is empty for a local match, fall back to a d3 API search by the player's
-  last name (search_player() is cached, no extra latency on repeated queries) and
-  extract teamAbbrev from the matching result.
+- CHANGED: pct_change clamp tightened from ±0.5 to [-0.12, +0.25]. Old ±50% annual
+  limit allowed unrealistic cliff drops for elite players (e.g. McDavid 100→50 pts
+  in a single projected year). Max 12% annual decline is still a meaningful decay
+  while respecting that top players age more gracefully than average clones suggest.
+- CHANGED: Clone average now blended 70% raw mean / 30% previous year's avg before
+  computing pct_change. Late-career clone pools shrink to 3-4 players, making one
+  injury year whipsaw the mean. The blend damps that noise without biasing the trend.
+- CHANGED: Fallback extrapolation rate floor tightened from -0.12 to -0.08 to stay
+  consistent with the live-clone clamp.
+
+v0.29.1 - Baseline Cliff Fix at Ages 38-40
+---------------------------------------------------------
+- FIXED: NHL 75th Percentile Baseline crashed to 0 at ages 38-40. Root cause: very
+  few players in the parquet played 40+ GP at those ages, so the raw 75th percentile
+  of that sparse pool collapsed to near-zero.
+- ADDED: Complementary decay cap to the survivorship rule — if the baseline drops
+  more than 15% year-over-year after age 31, it is clamped to 0.85× the previous
+  year (max 15% annual drop). This mirrors the existing rise cap (0.92×) and keeps
+  the baseline visible and realistic through age 40.
+
+v0.29.2 - Games Mode X-Axis Origin Alignment
+---------------------------------------------------------
+- FIXED: In Games Played mode, each player's line started at the end of their first
+  season (e.g. Crosby at x=50, McDavid at x=45) rather than at career game 0. This
+  made direct comparison impossible — game 100 for Crosby and game 100 for McDavid
+  appeared at different visual positions.
+- Added a CumGP=0 / metric=0 origin row prepended to every player's games-mode
+  dataframe. All players now share a common (0, 0) anchor so any x-position on the
+  chart represents the same career game number for every player. Rate stats (PPG,
+  GAA, etc.) use NaN at game 0 to avoid a false zero anchor on non-counting metrics.
 
 v0.30.0 - Dynamic Search & First-Name Lookup
 ---------------------------------------------------------
@@ -389,6 +365,15 @@ v0.30.0 - Dynamic Search & First-Name Lookup
   are sourced from clone_details_map for consistency.
 - CHANGED: d3 API result limit raised from 10 to 20 to surface more matches for
   ambiguous queries before the local supplement kicks in.
+
+v0.30.1 - Fix Missing Team Prefix on First-Name Search Results
+---------------------------------------------------------
+- FIXED: Players found via local first-name search (e.g. Connor McDavid when typing
+  "Connor") showed no [TEAM] prefix. Root cause: the NHL records API omits
+  activeTeamAbbrevs for active players, so clone_details_map returned team=''. Fix:
+  when team is empty for a local match, fall back to a d3 API search by the player's
+  last name (search_player() is cached, no extra latency on repeated queries) and
+  extract teamAbbrev from the matching result.
 
 v0.31.0 - Multi-League NHLe Support
 ---------------------------------------------------------
@@ -550,6 +535,67 @@ v0.36.0 - Mobile Chart UX: Toolbar, Axis Labels, Pan Limits
   User cannot pan the chart into empty space on either axis.
 - ADDED: import streamlit.components.v1 as components (previously unused).
 
-=========================================================
-END OF DOCUMENT
-=========================================================
+v0.37.0 - Modular Package Split (nhl/ package)
+---------------------------------------------------------
+- CHANGED: Split 1686-line single-file app.py into a nhl/ package with 12 focused
+  modules. app.py is now a ~130-line orchestrator that imports from nhl/.
+- ADDED: nhl/__init__.py — package marker with module directory docstring.
+- ADDED: nhl/constants.py — all shared constants: URLs, ACTIVE_TEAMS, RATE_STATS,
+  TEAM_RATE_STATS, TEAM_METRICS, ML_SUPPORTED_METRICS, NHLE_MULTIPLIERS,
+  CURRENT_SEASON_YEAR, STAT_CAPS, STAT_FLOORS. No project imports, no streamlit.
+  stat_caps and stat_floors promoted from inline pipeline locals to module-level constants.
+- ADDED: nhl/styles.py — CSS injection via inject_css() function. Isolates the full
+  CSS blob (animated title, logo, sidebar layout, modebar, mobile responsive) from app.py.
+- ADDED: nhl/era.py — era adjustment functions with no streamlit dependency:
+  get_era_multiplier(), get_goalie_era_sv_offset(), apply_era_to_hist().
+- ADDED: nhl/data_loaders.py — all 14 cached API fetch and parquet load functions.
+  All @st.cache_data decorators preserved with original TTL settings.
+- ADDED: nhl/baselines.py — build_historical_baselines() and build_team_baselines().
+  Survivorship bias fix (Rule A: 0.92x cap, Rule B: 15% drop limit) preserved verbatim.
+- ADDED: nhl/knn_engine.py — KNN ML projection engine extracted from player pipeline.
+  No streamlit import; independently testable. Exposes run_knn_projection() and
+  run_linear_fallback(). All session state reads converted to function parameters.
+- ADDED: nhl/player_pipeline.py — process_players() wrapping the full per-player
+  pipeline (fetch, gatekeeper, NHLe, era, groupby, rate stats, KNN, cumsum, smoothing,
+  real/proj split). No streamlit import.
+- ADDED: nhl/team_pipeline.py — process_teams() for the team-mode pipeline.
+  No streamlit import.
+- ADDED: nhl/controls.py — render_controls() renders Category/Metric and View Options
+  expanders. Returns (metric, do_cumul) so app.py doesn't re-read session state.
+- ADDED: nhl/dialog.py — show_season_details() @st.dialog popup. stat_category now
+  passed as a parameter instead of reading from session state directly.
+- ADDED: nhl/sidebar.py — render_sidebar() dispatching to _render_player_sidebar() and
+  _render_team_sidebar(). Returns sidebar_keys dict for chart cache-busting.
+- ADDED: nhl/chart.py — render_chart() assembling final_df, baseline overlay, Plotly
+  figure, visual conventions, JS dtick/pan-clamp injection, click handler dispatch.
+- ADDED: Google-style docstrings on every function in every new module.
+- ADDED: Import-level docstrings in app.py describing each module's responsibility.
+- Zero behavior changes — all existing logic, clamps, caps, fallbacks preserved verbatim.
+
+v0.37.1 - Active Roster Skater/Goalie Separation
+-------------------------------------------------
+- FIXED: Active Rosters dropdown now excludes goalies when Stat Category is "Skater".
+  Previously, [G] players appeared in the skater roster list despite being filtered out
+  by the pipeline gatekeeper. Added symmetric else-branch in nhl/sidebar.py to filter
+  out any entry starting with "[G]" in non-goalie mode.
+
+
+v0.37.2 - Per-Season View in Games Played Mode
+-------------------------------------------------
+- CHANGED: Games Played X-axis mode now defaults to per-season stats instead of
+  career cumulative totals. Each data point shows that season's raw stat value
+  (Points, Goals, Assists, etc.) positioned at the cumulative career GP milestone
+  where the season ended — producing the same peaks-and-valleys shape as the age curve.
+- CHANGED: Cumulative toggle is now enabled in Games Played mode. Toggle ON restores
+  the previous rising-curve career-total view. Toggle OFF (default) shows the new
+  per-season view.
+- CHANGED: Rate stats (PPG, SH%, TOI, Save%, GAA) in per-season mode are now derived
+  from that season's GP rather than career cumulative GP.
+- CHANGED: Origin-anchor zero row now only added in cumulative games_mode sub-branch;
+  per-season mode starts from the first real season naturally.
+- CHANGED: Peak detection in games_mode uses diff() only when cumulative (needed to
+  extract per-season increments from cumulative data); skips diff() in per-season mode.
+- CHANGED: Step 10 cumulative guard now excludes games_mode to prevent double-cumulation
+  since Step 6a handles cumulation for that branch.
+- CHANGED: Controls caption updated from "Cumulative unavailable in Games mode" to
+  "Projection & Baseline unavailable in Games mode" (reflecting that cumulative is now available).

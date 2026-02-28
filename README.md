@@ -1,4 +1,4 @@
-# NHL Player Age Curves & Career Projections 🏒
+# NHL Player Age Curves & Career Projections
 An interactive analytics dashboard built in Python that visualizes aging curves and career trajectories for NHL players using live data and machine learning projections.
 
 ## Available online here
@@ -37,6 +37,30 @@ https://nhl-age-curves.streamlit.app/
 * **Networking:** Requests (REST API)
 * **AI:** Anthropic SDK (`claude-opus-4-6`)
 * **Local Database:** Parquet (`nhl_historical_seasons.parquet`)
+
+## Code Structure
+
+The app is organized as a Python package under `nhl/`. `app.py` is a thin
+~200-line orchestrator; all logic lives in the package modules.
+
+```
+app.py                   entry point and session-state orchestrator
+nhl/
+    constants.py         URLs, team list, stat caps, NHLe multipliers
+    styles.py            CSS injection
+    era.py               era-adjustment math (no Streamlit dependency)
+    data_loaders.py      cached API fetch and parquet load functions
+    baselines.py         75th-percentile baseline builders
+    knn_engine.py        KNN projection engine (no Streamlit, testable)
+    player_pipeline.py   full per-player data pipeline
+    team_pipeline.py     team comparison pipeline
+    controls.py          Category/Metric and View Options expanders
+    sidebar.py           player and team sidebar UI
+    dialog.py            season-detail popup dialog
+    chart.py             Plotly chart rendering and JS pan-clamp
+scraper.py               standalone script to refresh the parquet file
+nhl_historical_seasons.parquet   ML backbone (generate with scraper.py)
+```
 
 ## How to Run Locally
 1. Clone this repository.
