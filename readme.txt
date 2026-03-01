@@ -35,11 +35,12 @@ scraper.py                 — Standalone script. Run manually to refresh parque
                              Hits NHL API, maps positions, calculates ages, exports
                              fully raw (unadjusted) Points, Goals, and Assists to
                              parquet. Era adjustment is NOT applied at export time.
-                             The KNN engine applies era adjustment at query time via
-                             apply_era_to_hist() before computing L1 distance, and
-                             the live player pipeline applies it independently via
-                             get_era_multiplier() — both using the same 8-period
-                             multiplier table so comparisons are always symmetric.
+                             player_pipeline.py applies era adjustment once to hist_df
+                             before the per-player KNN loop (via apply_era_to_hist()),
+                             then passes the adjusted df into knn_engine.py with
+                             do_era=False. The live player pipeline applies it
+                             independently via get_era_multiplier() — both using the
+                             same 8-period multiplier table so comparisons are symmetric.
 
 nhl_historical_seasons.parquet — Local database. Loaded once at startup.
 
@@ -187,8 +188,10 @@ For every player in active_players (resolved from skater_players or goalie_playe
                  Shutouts harder to record in high-scoring eras; inverse gives more
                  credit. 10 SO in 1985 / 0.80 = 12.5 adjusted.
        Wins:     not adjusted — too team-dependent for meaningful era normalization.
-     KNN historical data is era-adjusted in parallel via apply_era_to_hist(is_goalie=True)
-     so clone matching stays consistent with the displayed era-adjusted player curve.
+     KNN historical data is era-adjusted once in player_pipeline.py before the
+     player loop (apply_era_to_hist, is_goalie derived from stat_category), then
+     passed to knn_engine.py with do_era=False so clone matching stays consistent
+     with the displayed era-adjusted player curve without redundant copies.
 
   5. PIPELINE BRANCH — Age mode vs Games Played mode (x_axis_mode):
 

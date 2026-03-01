@@ -244,7 +244,6 @@ def render_chart(
             ),
         )
         fig.update_xaxes(
-            dtick       = 1,
             tickangle   = 0,
             automargin  = True,
             title_font  = dict(size=25, family='Arial Black'),
@@ -325,9 +324,11 @@ def render_chart(
     function calcDtick(width) {{
         var xRange = X_MAX - X_MIN;
         if (IS_AGE_MODE) {{
-            if (width >= 900) return 1;
-            if (width >= 480) return 2;
-            return 5;
+            var pixPerAge = width / xRange;
+            if (pixPerAge >= 32) return 1;
+            if (pixPerAge >= 16) return 2;
+            if (pixPerAge >= 7)  return 5;
+            return 10;
         }}
         if (IS_GAMES_MODE) {{
             var targetTicks = width >= 900 ? 8 : width >= 480 ? 5 : 3;
@@ -346,7 +347,7 @@ def render_chart(
     }}
 
     function applySettings(plot, Plotly) {{
-        var updates = {{'xaxis.dtick': calcDtick(window.parent.innerWidth)}};
+        var updates = {{'xaxis.dtick': calcDtick(plot.offsetWidth || window.parent.innerWidth)}};
         updates['xaxis.tickangle'] = 0;
         Plotly.relayout(plot, updates);
 
@@ -375,9 +376,8 @@ def render_chart(
         plots.forEach(function(p) {{ applySettings(p, Plotly); }});
 
         parent.addEventListener('resize', function() {{
-            var dtick = calcDtick(parent.innerWidth);
             parent.document.querySelectorAll('.js-plotly-plot').forEach(function(p) {{
-                Plotly.relayout(p, {{'xaxis.dtick': dtick}});
+                Plotly.relayout(p, {{'xaxis.dtick': calcDtick(p.offsetWidth || parent.innerWidth)}});
             }});
         }});
     }}

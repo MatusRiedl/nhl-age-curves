@@ -882,3 +882,31 @@ v0.45.1 - Fix API Health Not Showing on Streamlit Cloud
   ImportError returns all-False probe list so the section still renders with yellow dots.
 - FIXED: Wrapped the _check_api_health() call and render block in _render_ram_footer()
   with try/except; falls back to "API Health: unavailable" caption on any failure.
+
+
+v0.45.2 - Adaptive X-Axis Tick Density
+---------------------------------------------------------
+- FIXED: Age Mode X axis crams every single age tick even on wide screens when the
+  career span is long (e.g. age 16-52 = 37 ticks). dtick=1 was hardcoded in Python
+  and the JS calcDtick() used simple width breakpoints that ignored data range.
+- CHANGED: calcDtick() for Age Mode now computes pixels-per-age (plot width / x range)
+  and picks the largest dtick that keeps labels readable: >=32px/age->1, >=16->2,
+  >=7->5, else->10.
+- CHANGED: applySettings() and the resize handler now use plot.offsetWidth (actual
+  chart element width) instead of window.parent.innerWidth so the sidebar width is
+  correctly excluded from the calculation.
+- REMOVED: Hardcoded dtick=1 from Python update_xaxes() in Age Mode; JS fully owns
+  tick density now.
+
+v0.45.3 - KNN Era-Adjust Hoisted Before Player Loop
+---------------------------------------------------------
+- CHANGED: apply_era_to_hist() on hist_df moved from knn_engine.py (per-player, per-call)
+  into player_pipeline.py (once before the player loop). With N players on the board and
+  era adjustment enabled, this eliminates N-1 redundant 12 MB copies of hist_df during
+  each render cycle.
+- CHANGED: run_knn_projection() now receives a pre-adjusted knn_hist and do_era=False;
+  apply_era_to_hist inside knn_engine.py becomes a no-op (returns df unchanged when
+  do_era=False). KNN signature and projection logic are unchanged.
+- ADDED: do_predict guard on knn_hist assignment: when projection is off, hist_df is
+  passed as-is (no copy). Era-adjusted copy is only made when both do_predict=True and
+  do_era=True.

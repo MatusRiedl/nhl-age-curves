@@ -24,7 +24,7 @@ making this module independently testable.
 
 Imports from project:
     nhl.constants      — RATE_STATS, NHLE_MULTIPLIERS, ML_SUPPORTED_METRICS
-    nhl.era            — get_era_multiplier, get_goalie_era_sv_offset
+    nhl.era            — apply_era_to_hist, get_era_multiplier, get_goalie_era_sv_offset
     nhl.data_loaders   — get_player_raw_stats
     nhl.knn_engine     — run_knn_projection, run_linear_fallback
 """
@@ -33,7 +33,7 @@ import pandas as pd
 
 from nhl.constants import ML_SUPPORTED_METRICS, NHLE_MULTIPLIERS, RATE_STATS
 from nhl.data_loaders import get_player_raw_stats
-from nhl.era import get_era_multiplier, get_goalie_era_sv_offset
+from nhl.era import apply_era_to_hist, get_era_multiplier, get_goalie_era_sv_offset
 from nhl.knn_engine import run_knn_projection, run_linear_fallback
 
 
@@ -83,6 +83,16 @@ def process_players(
     peak_info      = {}
 
     _league_filter = league_filter or ['NHL']
+
+    # Era-adjust the historical DataFrame once before the player loop rather than
+    # once per player inside knn_engine.py.  apply_era_to_hist returns df unchanged
+    # when do_era=False (no copy), so this is free in the era-off case.
+    # Guard on do_predict: when projection is off, knn_hist is never consumed.
+    knn_hist = (
+        apply_era_to_hist(hist_df, do_era, is_goalie=(stat_category == "Goalie"))
+        if do_predict
+        else hist_df
+    )
 
     for pid, name in players.items():
         raw_df, base_name, pos_code = get_player_raw_stats(pid, name)
@@ -270,10 +280,10 @@ def process_players(
                 proj_rows, clone_names = run_knn_projection(
                     career_df      = career_df,
                     metric         = metric,
-                    hist_df        = hist_df,
+                    hist_df        = knn_hist,
                     is_goalie      = is_goalie,
                     pos_code       = pos_code,
-                    do_era         = do_era,
+                    do_era         = False,
                     season_type    = season_type,
                     stat_category  = stat_category,
                     id_to_name_map = id_to_name_map,
