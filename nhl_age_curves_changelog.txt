@@ -827,3 +827,23 @@ v0.43.0 - Dynamic Top 50 Ranking by Metric
   "career Assists" to match the active metric (skaters only; goalies unchanged).
 - CHANGED: Rank number in comparison panel reflects Goals or Assists rank
   when those metrics are selected.
+
+v0.43.1 - Live RAM Monitor in Sidebar
+---------------------------------------------------------
+- ADDED: RAM usage footer at the bottom of the sidebar (both player and team modes).
+  Shows current process RSS in MB, updated on every Streamlit rerun.
+  Uses psutil; silently skips if unavailable so it never breaks the app.
+- ADDED: psutil to requirements.txt.
+
+v0.43.2 - Fix RAM Footer Visibility
+---------------------------------------------------------
+- FIXED: RAM footer in sidebar was invisible locally because psutil was not installed
+  and the bare except-pass swallowed the ImportError silently.
+- CHANGED: _render_ram_footer() now always renders the divider and label; shows
+  "RAM: N/A" when psutil is unavailable, live MB when it is installed.
+
+v0.43.3 - Robust RAM Footer Fallback
+---------------------------------------------------------
+- CHANGED: _render_ram_footer() now falls back to reading /proc/self/status (VmRSS)
+  when psutil is unavailable. Guarantees live MB on Streamlit Cloud (Linux)
+  with zero external dependencies. Windows without psutil still shows N/A.

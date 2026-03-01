@@ -28,6 +28,31 @@ from nhl.data_loaders import (
 )
 
 
+def _render_ram_footer() -> None:
+    """Render a live process RAM readout at the bottom of the sidebar.
+
+    Tries psutil first (cross-platform). Falls back to /proc/self/status
+    (Linux / Streamlit Cloud, no external deps). Shows 'N/A' on Windows
+    without psutil installed.
+    """
+    rss_mb = "N/A"
+    try:
+        import os
+        import psutil
+        rss_mb = f"{psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024:.0f} MB"
+    except Exception:
+        try:
+            with open("/proc/self/status") as f:
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        rss_mb = f"{int(line.split()[1]) / 1024:.0f} MB"
+                        break
+        except Exception:
+            pass
+    st.markdown("---")
+    st.caption(f"RAM: {rss_mb}")
+
+
 def render_sidebar() -> dict:
     """Render the full sidebar UI and return chart cache-busting keys.
 
@@ -246,6 +271,8 @@ def _render_player_sidebar() -> dict:
     else:
         st.info("Board is empty")
 
+    _render_ram_footer()
+
     return {
         "search_term":   search_term,
         "top_selected":  top_selected,
@@ -324,6 +351,8 @@ def _render_team_sidebar() -> dict:
                     st.rerun()
     else:
         st.info("Board is empty")
+
+    _render_ram_footer()
 
     return {
         "search_term":   "",
