@@ -802,3 +802,28 @@ v0.42.6 - All-Time Rank Deduplication Fix
 v0.42.7 - Bold Best Age Text in Comparison Panel
 ---------------------------------------------------------
 - CHANGED: "Best: Age X (season)" line in comparison panel is now bold for readability.
+
+
+v0.42.8 - Jersey Numbers and Points Totals in Dropdowns
+---------------------------------------------------------
+- ADDED: Jersey number displayed in roster dropdown labels: "[LW] Mason McTavish #23".
+  Extracted from NHL roster API sweaterNumber field in get_team_roster().
+- ADDED: Jersey number displayed in global search dropdown labels for active players:
+  "[EDM] Connor McDavid #97". Best-effort — shown only if sweaterNumber is returned
+  by the D3 search API; falls back silently if not available.
+- ADDED: Career points total displayed in Top 50 all-time skaters dropdown:
+  "1. Wayne Gretzky (2857 P)". Fallback labels (shown when API is unavailable)
+  remain unchanged and parse correctly without pts.
+- CHANGED: All three sidebar callbacks (_on_player_select, _on_roster_select,
+  _on_top50_select) now strip the jersey number / pts suffix before storing the
+  clean player name in session state, so chart legends and comparison panel are unaffected.
+
+
+v0.43.0 - Dynamic Top 50 Ranking by Metric
+---------------------------------------------------------
+- CHANGED: Top 50 All-Time Skaters dropdown now ranks by Goals when metric=Goals,
+  by Assists when metric=Assists, and by Points for all other metrics.
+- CHANGED: Comparison panel all-time rank badge now shows "career Goals" or
+  "career Assists" to match the active metric (skaters only; goalies unchanged).
+- CHANGED: Rank number in comparison panel reflects Goals or Assists rank
+  when those metrics are selected.

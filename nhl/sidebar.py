@@ -115,7 +115,7 @@ def _render_player_sidebar() -> dict:
         pid = st.session_state.top50_opts.get(sel)
         if pid is None:
             return
-        name = sel.split(". ", 1)[-1]
+        name = sel.split(". ", 1)[-1].split(" (")[0]
         st.session_state[pk][pid] = name
         st.session_state.top50_ver = ver + 1
 
@@ -131,6 +131,8 @@ def _render_player_sidebar() -> dict:
         if pid is None:
             return
         name = sel.split("] ")[-1] if "]" in sel else sel
+        if " #" in name:
+            name = name.split(" #")[0]
         st.session_state[pk][pid] = name
         st.session_state.roster_ver = ver + 1
 
@@ -178,8 +180,9 @@ def _render_player_sidebar() -> dict:
         top_50_dict  = get_top_50_goalies()
         top_50_label = "Top 50 All-Time Goalies"
     else:
-        top_50_dict  = get_top_50()
-        top_50_label = "Top 50 All-Time Skaters"
+        current_metric = st.session_state.get("skater_metric", "Points")
+        top_50_dict    = get_top_50(current_metric)
+        top_50_label   = "Top 50 All-Time Skaters"
     _SENT = "— select a player —"
     st.session_state.top50_opts = top_50_dict
     top_selected = st.selectbox(

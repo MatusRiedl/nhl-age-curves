@@ -59,14 +59,17 @@ def render_comparison_panel(
         players: Dict mapping player ID (int or str) to display name (str).
         peak_info: Dict mapping base_name (str) to peak season metadata dict
             with keys: age, season_year, y, raw_peak_val, pid.
-        metric: Currently selected stat metric label (e.g., 'Points', 'Goals').
+        metric: Currently selected stat metric label (e.g., 'Points', 'Goals', 'Assists').
+            Controls the all-time ranking stat (Points/Goals/Assists for skaters; Wins for
+            goalies always) and the rank badge label in each player card.
         stat_category: 'Skater' or 'Goalie' — controls which counting stats
             are shown in career totals and which stat is used for ranking.
         season_type: 'Regular', 'Playoffs', or 'Both' — passed to the rank
             function so rankings match the active season filter.
     """
     is_goalie = stat_category == "Goalie"
-    rank_suffix = "career Wins" if is_goalie else "career Pts"
+    _RANK_SUFFIX_MAP = {"Goals": "career Goals", "Assists": "career Assists"}
+    rank_suffix = "career Wins" if is_goalie else _RANK_SUFFIX_MAP.get(metric, "career Pts")
 
     # Build lookup: base_name -> proc_df for fast access
     proc_lookup: dict = {}
@@ -106,7 +109,7 @@ def render_comparison_panel(
             career_pt = int(real['Points'].sum())    if 'Points'  in real.columns else 0
 
         # All-time rank by playerId — exact lookup, no value drift
-        rank = get_player_career_rank(int(pid), stat_category, season_type)
+        rank = get_player_career_rank(int(pid), stat_category, season_type, metric)
 
         # Best season from peak_info (metric-aware, pre-computed by pipeline)
         peak = peak_info.get(name)

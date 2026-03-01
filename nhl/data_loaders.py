@@ -200,17 +200,28 @@ def fetch_all_time_records(category: str, s_type: str) -> list:
 
 
 @st.cache_data
-def get_top_50() -> dict:
-    """Fetch the top 50 all-time NHL skaters ranked by career regular-season points.
+def get_top_50(metric: str = "Points") -> dict:
+    """Fetch the top 50 all-time NHL skaters ranked by the specified career counting stat.
+
+    Only Points, Goals, and Assists are supported sort keys. All other metric values
+    fall back to Points ranking as the least-surprising default.
+
+    Args:
+        metric: Stat label to sort by. One of 'Points', 'Goals', 'Assists', or any
+            other skater metric string (non-matching values default to 'Points').
 
     Returns:
-        Dict mapping display label ('1. Wayne Gretzky') to playerId int.
-        Falls back to a hardcoded 4-player dict if the API call fails.
+        Dict mapping display label (e.g. '1. Wayne Gretzky (2857 P)') to playerId int.
+        Falls back to a hardcoded 4-player dict (no stat suffix) if the API call fails.
     """
+    _SORT_MAP   = {"Points": "points", "Goals": "goals", "Assists": "assists"}
+    _SUFFIX_MAP = {"Points": "P",      "Goals": "G",     "Assists": "A"}
+    sort_key = _SORT_MAP.get(metric, "points")
+    suffix   = _SUFFIX_MAP.get(metric, "P")
     try:
         url = (
             "https://records.nhl.com/site/api/skater-career-scoring-regular-season"
-            "?sort=points&dir=DESC&limit=100"
+            f"?sort={sort_key}&dir=DESC&limit=100"
         )
         res = requests.get(url, timeout=5).json()
         players = {}
@@ -219,7 +230,9 @@ def get_top_50() -> dict:
         for p in res.get('data', []):
             pid = int(p['playerId'])
             if pid not in added_ids:
-                name = f"{count}. {p.get('firstName', '')} {p.get('lastName', '')}".strip()
+                stat_val = p.get(sort_key, 0)
+                base     = f"{count}. {p.get('firstName', '')} {p.get('lastName', '')}".strip()
+                name     = f"{base} ({stat_val} {suffix})"
                 players[name] = pid
                 added_ids.add(pid)
                 count += 1
@@ -361,7 +374,8 @@ def get_team_roster(team_abbr: str) -> dict:
         team_abbr: Three-letter team abbreviation (e.g. 'EDM').
 
     Returns:
-        Dict mapping '[POS] First Last' to int playerId, sorted alphabetically.
+        Dict mapping '[POS] First Last #NN' to int playerId, sorted alphabetically.
+        Jersey number is omitted only if the API does not return it.
         Returns {} on failure.
     """
     try:
@@ -372,7 +386,9 @@ def get_team_roster(team_abbr: str) -> dict:
             for p in res.get(pos_group, []):
                 raw_pos   = p.get('positionCode', '?')
                 clean_pos = pos_map.get(raw_pos, raw_pos)
-                name      = f"[{clean_pos}] {p['firstName']['default']} {p['lastName']['default']}"
+                num       = p.get('sweaterNumber', '')
+                base      = f"[{clean_pos}] {p['firstName']['default']} {p['lastName']['default']}"
+                name      = f"{base} #{num}" if num else base
                 players[name] = int(p['id'])
         return dict(sorted(players.items()))
     except Exception:
@@ -646,7 +662,7 @@ def get_all_time_rank(
     return len(records) + 1
 
 
-def get_player_career_rank(pid: int, category: str, s_type: str) -> int | None:
+def get_player_career_rank(pid: int, category: str, s_type: str, metric: str = "Points") -> int | None:
     """Return a player's exact all-time career rank looked up by player ID.
 
     Unlike get_all_time_rank (value comparison), this matches the player's
@@ -657,6 +673,8 @@ def get_player_career_rank(pid: int, category: str, s_type: str) -> int | None:
         pid:      Numeric NHL player ID.
         category: 'Skater' or 'Goalie'.
         s_type:   'Regular', 'Playoffs', or 'Both'.
+        metric:   Stat to rank by: 'Points', 'Goals', or 'Assists' for skaters;
+            other values default to Points. Ignored for Goalies (always Wins).
 
     Returns:
         1-based integer rank (1 = all-time leader), or None if the player is
@@ -665,7 +683,8 @@ def get_player_career_rank(pid: int, category: str, s_type: str) -> int | None:
     records = fetch_all_time_records(category, s_type)
     if not records:
         return None
-    rank_key = "wins" if category == "Goalie" else "points"
+    _RANK_KEY_MAP = {"Points": "points", "Goals": "goals", "Assists": "assists"}
+    rank_key = "wins" if category == "Goalie" else _RANK_KEY_MAP.get(metric, "points")
     sorted_records = sorted(
         [r for r in records if r.get(rank_key) is not None],
         key=lambda x: x.get(rank_key, 0),
