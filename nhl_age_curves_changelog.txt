@@ -749,3 +749,56 @@ v0.42.2 - Fix Toggle State Reset on Player Removal
   instead of key="do_X". Without key=, Streamlit cannot orphan-clean the session_state
   entries, so toggle state survives interrupted runs and persists across all add/remove
   operations indefinitely until the user manually changes them.
+
+v0.42.3 - Fix Toggle Double-Click Bug
+---------------------------------------------------------
+- FIXED: All 5 toggles (3-Season Rolling Avg, Project to 40, Era-Adjust, Cumulative,
+  Show Baseline) required two clicks to change state when players were loaded. Root cause:
+  the value= + manual write-back pattern (introduced in v0.42.2) creates a circular
+  conflict — on every rerun, value=st.session_state.do_X passes the old pre-click value
+  to the widget, which fights the pending user interaction. With players present, the
+  additional session state churn causes Streamlit to treat the value= as authoritative
+  and ignore the first click.
+- CHANGED: All 5 toggles now use key="do_X" (the correct Streamlit pattern), making
+  session state the single source of truth with no value= override conflict.
+- CHANGED: render_controls() is now called before render_sidebar() in app.py. This
+  ensures toggle widget keys are registered in Streamlit's widget registry before any
+  st.rerun() call from the sidebar (player removal) can interrupt execution. Without
+  this order, Streamlit orphan-cleans the key= entries during aborted runs and the
+  init block resets them to False, which was exactly the regression that v0.42.2
+  worked around.
+
+v0.42.4 - Era-Adjust Goalie UX Fix
+---------------------------------------------------------
+- CHANGED: Goalie metric dropdown now defaults to Save % (previously Wins), ensuring
+  Era-Adjust produces immediately visible results when toggled in Goalie mode.
+- ADDED: Caption under controls when Era-Adjust is active in Goalie mode but the
+  selected metric (Wins, GP, Saves) is not era-adjusted — explains which stats are
+  affected (Save %, GAA, Shutouts) without requiring the user to read documentation.
+
+
+v0.42.5 - Team Mode Controls Cleanup
+---------------------------------------------------------
+- CHANGED: "Project to 40" and "Era-Adjust" toggles are now hidden entirely in Team
+  mode instead of being rendered as disabled grey controls. Row 1 uses a 4-column
+  layout (Category, Rolling Avg, Cumulative, Show Baseline) when Team is active.
+- CHANGED: League multiselect and "Team mode: NHL data only." caption are now hidden
+  entirely in Team mode. Row 2 uses a 3-column layout (X-Axis, Metric, Season Type).
+- REMOVED: "Projection & Era-Adjust not applicable to teams." caption — redundant
+  once the controls are hidden.
+
+
+v0.42.6 - All-Time Rank Deduplication Fix
+---------------------------------------------------------
+- FIXED: Comparison panel all-time rank now matches the Top 50 dropdown rank.
+  Root cause: records API returns multiple stints per player (one per franchise);
+  get_player_career_rank() was not deduplicating by playerId before computing rank,
+  causing players like Sidney Crosby to show #10th instead of the correct #8th.
+- CHANGED: Deduplicate sorted records by playerId in get_player_career_rank(),
+  keeping the highest-value entry per player, mirroring the logic in get_top_50().
+- CHANGED: All-time rank text in comparison panel is now bold for readability.
+
+
+v0.42.7 - Bold Best Age Text in Comparison Panel
+---------------------------------------------------------
+- CHANGED: "Best: Age X (season)" line in comparison panel is now bold for readability.

@@ -671,7 +671,16 @@ def get_player_career_rank(pid: int, category: str, s_type: str) -> int | None:
         key=lambda x: x.get(rank_key, 0),
         reverse=True,
     )
-    for i, r in enumerate(sorted_records):
+    # Deduplicate by playerId (API may return multiple stints per player);
+    # keep first (highest-value) occurrence so rank matches the Top 50 dropdown.
+    seen_ids: set = set()
+    deduped: list = []
+    for r in sorted_records:
+        pid_r = int(r.get('playerId', -1))
+        if pid_r not in seen_ids:
+            seen_ids.add(pid_r)
+            deduped.append(r)
+    for i, r in enumerate(deduped):
         if int(r.get('playerId', -1)) == pid:
             return i + 1
     return None

@@ -67,11 +67,6 @@ if 'team_sel_abbr'     not in st.session_state:
     st.session_state.team_sel_abbr = list(ACTIVE_TEAMS.keys())[0]
 
 # =============================================================================
-# Sidebar — renders player/team board and returns keys for chart cache-busting
-# =============================================================================
-sidebar_keys = render_sidebar()
-
-# =============================================================================
 # Page header
 # =============================================================================
 st.markdown("""
@@ -93,11 +88,21 @@ elif not _tm and st.session_state.x_axis_mode == "Season Year":
     st.session_state.x_axis_mode = "Age"
 
 # =============================================================================
-# Controls — Category/Metric and View Options expanders
+# Controls — Category/Metric and View Options expanders.
+# MUST render before render_sidebar() so toggle widget keys are registered in
+# Streamlit's widget registry before any st.rerun() call from the sidebar can
+# interrupt execution. Without this order, Streamlit orphan-cleans the key=
+# widget entries on player removal and the init block resets them to False.
 # Returns (metric, do_cumul): do_cumul is already resolved (False for rate stats,
 # False in games_mode) so pipelines and chart don't need to recompute it.
 # =============================================================================
 metric, do_cumul = render_controls()
+
+# =============================================================================
+# Sidebar — renders player/team board and returns keys for chart cache-busting.
+# Rendered after controls so toggle keys survive any st.rerun() triggered here.
+# =============================================================================
+sidebar_keys = render_sidebar()
 
 # =============================================================================
 # Derived flags (read after controls have written to session state)

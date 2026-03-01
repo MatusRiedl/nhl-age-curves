@@ -130,7 +130,7 @@ def render_comparison_panel(
         rank_row = ""
         if rank is not None:
             rank_row = (
-                f"<br><span style='font-size:14px;color:#4caf50;'>"
+                f"<br><span style='font-size:14px;color:#4caf50;font-weight:bold;'>"
                 f"#{_ordinal(rank)} all-time &mdash; {rank_suffix}"
                 f"</span>"
             )
@@ -156,7 +156,7 @@ def render_comparison_panel(
                 val_str = str(int(val))
 
             best_row = (
-                f"<br><span style='font-size:14px;color:#999;'>"
+                f"<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
                 f"Best: Age&nbsp;{age} ({sy_str})"
                 f" &mdash; {val_str}&nbsp;{metric} in {peak_gp}&nbsp;GP"
                 f"</span>"

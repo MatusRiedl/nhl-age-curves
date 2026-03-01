@@ -57,9 +57,15 @@ def render_controls() -> tuple:
         _cumul_rate_set = TEAM_RATE_STATS if team_mode else RATE_STATS
 
         st.markdown("<div id='controls-row1'></div>", unsafe_allow_html=True)
-        c_category, c_t1, c_t2, c_t3, c_t4, c_t5 = st.columns(
-            [2.5, 2, 1.8, 1.5, 1.8, 1.8], vertical_alignment="center"
-        )
+
+        if team_mode:
+            c_category, c_t1, c_t4, c_t5 = st.columns(
+                [2.5, 2, 1.8, 1.8], vertical_alignment="center"
+            )
+        else:
+            c_category, c_t1, c_t2, c_t3, c_t4, c_t5 = st.columns(
+                [2.5, 2, 1.8, 1.5, 1.8, 1.8], vertical_alignment="center"
+            )
 
         with c_category:
             st.radio(
@@ -71,25 +77,20 @@ def render_controls() -> tuple:
             )
 
         with c_t1:
-            st.session_state.do_smooth = st.toggle(
-                "3-Season Rolling Avg", value=st.session_state.do_smooth)
+            st.toggle("3-Season Rolling Avg", key="do_smooth")
 
-        with c_t2:
-            st.session_state.do_predict = st.toggle(
-                "Project to 40", value=st.session_state.do_predict,
-                disabled=games_mode or team_mode)
-
-        with c_t3:
-            st.session_state.do_era = st.toggle(
-                "Era-Adjust", value=st.session_state.do_era, disabled=team_mode)
+        if not team_mode:
+            with c_t2:
+                st.toggle("Project to 40", key="do_predict",
+                          disabled=games_mode)
+            with c_t3:
+                st.toggle("Era-Adjust", key="do_era")
 
         with c_t4:
-            st.session_state.do_cumul_toggle = st.toggle(
-                "Cumulative", value=st.session_state.do_cumul_toggle)
+            st.toggle("Cumulative", key="do_cumul_toggle")
 
         with c_t5:
-            st.session_state.do_base = st.toggle(
-                "Show Baseline", value=st.session_state.do_base, disabled=games_mode)
+            st.toggle("Show Baseline", key="do_base", disabled=games_mode)
 
         # ------------------------------------------------------------------
         # Row 2: X-Axis | Select Metric | Season Type | Leagues dropdowns
@@ -101,9 +102,14 @@ def render_controls() -> tuple:
         )
 
         st.markdown("<div id='controls-dropdowns'></div>", unsafe_allow_html=True)
-        c_xaxis, c_metric, c_season, c_league = st.columns(
-            [1.5, 1.5, 1.5, 2], vertical_alignment="top"
-        )
+        if team_mode:
+            c_xaxis, c_metric, c_season = st.columns(
+                [1.5, 1.5, 1.5], vertical_alignment="top"
+            )
+        else:
+            c_xaxis, c_metric, c_season, c_league = st.columns(
+                [1.5, 1.5, 1.5, 2], vertical_alignment="top"
+            )
 
         with c_xaxis:
             st.selectbox(
@@ -132,7 +138,7 @@ def render_controls() -> tuple:
             elif st.session_state.stat_category == "Goalie":
                 metric = st.selectbox(
                     "Select Metric",
-                    ["Wins", "Save %", "GAA", "Shutouts", "GP", "Saves"],
+                    ["Save %", "GAA", "Shutouts", "Wins", "GP", "Saves"],
                     key="goalie_metric",
                     help=(
                         "Save %: Save Percentage | GAA: Goals Against Average | "
@@ -154,8 +160,8 @@ def render_controls() -> tuple:
         with c_season:
             st.selectbox("Season Type", ["Regular", "Playoffs", "Both"], key="season_type")
 
-        with c_league:
-            if st.session_state.stat_category != "Team":
+        if not team_mode:
+            with c_league:
                 st.multiselect(
                     "Leagues",
                     options=list(NHLE_MULTIPLIERS.keys()),
@@ -170,8 +176,6 @@ def render_controls() -> tuple:
                 _non_nhl = [l for l in (st.session_state.league_filter or ['NHL']) if l != 'NHL']
                 if _non_nhl:
                     st.caption(f"NHLe-adjusted: {', '.join(_non_nhl)}")
-            else:
-                st.caption("Team mode: NHL data only.")
 
         # Captions for toggle context (rendered after metric is resolved)
         if st.session_state.do_cumul_toggle and metric in _cumul_rate_set:
@@ -183,8 +187,16 @@ def render_controls() -> tuple:
                 else "ℹ️ Projection & Baseline unavailable in Games mode."
             )
             st.caption(_gm_note)
-        if team_mode:
-            st.caption("ℹ️ Projection & Era-Adjust not applicable to teams.")
+        _ERA_GOALIE_STATS = {'Save %', 'GAA', 'Shutouts'}
+        if (
+            st.session_state.do_era
+            and st.session_state.stat_category == 'Goalie'
+            and metric not in _ERA_GOALIE_STATS
+        ):
+            st.caption(
+                f"ℹ️ Era-Adjust for goalies applies to Save %, GAA, and Shutouts. "
+                f"{metric} is not era-adjusted."
+            )
 
         # Resolve do_cumul: False when metric is a rate stat; games_mode honours the toggle
         do_cumul = (
