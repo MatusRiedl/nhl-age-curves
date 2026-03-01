@@ -1,4 +1,4 @@
-# NHL Player Age Curves & Career Projections
+# NHL Player Age Curves & Career Projections 🏒
 An interactive analytics dashboard built in Python that visualizes aging curves and career trajectories for NHL players using live data and machine learning projections.
 
 ## Available online here
@@ -6,11 +6,11 @@ https://nhl-age-curves.streamlit.app/
 
 ## Features
 
-* **Live API Integration:** Pulls real-time data directly from the NHL's undocumented public API — player stats, team rosters, and all-time records leaderboards.
+* **Live API Integration:** Pulls real-time data directly from the NHL's undocumented public API: player stats, team rosters, and all-time records leaderboards.
 
-* **KNN Machine Learning Projections:** Projects player performance to age 40 using a K-Nearest Neighbors algorithm. Matches against a database of ~8,500 NHL careers using full-career shape (not just recent seasons). An elite-tier pre-filter ensures top players are compared against historically similar talent levels — McDavid clones from Gretzky/Lemieux/Crosby, not role players.
+* **KNN Machine Learning Projections:** Projects player performance to age 40 using a K-Nearest Neighbors algorithm. Matches against a database of ~8,500 NHL careers using full-career shape (not just recent seasons). An elite-tier pre-filter ensures top players are compared against historically similar talent levels (McDavid clones from Gretzky/Lemieux/Crosby, not role players).
 
-* **Era-Adjusted Scoring:** Normalizes Points, Goals, and Assists independently across 8 NHL eras — the high-scoring 80s, the Dead Puck era, the modern game, etc. — using historical goals-per-game data so comparisons across generations are apples-to-apples.
+* **Era-Adjusted Scoring:** Normalizes Points, Goals, and Assists independently across 8 NHL eras (the high-scoring 80s, the Dead Puck era, the modern game, etc.) using historical goals-per-game data so comparisons across generations are apples-to-apples.
 
 * **75th Percentile Baseline:** Toggle a "Top 6 Forward / Starting Goalie" reference curve built from historical parquet data, with survivorship bias correction applied after age 31 (flat-or-rising baselines are overridden with a monotonic decay).
 
@@ -26,7 +26,7 @@ https://nhl-age-curves.streamlit.app/
 
 * **Shareable URLs:** All chart state (players on board, metric, toggles, category, season type) is encoded into the browser URL automatically. Copy the URL to share an exact comparison with anyone.
 
-* **Dynamic Search:** Type a player's first or last name to get live results. Selecting a match immediately adds them to the chart — no separate button required.
+* **Dynamic Search:** Type a player's first or last name to get live results. Selecting a match immediately adds them to the chart, no separate button required.
 
 * **Mobile-Friendly Layout:** Controls are organized into collapsible expander sections so the chart stays front-and-center on smaller screens.
 
@@ -37,7 +37,6 @@ https://nhl-age-curves.streamlit.app/
 * **Data & ML:** Pandas, PyArrow, custom KNN implementation
 * **Visualization:** Plotly
 * **Networking:** Requests (REST API)
-* **AI:** Anthropic SDK (`claude-opus-4-6`)
 * **Local Database:** Parquet (`nhl_historical_seasons.parquet`)
 
 ## Code Structure
