@@ -52,13 +52,18 @@ def _render_player_sidebar() -> dict:
 
     Three ways to add a player:
         1. Global search (D3 API + local records fallback).
-        2. Top 50 all-time dropdown with 'Add Legend' button.
-        3. Active roster selector by team with 'Add Roster Player' button.
+        2. Top 50 all-time dropdown (auto-adds on selection).
+        3. Active roster selector by team (auto-adds on selection).
 
     Writes to:
-        st.session_state.players     — dict {pid: name}
+        st.session_state.skater_players — dict {pid: name} (Skater mode)
+        st.session_state.goalie_players — dict {pid: name} (Goalie mode)
         st.session_state.search_ver  — incrementing int to reset the search box
         st.session_state.search_opts — current search result dict
+        st.session_state.top50_ver   — incrementing int to reset the top-50 box
+        st.session_state.top50_opts  — current top-50 dict for callback lookup
+        st.session_state.roster_ver  — incrementing int to reset the roster box
+        st.session_state.roster_opts — current roster dict for callback lookup
 
     Returns:
         Dict with sidebar keys for chart cache-busting.
@@ -74,9 +79,18 @@ def _render_player_sidebar() -> dict:
         st.session_state.search_ver = 0
     if 'search_opts' not in st.session_state:
         st.session_state.search_opts = {}
+    if 'top50_ver' not in st.session_state:
+        st.session_state.top50_ver = 0
+    if 'top50_opts' not in st.session_state:
+        st.session_state.top50_opts = {}
+    if 'roster_ver' not in st.session_state:
+        st.session_state.roster_ver = 0
+    if 'roster_opts' not in st.session_state:
+        st.session_state.roster_opts = {}
 
     def _on_player_select():
-        """Callback: add the selected player to the board and reset the search box."""
+        """Callback: add the selected player to the category board and reset the search box."""
+        pk   = "goalie_players" if st.session_state.stat_category == "Goalie" else "skater_players"
         ver  = st.session_state.search_ver
         sel  = st.session_state.get(f"_player_pick_{ver}")
         _SENT = "— select a player —"
@@ -86,9 +100,39 @@ def _render_player_sidebar() -> dict:
         if pid is None:
             return
         name = sel.split("] ")[-1] if "]" in sel else sel
-        st.session_state.players[pid] = name
+        st.session_state[pk][pid] = name
         st.session_state.search_ver  = ver + 1
         st.session_state.search_opts = {}
+
+    def _on_top50_select():
+        """Callback: add the selected top-50 player to the category board and reset the dropdown."""
+        pk   = "goalie_players" if st.session_state.stat_category == "Goalie" else "skater_players"
+        ver  = st.session_state.top50_ver
+        sel  = st.session_state.get(f"_top50_pick_{ver}")
+        _SENT = "— select a player —"
+        if not sel or sel == _SENT:
+            return
+        pid = st.session_state.top50_opts.get(sel)
+        if pid is None:
+            return
+        name = sel.split(". ", 1)[-1]
+        st.session_state[pk][pid] = name
+        st.session_state.top50_ver = ver + 1
+
+    def _on_roster_select():
+        """Callback: add the selected roster player to the category board and reset the dropdown."""
+        pk   = "goalie_players" if st.session_state.stat_category == "Goalie" else "skater_players"
+        ver  = st.session_state.roster_ver
+        sel  = st.session_state.get(f"_roster_pick_{ver}")
+        _SENT = "— select a player —"
+        if not sel or sel == _SENT:
+            return
+        pid = st.session_state.roster_opts.get(sel)
+        if pid is None:
+            return
+        name = sel.split("] ")[-1] if "]" in sel else sel
+        st.session_state[pk][pid] = name
+        st.session_state.roster_ver = ver + 1
 
     search_term = st.text_input(
         "Search player:",
@@ -136,11 +180,14 @@ def _render_player_sidebar() -> dict:
     else:
         top_50_dict  = get_top_50()
         top_50_label = "Top 50 All-Time Skaters"
-    top_selected = st.selectbox(top_50_label, list(top_50_dict.keys()))
-
-    st.markdown("<div class='blue-btn-anchor'></div>", unsafe_allow_html=True)
-    if st.button("Add Legend", use_container_width=True):
-        st.session_state.players[top_50_dict[top_selected]] = top_selected.split(". ")[-1]
+    _SENT = "— select a player —"
+    st.session_state.top50_opts = top_50_dict
+    top_selected = st.selectbox(
+        top_50_label,
+        [_SENT] + list(top_50_dict.keys()),
+        key=f"_top50_pick_{st.session_state.top50_ver}",
+        on_change=_on_top50_select,
+    )
 
     team_abbr = st.selectbox(
         "Active Rosters",
@@ -160,17 +207,20 @@ def _render_player_sidebar() -> dict:
         else:
             roster = {k: v for k, v in roster.items() if not k.startswith("[G]")}
         if roster:
+            st.session_state.roster_opts = roster
             roster_player = st.selectbox(
-                "Select Player:", list(roster.keys()), label_visibility="collapsed"
+                "Select Player:",
+                [_SENT] + list(roster.keys()),
+                key=f"_roster_pick_{st.session_state.roster_ver}",
+                on_change=_on_roster_select,
+                label_visibility="collapsed",
             )
-            st.markdown("<div class='blue-btn-anchor'></div>", unsafe_allow_html=True)
-            if st.button("Add Roster Player", use_container_width=True):
-                clean_name = roster_player.split("] ")[-1] if "]" in roster_player else roster_player
-                st.session_state.players[roster[roster_player]] = clean_name
+
+    _pk = "goalie_players" if st.session_state.stat_category == "Goalie" else "skater_players"
 
     st.markdown("---")
-    if st.session_state.players:
-        for pid, name in list(st.session_state.players.items()):
+    if st.session_state[_pk]:
+        for pid, name in list(st.session_state[_pk].items()):
             c_name, c_btn = st.columns([5, 1], vertical_alignment="center", gap="small")
             with c_name:
                 headshot = get_player_headshot(pid)
@@ -188,7 +238,7 @@ def _render_player_sidebar() -> dict:
                 )
             with c_btn:
                 if st.button("✖", key=f"drop_{pid}", type="primary"):
-                    del st.session_state.players[pid]
+                    del st.session_state[_pk][pid]
                     st.rerun()
     else:
         st.info("Board is empty")
@@ -202,41 +252,53 @@ def _render_player_sidebar() -> dict:
 
 
 def _render_team_sidebar() -> dict:
-    """Render the team-mode sidebar: team selector, Add Team button, team board.
+    """Render the team-mode sidebar: team selector (auto-adds on selection), team board.
 
-    The team logo is shown above the dropdown and updates live on selection change
-    by reading st.session_state.team_sel_abbr (set by the selectbox key).
+    The team logo is shown above the dropdown and reflects the current dropdown selection.
+    Selecting a team immediately adds it to the board and resets the dropdown.
 
     Writes to:
-        st.session_state.teams       — dict {abbr: name}
-        st.session_state.team_sel_abbr — currently highlighted team abbreviation
+        st.session_state.teams    — dict {abbr: name}
+        st.session_state.team_ver — incrementing int to reset the team selectbox
 
     Returns:
         Dict with sidebar keys for chart cache-busting (only 'team_abbr' is relevant).
     """
     st.subheader("Team Comparison")
 
-    # Logo shown ABOVE the dropdown — updates live on selection change
-    _logo_abbr = st.session_state.get("team_sel_abbr", list(ACTIVE_TEAMS.keys())[0])
-    st.markdown(
-        f"<div style='text-align:center;margin-bottom:5px;'>"
-        f"<img src='https://assets.nhle.com/logos/nhl/svg/{_logo_abbr}_light.svg' height='40'>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
+    if 'team_ver' not in st.session_state:
+        st.session_state.team_ver = 0
 
-    st.selectbox(
+    _SENT = "— select a team —"
+    _team_keys = list(ACTIVE_TEAMS.keys())
+
+    def _on_team_select():
+        """Callback: add the selected team to the board and reset the dropdown."""
+        ver = st.session_state.team_ver
+        sel = st.session_state.get(f"_team_pick_{ver}")
+        if not sel or sel == _SENT:
+            return
+        st.session_state.teams[sel] = ACTIVE_TEAMS[sel]
+        st.session_state.team_ver = ver + 1
+
+    # Logo shown ABOVE the dropdown — reflects current dropdown selection
+    _logo_abbr = st.session_state.get(f"_team_pick_{st.session_state.team_ver}", _SENT)
+    if _logo_abbr and _logo_abbr != _SENT:
+        st.markdown(
+            f"<div style='text-align:center;margin-bottom:5px;'>"
+            f"<img src='https://assets.nhle.com/logos/nhl/svg/{_logo_abbr}_light.svg' height='40'>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    _team_sel = st.selectbox(
         "Select Team:",
-        list(ACTIVE_TEAMS.keys()),
-        format_func=lambda x: f"{x} — {ACTIVE_TEAMS[x]}",
-        key="team_sel_abbr",
+        [_SENT] + _team_keys,
+        format_func=lambda x: x if x == _SENT else f"{x} — {ACTIVE_TEAMS[x]}",
+        key=f"_team_pick_{st.session_state.team_ver}",
+        on_change=_on_team_select,
         label_visibility="collapsed",
     )
-
-    st.markdown("<div class='blue-btn-anchor'></div>", unsafe_allow_html=True)
-    if st.button("Add Team", use_container_width=True):
-        _sel = st.session_state.team_sel_abbr
-        st.session_state.teams[_sel] = ACTIVE_TEAMS[_sel]
 
     st.markdown("---")
 
@@ -263,6 +325,6 @@ def _render_team_sidebar() -> dict:
     return {
         "search_term":   "",
         "top_selected":  "",
-        "team_abbr":     st.session_state.get("team_sel_abbr", ""),
+        "team_abbr":     _team_sel if _team_sel != _SENT else "",
         "roster_player": "",
     }

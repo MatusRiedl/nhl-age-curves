@@ -646,3 +646,106 @@ v0.38.1 - Rank Fix, Green Rank Color, Tight Card Spacing
   within each card. Previously four separate st.markdown() calls each produced a <p> element
   with default 16px top/bottom margin. All four rows now rendered in a single HTML block with
   line-height:1.6 and margin:0, removing the inter-paragraph whitespace.
+
+v0.39.0 - Auto-Add Sidebar Dropdowns
+---------------------------------------------------------
+- CHANGED: Top 50 skater/goalie dropdown now auto-adds the selected player on selection via
+  on_change callback with versioned widget key reset to sentinel. "Add Legend" button removed.
+- CHANGED: Active roster player dropdown now auto-adds on selection the same way.
+  "Add Roster Player" button removed.
+- CHANGED: Team comparison dropdown now auto-adds on selection the same way.
+  "Add Team" button removed.
+
+
+v0.40.0 - Merged Controls Panel
+---------------------------------------------------------
+- CHANGED: Removed the separate "View Options" expander. All controls now live inside
+  a single "Category & Metric" expander.
+- CHANGED: X-Axis, Leagues, and Season Type dropdowns share a compact equal-proportioned
+  row on the left side of the controls bottom row.
+- CHANGED: Season Type dropdown moved from View Options into the Category & Metric expander,
+  inline with X-Axis and Leagues.
+- CHANGED: 3-Season Rolling Avg, Project to 40, Era-Adjust, Cumulative, and Show Baseline
+  toggles moved to the right side of the same bottom row, appearing beside the dropdowns
+  on desktop.
+- CHANGED: Mobile CSS updated (#controls-bottom marker, flex-wrap: wrap, min-width: 30%)
+  so the bottom row wraps to approximately 3 columns per row on narrow screens.
+
+v0.40.1 - Responsive Expander Default State
+---------------------------------------------------------
+- CHANGED: "Category & Metric" expander now starts collapsed on mobile screens
+  (<=768 px) and expanded on desktop screens (>768 px).
+- CHANGED: Python expanded=False provides the correct closed default for mobile
+  without any JS. A components.html JS shim opens the expander on desktop,
+  using sessionStorage (keyed by performance.timeOrigin) to respect manual
+  close/open choices within the same page-load session.
+
+v0.41.0 - Metric Dropdown and Compact Controls Layout
+---------------------------------------------------------
+- CHANGED: "Select Metric" converted from a horizontal radio group to a selectbox
+  dropdown, matching the visual style of X-Axis, Season Type, and Leagues.
+- CHANGED: Controls row reorganised into three rows inside the expander:
+  Row 1 — Category radio (Skater / Goalie / Team) standalone.
+  Row 2 — Dropdowns in order: X-Axis, Select Metric, Season Type, Leagues.
+  Row 3 — Toggles compact and vertically centred: 3-Season Rolling Avg,
+           Project to 40, Era-Adjust, Cumulative, Show Baseline.
+- CHANGED: Mobile CSS updated with two separate responsive rules:
+  #controls-dropdowns marker stacks each dropdown to 100% width (one per row).
+  #controls-toggles marker wraps toggles at 30% minimum (three per row).
+
+v0.41.1 - Category and Toggles Merged onto One Row
+---------------------------------------------------------
+- CHANGED: Category radio (Skater/Goalie/Team) and all 5 toggles now share one row,
+  eliminating the empty desktop space that existed when the category radio was alone.
+- CHANGED: #controls-toggles CSS marker renamed to #controls-row1 to reflect the
+  merged row. Mobile wrapping unchanged: category + toggles wrap at 3 per row.
+
+
+v0.41.2 - Compact Controls Expander Spacing
+---------------------------------------------------------
+- CHANGED: Reduced vertical whitespace inside the Category & Metric expander via CSS.
+  Tightened padding on the expander content area, element-container margins, row gap
+  between the toggles row and dropdowns row, radio label bottom margin, and toggle margins.
+  No Python logic changed; purely a CSS addition in nhl/styles.py.
+
+v0.41.3 - Controls Expander Label and Alignment Fixes
+---------------------------------------------------------
+- CHANGED: Removed "Category:" label above the radio buttons (label_visibility="collapsed").
+- CHANGED: Radio buttons now align vertically with toggles — label removal fixes the
+  height mismatch that was pushing the radio options below the toggle midpoint.
+- CHANGED: Reduced gap between the toggle row and dropdown row by adding a gap rule
+  on stVerticalBlock inside the expander (nhl/styles.py).
+
+
+v0.42.0 - Separate Player Boards + Persistent Controls
+---------------------------------------------------------
+- ADDED: Independent Skater and Goalie player boards. Switching from Skater to Goalie
+  mode (or back) now preserves each board separately. Previously both categories shared
+  a single players dict, so switching modes could clobber the board.
+- FIXED: Controls expander now persists its open/closed state across all reruns
+  (player add, player remove, team add/remove). Previously the expander collapsed back
+  to closed on every st.rerun(), hiding the toggle controls from the user.
+- CHANGED: Replaced the client-side JS shim (sessionStorage-based auto-open hack) with
+  Streamlit's native key="controls_expanded" expander state tracking. Expander defaults
+  to open on first load (controls_expanded=True initialized in app.py).
+- CHANGED: st.session_state.players split into st.session_state.skater_players and
+  st.session_state.goalie_players. app.py resolves active_players based on stat_category.
+
+v0.42.1 - Baseline Renders Without Players
+---------------------------------------------------------
+- FIXED: Chart now renders the 75th percentile baseline alone when the board is empty
+  and Show Baseline is toggled on. Previously the chart returned early with an info
+  message, hiding the baseline. Now the baseline trace is visible even with zero
+  players loaded, allowing users to compare new additions against it immediately.
+
+v0.42.2 - Fix Toggle State Reset on Player Removal
+---------------------------------------------------------
+- FIXED: Toggles (Project to 40, Era-Adjust, Show Baseline, Cumulative, Rolling Avg)
+  were resetting to OFF whenever a player was removed. Root cause: the sidebar remove
+  button calls st.rerun(), which aborts script execution before render_controls() runs.
+  Streamlit then cleans up "orphaned" widget keys from session_state, and the init block
+  re-initializes them to False on the next run.
+- CHANGED: All 5 toggles now use value=st.session_state.do_X + explicit assignment
+  instead of key="do_X". Without key=, Streamlit cannot orphan-clean the session_state
+  entries, so toggle state survives interrupted runs and persists across all add/remove
+  operations indefinitely until the user manually changes them.

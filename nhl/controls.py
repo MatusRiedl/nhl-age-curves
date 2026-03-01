@@ -1,10 +1,13 @@
 """
-nhl.controls — Category/Metric and View Options expanders for the NHL Age Curves app.
+nhl.controls — Category/Metric expander for the NHL Age Curves app.
 
-Renders the two main control expanders that appear below the page title:
-    1. "Category & Metric" — category radio, metric radio, x-axis mode, league filter.
-    2. "View Options"      — season type, rolling avg, project, era-adjust,
-                            cumulative, and baseline toggles.
+Renders a single "Category & Metric" expander that appears below the page title.
+It contains all controls in two rows:
+    Row 1: category radio (Skater / Goalie / Team) + all 5 toggles on the same row
+    Row 2: X-Axis, Select Metric, Season Type, Leagues dropdowns (compact, left→right)
+
+The expander uses expanded=True so it is always open on every rerun, ensuring toggles
+remain visible after player add/remove actions.
 
 Reads and writes st.session_state directly (that is the correct Streamlit pattern
 for widget state).  Returns (metric, do_cumul) so app.py can pass both values into
@@ -20,17 +23,20 @@ from nhl.constants import NHLE_MULTIPLIERS, RATE_STATS, TEAM_METRICS, TEAM_RATE_
 
 
 def render_controls() -> tuple:
-    """Render the Category/Metric expander and the View Options expander.
+    """Render the unified Category & Metric expander with all controls.
 
-    Both expanders are expanded by default (expanded=True) so all controls are
-    visible immediately on desktop; mobile users can tap the header to collapse.
+    The expander uses expanded=True so it is always open on every rerun, ensuring
+    toggles remain visible and accessible after player add/remove actions.
+
+    A single expander holds two rows:
+        Row 1 — Category radio (Skater/Goalie/Team) + all 5 toggles on the same row.
+        Row 2 — X-Axis, Select Metric, Season Type, Leagues dropdowns.
 
     Reads:
         st.session_state.stat_category   — drives metric radio options
         st.session_state.x_axis_mode     — determines which mode note to show
         st.session_state.do_cumul_toggle — raw toggle value
         st.session_state.league_filter   — current league multiselect
-
     Writes (via widget keys):
         stat_category, x_axis_mode, league_filter, season_type,
         do_smooth, do_predict, do_era, do_cumul_toggle, do_base
@@ -44,61 +50,61 @@ def render_controls() -> tuple:
     team_mode  = st.session_state.stat_category == "Team"
     games_mode = st.session_state.x_axis_mode == "Games Played"
 
-    # ------------------------------------------------------------------
-    # Expander 1: Category & Metric
-    # ------------------------------------------------------------------
     with st.expander("📊 Category & Metric", expanded=True):
-        c_category, c_metric = st.columns([2, 8], vertical_alignment="center")
+        # ------------------------------------------------------------------
+        # Row 1: Category radio + compact toggles (no wasted desktop space)
+        # ------------------------------------------------------------------
+        _cumul_rate_set = TEAM_RATE_STATS if team_mode else RATE_STATS
+
+        st.markdown("<div id='controls-row1'></div>", unsafe_allow_html=True)
+        c_category, c_t1, c_t2, c_t3, c_t4, c_t5 = st.columns(
+            [2.5, 2, 1.8, 1.5, 1.8, 1.8], vertical_alignment="center"
+        )
+
         with c_category:
             st.radio(
                 "Category:",
                 ["Skater", "Goalie", "Team"],
                 horizontal=True,
                 key="stat_category",
+                label_visibility="collapsed",
             )
-        with c_metric:
-            if st.session_state.stat_category == "Skater":
-                metric = st.radio(
-                    "Select Metric:",
-                    ["Points", "Goals", "Assists", "+/-", "GP", "PPG", "SH%", "PIM", "TOI"],
-                    horizontal=True,
-                    key="skater_metric",
-                    help=(
-                        "+/-: Plus/Minus Differential | GP: Games Played | "
-                        "PPG: Points Per Game | SH%: Shooting Percentage | "
-                        "PIM: Penalty Minutes | TOI: Time on Ice (Avg Mins)"
-                    ),
-                )
-            elif st.session_state.stat_category == "Goalie":
-                metric = st.radio(
-                    "Select Metric:",
-                    ["Wins", "Save %", "GAA", "Shutouts", "GP", "Saves"],
-                    horizontal=True,
-                    key="goalie_metric",
-                    help=(
-                        "Save %: Save Percentage | GAA: Goals Against Average | "
-                        "GP: Games Played | Saves: Total Saves"
-                    ),
-                )
-            else:
-                metric = st.radio(
-                    "Select Metric:",
-                    TEAM_METRICS,
-                    horizontal=True,
-                    key="team_metric",
-                    help=(
-                        "Points: standings pts | Wins: wins per season | Win%: pts pct | "
-                        "Goals: team GF | GF/G: goals for/game | GA/G: goals against/game | "
-                        "PP%: power play % | PPG: team scoring pts/game (est.)"
-                    ),
-                )
 
+        with c_t1:
+            st.session_state.do_smooth = st.toggle(
+                "3-Season Rolling Avg", value=st.session_state.do_smooth)
+
+        with c_t2:
+            st.session_state.do_predict = st.toggle(
+                "Project to 40", value=st.session_state.do_predict,
+                disabled=games_mode or team_mode)
+
+        with c_t3:
+            st.session_state.do_era = st.toggle(
+                "Era-Adjust", value=st.session_state.do_era, disabled=team_mode)
+
+        with c_t4:
+            st.session_state.do_cumul_toggle = st.toggle(
+                "Cumulative", value=st.session_state.do_cumul_toggle)
+
+        with c_t5:
+            st.session_state.do_base = st.toggle(
+                "Show Baseline", value=st.session_state.do_base, disabled=games_mode)
+
+        # ------------------------------------------------------------------
+        # Row 2: X-Axis | Select Metric | Season Type | Leagues dropdowns
+        # ------------------------------------------------------------------
         _x_opts = (
             ["Season Year", "Games Played"]
             if st.session_state.stat_category == "Team"
             else ["Age", "Games Played"]
         )
-        c_xaxis, c_league, _ = st.columns([3, 4, 3])
+
+        st.markdown("<div id='controls-dropdowns'></div>", unsafe_allow_html=True)
+        c_xaxis, c_metric, c_season, c_league = st.columns(
+            [1.5, 1.5, 1.5, 2], vertical_alignment="top"
+        )
+
         with c_xaxis:
             st.selectbox(
                 "X-Axis",
@@ -110,6 +116,44 @@ def render_controls() -> tuple:
                     "Games Played: cumulative game number."
                 ),
             )
+
+        with c_metric:
+            if st.session_state.stat_category == "Skater":
+                metric = st.selectbox(
+                    "Select Metric",
+                    ["Points", "Goals", "Assists", "+/-", "GP", "PPG", "SH%", "PIM", "TOI"],
+                    key="skater_metric",
+                    help=(
+                        "+/-: Plus/Minus Differential | GP: Games Played | "
+                        "PPG: Points Per Game | SH%: Shooting Percentage | "
+                        "PIM: Penalty Minutes | TOI: Time on Ice (Avg Mins)"
+                    ),
+                )
+            elif st.session_state.stat_category == "Goalie":
+                metric = st.selectbox(
+                    "Select Metric",
+                    ["Wins", "Save %", "GAA", "Shutouts", "GP", "Saves"],
+                    key="goalie_metric",
+                    help=(
+                        "Save %: Save Percentage | GAA: Goals Against Average | "
+                        "GP: Games Played | Saves: Total Saves"
+                    ),
+                )
+            else:
+                metric = st.selectbox(
+                    "Select Metric",
+                    TEAM_METRICS,
+                    key="team_metric",
+                    help=(
+                        "Points: standings pts | Wins: wins per season | Win%: pts pct | "
+                        "Goals: team GF | GF/G: goals for/game | GA/G: goals against/game | "
+                        "PP%: power play % | PPG: team scoring pts/game (est.)"
+                    ),
+                )
+
+        with c_season:
+            st.selectbox("Season Type", ["Regular", "Playoffs", "Both"], key="season_type")
+
         with c_league:
             if st.session_state.stat_category != "Team":
                 st.multiselect(
@@ -129,35 +173,20 @@ def render_controls() -> tuple:
             else:
                 st.caption("Team mode: NHL data only.")
 
-    # ------------------------------------------------------------------
-    # Expander 2: View Options & Toggles
-    # ------------------------------------------------------------------
-    with st.expander("⚙️ View Options", expanded=True):
-        st.markdown("<div id='master-toggles'></div>", unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([2, 3, 3])
-        with c1:
-            st.selectbox("Season Type", ["Regular", "Playoffs", "Both"], key="season_type")
-        with c2:
-            st.toggle("3-Season Rolling Avg", key="do_smooth")
-            st.toggle("Project to 40", key="do_predict", disabled=games_mode or team_mode)
-        with c3:
-            st.toggle("Era-Adjust", key="do_era", disabled=team_mode)
-            _cumul_rate_set = TEAM_RATE_STATS if team_mode else RATE_STATS
-            st.toggle("Cumulative", key="do_cumul_toggle")
-            if st.session_state.do_cumul_toggle and metric in _cumul_rate_set:
-                st.caption(f"⚠️ Cumulative disabled — {metric} is a rate stat.")
-            if games_mode:
-                _gm_note = (
-                    "ℹ️ Cumulative & Baseline unavailable in Games mode."
-                    if team_mode
-                    else "ℹ️ Projection & Baseline unavailable in Games mode."
-                )
-                st.caption(_gm_note)
-            if team_mode:
-                st.caption("ℹ️ Projection & Era-Adjust not applicable to teams.")
-            st.toggle("Show Baseline", key="do_base", disabled=games_mode)
+        # Captions for toggle context (rendered after metric is resolved)
+        if st.session_state.do_cumul_toggle and metric in _cumul_rate_set:
+            st.caption(f"⚠️ Cumulative disabled — {metric} is a rate stat.")
+        if games_mode:
+            _gm_note = (
+                "ℹ️ Cumulative & Baseline unavailable in Games mode."
+                if team_mode
+                else "ℹ️ Projection & Baseline unavailable in Games mode."
+            )
+            st.caption(_gm_note)
+        if team_mode:
+            st.caption("ℹ️ Projection & Era-Adjust not applicable to teams.")
 
-        # Resolve do_cumul: False when metric is a rate stat; games_mode now honours the toggle
+        # Resolve do_cumul: False when metric is a rate stat; games_mode honours the toggle
         do_cumul = (
             st.session_state.do_cumul_toggle
             and metric not in _cumul_rate_set

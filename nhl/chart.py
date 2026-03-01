@@ -64,13 +64,15 @@ def render_chart(
                               'roster_player' — used for chart widget key generation.
     """
     if not processed_dfs:
-        if team_mode:
-            st.info("Add teams from the sidebar to compare their historical performance.")
-        else:
-            st.info("No data found for the selected parameters.")
-        return
+        # Allow baseline-only render when Show Baseline is on in player mode
+        if not (do_base and not games_mode and not team_mode):
+            if team_mode:
+                st.info("Add teams from the sidebar to compare their historical performance.")
+            else:
+                st.info("Add players from the sidebar to get started.")
+            return
 
-    final_df = pd.concat(processed_dfs, ignore_index=True)
+    final_df = pd.concat(processed_dfs, ignore_index=True) if processed_dfs else pd.DataFrame()
 
     # ------------------------------------------------------------------
     # Baseline overlay
@@ -118,6 +120,12 @@ def render_chart(
                     })
                 final_df = pd.concat([final_df, pd.DataFrame(base_data)], ignore_index=True)
 
+    # Guard: baseline attempt may still leave final_df empty (e.g. switching to Goalie
+    # mode with no goalies loaded and a metric that has no baseline data).
+    if final_df.empty:
+        st.info("Add players from the sidebar to get started.")
+        return
+
     # ------------------------------------------------------------------
     # Determine x-axis column and custom_data columns
     # ------------------------------------------------------------------
@@ -142,7 +150,8 @@ def render_chart(
     _x_max  = float(_x_vals.max()) + _x_pad
     _y_min  = max(0.0, float(_y_vals.min()))
     _y_max  = float(_y_vals.max()) + _y_pad
-    _is_age_mode = (x_col == "Age")
+    _is_age_mode   = (x_col == "Age")
+    _is_games_mode = (x_col == "Games Played")
 
     # ------------------------------------------------------------------
     # Build Plotly figure
@@ -274,7 +283,7 @@ def render_chart(
         )
     else:
         chart_key = (
-            f"chart_{hash(str(st.session_state.players))}"
+            f"chart_{hash(str({**st.session_state.skater_players, **st.session_state.goalie_players}))}"
             f"_{metric}_{st.session_state.do_predict}_{st.session_state.do_smooth}"
             f"_{sidebar_keys.get('search_term', '')}"
             f"_{sidebar_keys.get('top_selected', '')}"
@@ -310,14 +319,34 @@ def render_chart(
     var X_MAX = {_x_max:.4f};
     var Y_MIN = {_y_min:.4f};
     var Y_MAX = {_y_max:.4f};
-    var IS_AGE_MODE = {'true' if _is_age_mode else 'false'};
+    var IS_AGE_MODE   = {'true' if _is_age_mode else 'false'};
+    var IS_GAMES_MODE = {'true' if _is_games_mode else 'false'};
+
+    function calcDtick(width) {{
+        var xRange = X_MAX - X_MIN;
+        if (IS_AGE_MODE) {{
+            if (width >= 900) return 1;
+            if (width >= 480) return 2;
+            return 5;
+        }}
+        if (IS_GAMES_MODE) {{
+            var targetTicks = width >= 900 ? 8 : width >= 480 ? 5 : 3;
+            var rawDtick = xRange / targetTicks;
+            if (rawDtick <= 100)  return 100;
+            if (rawDtick <= 200)  return 200;
+            if (rawDtick <= 300)  return 250;
+            if (rawDtick <= 400)  return 400;
+            if (rawDtick <= 750)  return 500;
+            return Math.ceil(rawDtick / 500) * 500;
+        }}
+        // Season Year mode
+        if (width >= 900) return 2;
+        if (width >= 480) return 5;
+        return 10;
+    }}
 
     function applySettings(plot, Plotly) {{
-        var isMobile = window.parent.innerWidth < 768;
-        var updates = {{}};
-        if (IS_AGE_MODE) {{
-            updates['xaxis.dtick'] = isMobile ? 5 : 1;
-        }}
+        var updates = {{'xaxis.dtick': calcDtick(window.parent.innerWidth)}};
         updates['xaxis.tickangle'] = 0;
         Plotly.relayout(plot, updates);
 
@@ -346,9 +375,9 @@ def render_chart(
         plots.forEach(function(p) {{ applySettings(p, Plotly); }});
 
         parent.addEventListener('resize', function() {{
-            var isMobile = parent.innerWidth < 768;
+            var dtick = calcDtick(parent.innerWidth);
             parent.document.querySelectorAll('.js-plotly-plot').forEach(function(p) {{
-                if (IS_AGE_MODE) Plotly.relayout(p, {{'xaxis.dtick': isMobile ? 5 : 1}});
+                Plotly.relayout(p, {{'xaxis.dtick': dtick}});
             }});
         }});
     }}

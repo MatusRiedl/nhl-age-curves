@@ -85,9 +85,10 @@ All are wrapped in try/except with silent fallbacks.
 
 SECTION 4 — SESSION STATE
 ---------------------------
-All 10 persistent session state keys (initialized at top of script):
+All 11 persistent session state keys (initialized at top of script):
 
-  st.session_state.players          dict: {player_id (int): "Player Name" (str)}
+  st.session_state.skater_players   dict: {player_id (int): "Player Name" (str)} — Skater board
+  st.session_state.goalie_players   dict: {player_id (int): "Player Name" (str)} — Goalie board
   st.session_state.stat_category    str: "Skater" or "Goalie"
   st.session_state.season_type      str: "Regular", "Playoffs", or "Both"
   st.session_state.do_smooth        bool: Data Smoothing toggle
@@ -119,7 +120,7 @@ skipped and vice versa. The user must switch category to see those players.
 
 SECTION 6 — DATA PIPELINE (per player, per render)
 ----------------------------------------------------
-For every player in st.session_state.players:
+For every player in active_players (resolved from skater_players or goalie_players based on stat_category):
 
   1. FETCH: get_player_raw_stats(pid) → raw_df (one row per supported-league season/gametype)
      Columns: League, Age, SeasonYear, GameType, GP, Points, Goals, Assists, PIM, +/-,

@@ -3,7 +3,7 @@ nhl.comparison -- Right-column player comparison panel for the NHL Age Curves ap
 
 Renders one stat card per selected player showing a full-body hero image,
 career counting stats totals, all-time ranking, and best season highlight.
-Imported and called from app.py when show_stats_panel toggle is active.
+Imported and called from app.py whenever players are loaded (always visible).
 
 Imports from project:
     nhl.data_loaders  -- get_player_hero_image(), get_player_current_team(),
@@ -76,8 +76,6 @@ def render_comparison_panel(
         base = proc_df['BaseName'].iloc[0]
         proc_lookup[base] = proc_df
 
-    st.markdown("#### Player Stats")
-
     for pid, name in players.items():
         proc_df = proc_lookup.get(name)
         if proc_df is None:
@@ -132,9 +130,9 @@ def render_comparison_panel(
         rank_row = ""
         if rank is not None:
             rank_row = (
-                f"<br><small style='color:#4caf50;'>"
+                f"<br><span style='font-size:14px;color:#4caf50;'>"
                 f"#{_ordinal(rank)} all-time &mdash; {rank_suffix}"
-                f"</small>"
+                f"</span>"
             )
 
         best_row = ""
@@ -158,10 +156,10 @@ def render_comparison_panel(
                 val_str = str(int(val))
 
             best_row = (
-                f"<br><small style='color:#999;'>"
+                f"<br><span style='font-size:14px;color:#999;'>"
                 f"Best: Age&nbsp;{age} ({sy_str})"
                 f" &mdash; {val_str}&nbsp;{metric} in {peak_gp}&nbsp;GP"
-                f"</small>"
+                f"</span>"
             )
 
         with st.container():
@@ -173,7 +171,7 @@ def render_comparison_panel(
 
             with stat_col:
                 st.markdown(
-                    f"<div style='line-height:1.6;margin:0;padding:0;'>"
+                    f"<div style='line-height:1.4;margin:0;padding:0;'>"
                     f"<strong>{name}</strong>{logo_html}<br>"
                     f"{stats_row}"
                     f"{rank_row}"
@@ -182,4 +180,7 @@ def render_comparison_panel(
                     unsafe_allow_html=True,
                 )
 
-        st.markdown("---")
+        st.markdown(
+            "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
+            unsafe_allow_html=True,
+        )

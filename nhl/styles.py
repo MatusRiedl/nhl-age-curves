@@ -68,6 +68,32 @@ _CSS = """
             margin-bottom: 4px !important;
         }
 
+        /* Compact controls expander — reduce vertical whitespace */
+        [data-testid="stExpander"] details summary {
+            padding-top: 0.4rem !important;
+            padding-bottom: 0.4rem !important;
+        }
+        [data-testid="stExpander"] details > div {
+            padding-top: 0.25rem !important;
+            padding-bottom: 0.25rem !important;
+        }
+        [data-testid="stExpander"] .element-container {
+            margin-bottom: 0 !important;
+        }
+        [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
+            gap: 0.5rem !important;
+            row-gap: 0.25rem !important;
+        }
+        [data-testid="stExpander"] .stRadio > label {
+            margin-bottom: 0.1rem !important;
+        }
+        [data-testid="stExpander"] [data-testid="stToggle"] {
+            margin-bottom: 0 !important;
+        }
+        [data-testid="stExpander"] [data-testid="stVerticalBlock"] {
+            gap: 0.25rem !important;
+        }
+
         .player-name {
             font-size: 15px;
             white-space: nowrap;
@@ -85,13 +111,25 @@ _CSS = """
             border-color: #1a569d !important;
         }
 
+        /* Controls dropdowns: stack one per row on mobile */
         @media (max-width: 768px) {
-            div:has(> #master-toggles) + div [data-testid="stHorizontalBlock"] {
-                flex-wrap: nowrap !important;
+            div:has(> #controls-dropdowns) + div [data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap !important;
             }
-            div:has(> #master-toggles) + div [data-testid="column"] {
-                min-width: 48% !important;
-                flex: 1 1 48% !important;
+            div:has(> #controls-dropdowns) + div [data-testid="column"] {
+                min-width: 100% !important;
+                flex: 1 1 100% !important;
+            }
+        }
+
+        /* Controls row1 (category + toggles): wrap ~3 per row on mobile */
+        @media (max-width: 768px) {
+            div:has(> #controls-row1) + div [data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap !important;
+            }
+            div:has(> #controls-row1) + div [data-testid="column"] {
+                min-width: 30% !important;
+                flex: 1 1 30% !important;
             }
         }
 
@@ -100,11 +138,22 @@ _CSS = """
             padding: 0.5rem 0.25rem;
         }
         .comparison-card b {
-            font-size: 15px;
+            font-size: 18px;
         }
         .comparison-card small {
             color: #aaa;
             font-size: 12px;
+        }
+
+        /* Responsive: stack chart and stats panel vertically on mobile */
+        @media screen and (max-width: 768px) {
+            .main [data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap !important;
+            }
+            .main [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+                min-width: 100% !important;
+                width: 100% !important;
+            }
         }
 
         /* Plotly modebar — always visible, fit on one row */
@@ -149,7 +198,9 @@ def inject_css() -> None:
     """Inject the NHL Age Curves custom CSS into the Streamlit page.
 
     Covers: animated gradient title, spinning NHL logo, sidebar compact layout,
-    blue Add-Legend button override, mobile responsive toggle columns, and
+    blue Add-Legend button override, mobile responsive controls-bottom row wrapping
+    (~3 columns per row via #controls-bottom marker),
+    responsive stacking of the chart/stats panel split on narrow screens, and
     Plotly modebar sizing for desktop and mobile.
 
     Must be called once per app run, after st.set_page_config().

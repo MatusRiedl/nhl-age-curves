@@ -51,20 +51,20 @@ inject_css()
 # Session state initialization
 # All keys that any module reads must be seeded here before the first widget run.
 # =============================================================================
-if 'players'        not in st.session_state: st.session_state.players        = {}
-if 'teams'          not in st.session_state: st.session_state.teams          = {}
-if 'stat_category'  not in st.session_state: st.session_state.stat_category  = "Skater"
-if 'season_type'    not in st.session_state: st.session_state.season_type    = "Regular"
-if 'do_smooth'      not in st.session_state: st.session_state.do_smooth      = False
-if 'do_predict'     not in st.session_state: st.session_state.do_predict     = False
-if 'do_era'         not in st.session_state: st.session_state.do_era         = False
-if 'do_cumul_toggle'not in st.session_state: st.session_state.do_cumul_toggle= False
-if 'do_base'        not in st.session_state: st.session_state.do_base        = False
-if 'x_axis_mode'    not in st.session_state: st.session_state.x_axis_mode    = "Age"
-if 'league_filter'  not in st.session_state: st.session_state.league_filter  = ['NHL']
-if 'team_sel_abbr'  not in st.session_state:
+if 'skater_players'    not in st.session_state: st.session_state.skater_players    = {}
+if 'goalie_players'    not in st.session_state: st.session_state.goalie_players    = {}
+if 'teams'             not in st.session_state: st.session_state.teams             = {}
+if 'stat_category'     not in st.session_state: st.session_state.stat_category     = "Skater"
+if 'season_type'       not in st.session_state: st.session_state.season_type       = "Regular"
+if 'do_smooth'         not in st.session_state: st.session_state.do_smooth         = False
+if 'do_predict'        not in st.session_state: st.session_state.do_predict        = False
+if 'do_era'            not in st.session_state: st.session_state.do_era            = False
+if 'do_cumul_toggle'   not in st.session_state: st.session_state.do_cumul_toggle   = False
+if 'do_base'           not in st.session_state: st.session_state.do_base           = False
+if 'x_axis_mode'       not in st.session_state: st.session_state.x_axis_mode       = "Age"
+if 'league_filter'     not in st.session_state: st.session_state.league_filter     = ['NHL']
+if 'team_sel_abbr'     not in st.session_state:
     st.session_state.team_sel_abbr = list(ACTIVE_TEAMS.keys())[0]
-if 'show_stats_panel' not in st.session_state: st.session_state.show_stats_panel = False
 
 # =============================================================================
 # Sidebar — renders player/team board and returns keys for chart cache-busting
@@ -105,9 +105,14 @@ metric, do_cumul = render_controls()
 team_mode  = st.session_state.stat_category == "Team"
 games_mode = st.session_state.x_axis_mode == "Games Played"
 
-# Stats panel toggle — player mode only, hidden when no players are on the board
-if not team_mode and st.session_state.players:
-    st.toggle("Show Player Stats Panel", key="show_stats_panel")
+# Active player board — scoped to the current category so Skater and Goalie
+# boards are independent; switching category never clears the other board.
+if st.session_state.stat_category == "Skater":
+    active_players = st.session_state.skater_players
+elif st.session_state.stat_category == "Goalie":
+    active_players = st.session_state.goalie_players
+else:
+    active_players = {}
 
 # =============================================================================
 # Shared data: historical parquet + baselines
@@ -155,10 +160,10 @@ if team_mode:
             games_mode  = games_mode,
         )
 
-elif st.session_state.players:
+elif active_players:
     # ── Player pipeline ────────────────────────────────────────────────
     processed_dfs, raw_dfs_cache, ml_clones_dict, peak_info = process_players(
-        players           = st.session_state.players,
+        players           = active_players,
         metric            = metric,
         hist_df           = hist_df,
         id_to_name_map    = id_to_name_map,
@@ -175,13 +180,10 @@ elif st.session_state.players:
 
 # =============================================================================
 # Chart rendering (shared by both pipelines)
-# When the stats panel is toggled on, split main area 65/35; otherwise full width.
+# Stats panel is always visible in player mode when players are loaded.
+# Desktop: 65/35 split (chart left, stats right). Mobile: stacked via CSS.
 # =============================================================================
-_show_panel = (
-    st.session_state.show_stats_panel
-    and not team_mode
-    and bool(processed_dfs)
-)
+_show_panel = not team_mode and bool(processed_dfs)
 
 if _show_panel:
     col_chart, col_stats = st.columns([65, 35], gap="medium")
@@ -211,7 +213,7 @@ if col_stats is not None:
     with col_stats:
         render_comparison_panel(
             processed_dfs = processed_dfs,
-            players       = st.session_state.players,
+            players       = active_players,
             peak_info     = peak_info,
             metric        = metric,
             stat_category = st.session_state.stat_category,
