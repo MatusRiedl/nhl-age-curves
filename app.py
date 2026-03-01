@@ -25,7 +25,7 @@ from nhl.baselines import build_historical_baselines, build_team_baselines
 from nhl.chart import render_chart
 from nhl.constants import ACTIVE_TEAMS
 from nhl.controls import render_controls
-from nhl.comparison import render_comparison_panel
+from nhl.comparison import render_comparison_panel, render_team_comparison_panel
 from nhl.data_loaders import (
     get_clone_details_map,
     get_id_to_name_map,
@@ -36,6 +36,7 @@ from nhl.player_pipeline import process_players
 from nhl.sidebar import render_sidebar
 from nhl.styles import inject_css
 from nhl.team_pipeline import process_teams
+from nhl.schedule import get_featured_players, get_live_or_recent_game
 from nhl.url_params import apply_params_to_state, encode_state_to_params
 
 # =============================================================================
@@ -60,13 +61,12 @@ if "_url_loaded" not in st.session_state:
 # Session state initialization
 # All keys that any module reads must be seeded here before the first widget run.
 # =============================================================================
-if 'skater_players'    not in st.session_state: st.session_state.skater_players    = {}
-if 'goalie_players'    not in st.session_state: st.session_state.goalie_players    = {}
+if 'players'           not in st.session_state: st.session_state.players           = {}
 if 'teams'             not in st.session_state: st.session_state.teams             = {}
 if 'stat_category'     not in st.session_state: st.session_state.stat_category     = "Skater"
 if 'season_type'       not in st.session_state: st.session_state.season_type       = "Regular"
 if 'do_smooth'         not in st.session_state: st.session_state.do_smooth         = False
-if 'do_predict'        not in st.session_state: st.session_state.do_predict        = False
+if 'do_predict'        not in st.session_state: st.session_state.do_predict        = True
 if 'do_era'            not in st.session_state: st.session_state.do_era            = False
 if 'do_cumul_toggle'   not in st.session_state: st.session_state.do_cumul_toggle   = False
 if 'do_base'           not in st.session_state: st.session_state.do_base           = False
@@ -74,6 +74,19 @@ if 'x_axis_mode'       not in st.session_state: st.session_state.x_axis_mode    
 if 'league_filter'     not in st.session_state: st.session_state.league_filter     = ['NHL']
 if 'team_sel_abbr'     not in st.session_state:
     st.session_state.team_sel_abbr = list(ACTIVE_TEAMS.keys())[0]
+
+# =============================================================================
+# Auto-populate from live/recent NHL game — fires once per session, only when
+# no players or teams were loaded from a shared URL.
+# =============================================================================
+if "_default_loaded" not in st.session_state:
+    st.session_state["_default_loaded"] = True
+    if not st.session_state.players and not st.session_state.teams:
+        _game = get_live_or_recent_game()
+        if _game:
+            _featured = get_featured_players(*_game)
+            st.session_state.players.update(_featured["players"])
+            st.session_state.teams.update(_featured["teams"])
 
 # =============================================================================
 # Page header
@@ -119,14 +132,9 @@ sidebar_keys = render_sidebar()
 team_mode  = st.session_state.stat_category == "Team"
 games_mode = st.session_state.x_axis_mode == "Games Played"
 
-# Active player board — scoped to the current category so Skater and Goalie
-# boards are independent; switching category never clears the other board.
-if st.session_state.stat_category == "Skater":
-    active_players = st.session_state.skater_players
-elif st.session_state.stat_category == "Goalie":
-    active_players = st.session_state.goalie_players
-else:
-    active_players = {}
+# Active player board — shared across Skater and Goalie categories.
+# The pipeline's is_goalie gatekeeper filters per category at render time.
+active_players = {} if team_mode else st.session_state.players
 
 # =============================================================================
 # Shared data: historical parquet + baselines
@@ -197,7 +205,7 @@ elif active_players:
 # Stats panel is always visible in player mode when players are loaded.
 # Desktop: 65/35 split (chart left, stats right). Mobile: stacked via CSS.
 # =============================================================================
-_show_panel = not team_mode and bool(processed_dfs)
+_show_panel = bool(processed_dfs)
 
 if _show_panel:
     col_chart, col_stats = st.columns([65, 35], gap="medium")
@@ -225,14 +233,20 @@ with col_chart:
 
 if col_stats is not None:
     with col_stats:
-        render_comparison_panel(
-            processed_dfs = processed_dfs,
-            players       = active_players,
-            peak_info     = peak_info,
-            metric        = metric,
-            stat_category = st.session_state.stat_category,
-            season_type   = st.session_state.season_type,
-        )
+        if team_mode:
+            render_team_comparison_panel(
+                active_teams = st.session_state.teams,
+                metric       = metric,
+            )
+        else:
+            render_comparison_panel(
+                processed_dfs = processed_dfs,
+                players       = active_players,
+                peak_info     = peak_info,
+                metric        = metric,
+                stat_category = st.session_state.stat_category,
+                season_type   = st.session_state.season_type,
+            )
 
 # =============================================================================
 # Sync current state to URL (does not trigger a rerun in Streamlit 1.30+)
@@ -246,7 +260,7 @@ st.query_params.update(encode_state_to_params(st.session_state))
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.46.2 <br>"
+    "Created by Iksperial. v0.52.3 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

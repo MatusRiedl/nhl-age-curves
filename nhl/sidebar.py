@@ -137,8 +137,7 @@ def _render_player_sidebar() -> dict:
         3. Active roster selector by team (auto-adds on selection).
 
     Writes to:
-        st.session_state.skater_players — dict {pid: name} (Skater mode)
-        st.session_state.goalie_players — dict {pid: name} (Goalie mode)
+        st.session_state.players     — dict {pid: name} shared across Skater/Goalie modes
         st.session_state.search_ver  — incrementing int to reset the search box
         st.session_state.search_opts — current search result dict
         st.session_state.top50_ver   — incrementing int to reset the top-50 box
@@ -170,8 +169,7 @@ def _render_player_sidebar() -> dict:
         st.session_state.roster_opts = {}
 
     def _on_player_select():
-        """Callback: add the selected player to the category board and reset the search box."""
-        pk   = "goalie_players" if st.session_state.stat_category == "Goalie" else "skater_players"
+        """Callback: add the selected player to the shared board and reset the search box."""
         ver  = st.session_state.search_ver
         sel  = st.session_state.get(f"_player_pick_{ver}")
         _SENT = "— select a player —"
@@ -181,13 +179,12 @@ def _render_player_sidebar() -> dict:
         if pid is None:
             return
         name = sel.split("] ")[-1] if "]" in sel else sel
-        st.session_state[pk][pid] = name
+        st.session_state.players[pid] = name
         st.session_state.search_ver  = ver + 1
         st.session_state.search_opts = {}
 
     def _on_top50_select():
-        """Callback: add the selected top-50 player to the category board and reset the dropdown."""
-        pk   = "goalie_players" if st.session_state.stat_category == "Goalie" else "skater_players"
+        """Callback: add the selected top-50 player to the shared board and reset the dropdown."""
         ver  = st.session_state.top50_ver
         sel  = st.session_state.get(f"_top50_pick_{ver}")
         _SENT = "— select a player —"
@@ -197,12 +194,11 @@ def _render_player_sidebar() -> dict:
         if pid is None:
             return
         name = sel.split(". ", 1)[-1].split(" (")[0]
-        st.session_state[pk][pid] = name
+        st.session_state.players[pid] = name
         st.session_state.top50_ver = ver + 1
 
     def _on_roster_select():
-        """Callback: add the selected roster player to the category board and reset the dropdown."""
-        pk   = "goalie_players" if st.session_state.stat_category == "Goalie" else "skater_players"
+        """Callback: add the selected roster player to the shared board and reset the dropdown."""
         ver  = st.session_state.roster_ver
         sel  = st.session_state.get(f"_roster_pick_{ver}")
         _SENT = "— select a player —"
@@ -214,7 +210,7 @@ def _render_player_sidebar() -> dict:
         name = sel.split("] ")[-1] if "]" in sel else sel
         if " #" in name:
             name = name.split(" #")[0]
-        st.session_state[pk][pid] = name
+        st.session_state.players[pid] = name
         st.session_state.roster_ver = ver + 1
 
     search_term = st.text_input(
@@ -300,11 +296,9 @@ def _render_player_sidebar() -> dict:
                 label_visibility="collapsed",
             )
 
-    _pk = "goalie_players" if st.session_state.stat_category == "Goalie" else "skater_players"
-
     st.markdown("---")
-    if st.session_state[_pk]:
-        for pid, name in list(st.session_state[_pk].items()):
+    if st.session_state.players:
+        for pid, name in list(st.session_state.players.items()):
             c_name, c_btn = st.columns([5, 1], vertical_alignment="center", gap="small")
             with c_name:
                 headshot = get_player_headshot(pid)
@@ -322,7 +316,7 @@ def _render_player_sidebar() -> dict:
                 )
             with c_btn:
                 if st.button("✖", key=f"drop_{pid}", type="primary"):
-                    del st.session_state[_pk][pid]
+                    del st.session_state.players[pid]
                     st.rerun()
     else:
         st.info("Board is empty")

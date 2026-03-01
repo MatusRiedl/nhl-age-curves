@@ -434,6 +434,40 @@ def get_player_current_team(player_id: int) -> str:
 
 
 @st.cache_data
+def get_player_roster_info(player_id: int) -> dict:
+    """Return position code and jersey number for an active NHL player.
+
+    Fetches the player landing page. Active players have a non-empty
+    currentTeamAbbrev and valid position / sweaterNumber fields. Retired
+    players and free agents return an empty dict so callers can skip the
+    position/number display.
+
+    Args:
+        player_id: Numeric NHL player ID.
+
+    Returns:
+        Dict with keys 'position' (str, e.g. 'C', 'LW', 'RW', 'D', 'G')
+        and 'sweater_number' (int), or {} if the player is inactive or
+        the request fails.
+    """
+    _POS_MAP = {'C': 'C', 'L': 'LW', 'R': 'RW', 'D': 'D', 'G': 'G'}
+    try:
+        res = requests.get(STATS_URL.format(player_id), timeout=5).json()
+        if not res.get('currentTeamAbbrev'):
+            return {}
+        raw_pos = res.get('position', '')
+        num = res.get('sweaterNumber')
+        if not raw_pos or num is None:
+            return {}
+        return {
+            'position': _POS_MAP.get(raw_pos, raw_pos),
+            'sweater_number': int(num),
+        }
+    except Exception:
+        return {}
+
+
+@st.cache_data
 def get_player_hero_image(player_id: int) -> str:
     """Return the full-body hero image URL for a player from the NHL stats API.
 
@@ -703,3 +737,53 @@ def get_player_career_rank(pid: int, category: str, s_type: str, metric: str = "
         if int(r.get('playerId', -1)) == pid:
             return i + 1
     return None
+
+
+@st.cache_data
+def get_team_all_time_stats() -> dict:
+    """Compute all-time franchise stats for each NHL team from historical data.
+
+    Uses regular-season records only (gameTypeId == 2). Computes career totals,
+    all-time wins rank (1 = most wins), and best single season by wins.
+
+    Returns:
+        Dict mapping teamAbbrev (str) to a stats dict with keys:
+            total_wins (int), total_gp (int), total_points (int), total_goals (int),
+            wins_rank (int), best_year (int | None), best_wins (int | None),
+            best_gp (int | None).
+    """
+    df = load_all_team_seasons()
+    if df.empty:
+        return {}
+    reg = df[df['gameTypeId'] == 2].copy()
+
+    totals = reg.groupby('teamAbbrev', as_index=False).agg(
+        total_wins=('Wins', 'sum'),
+        total_gp=('GP', 'sum'),
+        total_points=('Points', 'sum'),
+        total_goals=('Goals', 'sum'),
+    )
+    totals = totals.sort_values('total_wins', ascending=False).reset_index(drop=True)
+    totals['wins_rank'] = range(1, len(totals) + 1)
+
+    best = (
+        reg.sort_values('Wins', ascending=False)
+           .groupby('teamAbbrev', as_index=False)
+           .first()[['teamAbbrev', 'SeasonYear', 'Wins', 'GP']]
+           .rename(columns={'SeasonYear': 'best_year', 'Wins': 'best_wins', 'GP': 'best_gp'})
+    )
+
+    merged = totals.merge(best, on='teamAbbrev', how='left')
+    result: dict = {}
+    for _, row in merged.iterrows():
+        result[row['teamAbbrev']] = {
+            'total_wins':   int(row['total_wins']),
+            'total_gp':     int(row['total_gp']),
+            'total_points': int(row['total_points']),
+            'total_goals':  int(row['total_goals']),
+            'wins_rank':    int(row['wins_rank']),
+            'best_year':    int(row['best_year'])  if pd.notna(row.get('best_year'))  else None,
+            'best_wins':    int(row['best_wins'])  if pd.notna(row.get('best_wins'))  else None,
+            'best_gp':      int(row['best_gp'])    if pd.notna(row.get('best_gp'))    else None,
+        }
+    return result

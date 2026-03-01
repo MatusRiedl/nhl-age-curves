@@ -61,13 +61,9 @@ def encode_state_to_params(ss) -> dict:
     for url_key, ss_key in _BOOL_PARAMS.items():
         params[url_key] = "1" if ss.get(ss_key) else "0"
 
-    sk = ss.get("skater_players") or {}
-    if sk:
-        params["sk"] = ";".join(f"{pid}|{name}" for pid, name in sk.items())
-
-    go = ss.get("goalie_players") or {}
-    if go:
-        params["go"] = ";".join(f"{pid}|{name}" for pid, name in go.items())
+    pl = ss.get("players") or {}
+    if pl:
+        params["pl"] = ";".join(f"{pid}|{name}" for pid, name in pl.items())
 
     tm = ss.get("teams") or {}
     if tm:
@@ -118,25 +114,17 @@ def apply_params_to_state(params: dict, ss) -> None:
         if url_key in params:
             ss[ss_key] = params[url_key] == "1"
 
-    if "sk" in params and params["sk"]:
-        players = {}
-        for entry in params["sk"].split(";"):
-            if "|" in entry:
-                pid, name = entry.split("|", 1)
-                if pid.strip():
-                    players[pid.strip()] = name.strip()
-        if players:
-            ss["skater_players"] = players
-
-    if "go" in params and params["go"]:
-        goalies = {}
-        for entry in params["go"].split(";"):
-            if "|" in entry:
-                pid, name = entry.split("|", 1)
-                if pid.strip():
-                    goalies[pid.strip()] = name.strip()
-        if goalies:
-            ss["goalie_players"] = goalies
+    # Decode unified players param; also accept legacy sk/go params for backward compat.
+    _players = {}
+    for _key in ("sk", "go", "pl"):
+        if _key in params and params[_key]:
+            for entry in params[_key].split(";"):
+                if "|" in entry:
+                    pid, name = entry.split("|", 1)
+                    if pid.strip():
+                        _players[pid.strip()] = name.strip()
+    if _players:
+        ss["players"] = _players
 
     if "tm" in params and params["tm"]:
         teams = {}

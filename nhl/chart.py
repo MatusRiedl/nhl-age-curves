@@ -153,6 +153,17 @@ def render_chart(
     _is_age_mode   = (x_col == "Age")
     _is_games_mode = games_mode
 
+    # Python-side dtick for team/season-year mode (applied immediately, before JS lands)
+    _x_range_size = float(_x_vals.max() - _x_vals.min())
+    if _x_range_size <= 30:
+        _team_dtick = 2
+    elif _x_range_size <= 65:
+        _team_dtick = 5
+    elif _x_range_size <= 120:
+        _team_dtick = 10
+    else:
+        _team_dtick = 20
+
     # ------------------------------------------------------------------
     # Build Plotly figure
     # ------------------------------------------------------------------
@@ -199,6 +210,10 @@ def render_chart(
     )
 
     if team_mode and not games_mode:
+        fig.update_layout(
+            margin = dict(l=0, r=0, t=40, b=140),
+            legend = dict(y=-0.28),
+        )
         fig.update_traces(
             connectgaps    = True,
             line           = dict(width=4, shape='spline', smoothing=0.6),
@@ -210,7 +225,8 @@ def render_chart(
         )
         fig.update_xaxes(
             title_text  = "Season Year",
-            tickangle   = 0,
+            dtick       = _team_dtick,
+            tickangle   = -45,
             automargin  = True,
             title_font  = dict(size=25, family='Arial Black'),
             tickfont    = dict(size=18, family='Arial Black'),
@@ -282,7 +298,7 @@ def render_chart(
         )
     else:
         chart_key = (
-            f"chart_{hash(str({**st.session_state.skater_players, **st.session_state.goalie_players}))}"
+            f"chart_{hash(str(st.session_state.players))}"
             f"_{metric}_{st.session_state.do_predict}_{st.session_state.do_smooth}"
             f"_{sidebar_keys.get('search_term', '')}"
             f"_{sidebar_keys.get('top_selected', '')}"
@@ -340,15 +356,18 @@ def render_chart(
             if (rawDtick <= 750)  return 500;
             return Math.ceil(rawDtick / 500) * 500;
         }}
-        // Season Year mode
-        if (width >= 900) return 2;
-        if (width >= 480) return 5;
-        return 10;
+        // Season Year mode — 4-digit labels need ~60px each
+        var pixPerYear = width / xRange;
+        if (pixPerYear >= 60) return 1;
+        if (pixPerYear >= 30) return 2;
+        if (pixPerYear >= 12) return 5;
+        if (pixPerYear >= 6)  return 10;
+        return 20;
     }}
 
     function applySettings(plot, Plotly) {{
         var updates = {{'xaxis.dtick': calcDtick(plot.offsetWidth || window.parent.innerWidth)}};
-        updates['xaxis.tickangle'] = 0;
+        updates['xaxis.tickangle'] = (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45;
         Plotly.relayout(plot, updates);
 
         // Clamp pan/zoom to data region
@@ -377,7 +396,7 @@ def render_chart(
 
         parent.addEventListener('resize', function() {{
             parent.document.querySelectorAll('.js-plotly-plot').forEach(function(p) {{
-                Plotly.relayout(p, {{'xaxis.dtick': calcDtick(p.offsetWidth || parent.innerWidth)}});
+                Plotly.relayout(p, {{'xaxis.dtick': calcDtick(p.offsetWidth || parent.innerWidth), 'xaxis.tickangle': (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45}});
             }});
         }});
     }}

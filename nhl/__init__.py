@@ -16,4 +16,5 @@ This package splits the single-file app.py into focused modules:
     dialog          — @st.dialog season-detail popup
     chart           — Plotly chart rendering + JS pan-clamp injection
     comparison      — right-column player stat cards (hero image, career totals, best season)
+    schedule        — live/recent game detection + featured player selection for auto-population
 """

@@ -12,10 +12,13 @@ Imports from project:
 
 import streamlit as st
 
+from nhl.constants import TEAM_FOUNDED
 from nhl.data_loaders import (
     get_player_career_rank,
     get_player_current_team,
     get_player_hero_image,
+    get_player_roster_info,
+    get_team_all_time_stats,
 )
 
 _TEAM_LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbr}_light.svg"
@@ -173,15 +176,103 @@ def render_comparison_panel(
                     st.image(hero_url, use_container_width=True)
 
             with stat_col:
+                roster_info = get_player_roster_info(int(pid))
+                if roster_info:
+                    pos = roster_info['position']
+                    num = roster_info['sweater_number']
+                    name_html = (
+                        f"<span style='color:#aaa;font-size:13px;'>[{pos}]</span> "
+                        f"<strong>{name}</strong> "
+                        f"<span style='color:#aaa;font-size:13px;'>#{num}</span>"
+                    )
+                else:
+                    name_html = f"<strong>{name}</strong>"
                 st.markdown(
                     f"<div style='line-height:1.4;margin:0;padding:0;'>"
-                    f"<strong>{name}</strong>{logo_html}<br>"
+                    f"{name_html}{logo_html}<br>"
                     f"{stats_row}"
                     f"{rank_row}"
                     f"{best_row}"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
+
+        st.markdown(
+            "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
+            unsafe_allow_html=True,
+        )
+
+
+def render_team_comparison_panel(active_teams: dict, metric: str) -> None:
+    """Render the right-column team comparison panel.
+
+    Displays one card per selected team: logo image (left column), franchise
+    name with founding year, career totals (W / Pts / GF / GP), all-time wins
+    rank badge in green, and best single season by wins. Mirrors the structure
+    of render_comparison_panel() for players.
+
+    Args:
+        active_teams: Dict mapping team abbreviation (str) to full team name
+            (str). Typically st.session_state.teams.
+        metric: Currently selected metric string (reserved for future
+            metric-aware ranking; not used in current card layout).
+    """
+    team_stats = get_team_all_time_stats()
+
+    for abbr, full_name in active_teams.items():
+        stats = team_stats.get(abbr)
+        if not stats:
+            continue
+
+        founded   = TEAM_FOUNDED.get(abbr, '')
+        logo_url  = _TEAM_LOGO_URL.format(abbr=abbr)
+
+        total_w   = stats['total_wins']
+        total_pts = stats['total_points']
+        total_gf  = stats['total_goals']
+        total_gp  = stats['total_gp']
+        wins_rank = stats['wins_rank']
+        best_year = stats['best_year']
+        best_wins = stats['best_wins']
+        best_gp   = stats['best_gp']
+
+        name_html = (
+            f"<strong>{full_name}</strong> "
+            f"<span style='color:#aaa;font-size:13px;'>{founded}</span>"
+        )
+        stats_row = (
+            f"W:&nbsp;{total_w:,} &nbsp;|&nbsp; "
+            f"Pts:&nbsp;{total_pts:,} &nbsp;|&nbsp; "
+            f"GF:&nbsp;{total_gf:,} &nbsp;|&nbsp; "
+            f"GP:&nbsp;{total_gp:,}"
+        )
+        rank_row = (
+            f"<br><span style='font-size:14px;color:#4caf50;font-weight:bold;'>"
+            f"#{_ordinal(wins_rank)} all-time &mdash; franchise Wins"
+            f"</span>"
+        )
+        best_row = ""
+        if best_year and best_wins is not None:
+            sy_str   = f"{best_year - 1}-{str(best_year)[2:]}"
+            best_row = (
+                f"<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
+                f"Best: {sy_str} &mdash; {best_wins}&nbsp;W in {best_gp}&nbsp;GP"
+                f"</span>"
+            )
+
+        with st.container():
+            st.markdown(
+                f"<div style='display:flex;align-items:flex-start;gap:14px;margin:4px 0;'>"
+                f"<img src='{logo_url}' style='width:80px;flex-shrink:0;object-fit:contain;'>"
+                f"<div style='line-height:1.4;'>"
+                f"{name_html}<br>"
+                f"{stats_row}"
+                f"{rank_row}"
+                f"{best_row}"
+                f"</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
         st.markdown(
             "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",

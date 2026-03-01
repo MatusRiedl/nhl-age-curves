@@ -64,6 +64,10 @@ nhl/ package (all logic lives here — see Section 12 for full detail):
   url_params.py            — encode_state_to_params() / apply_params_to_state().
                              Serializes full session state to URL query params and
                              restores it on first page load. No Streamlit import.
+  schedule.py              — get_live_or_recent_game() / get_featured_players().
+                             Fetches live or recent NHL game via score API and
+                             identifies best skater + starting goalie per team for
+                             chart auto-population on first open.
 
 SECTION 3 — EXTERNAL API ENDPOINTS
 --------------------------------------
@@ -536,3 +540,28 @@ MODULE: nhl/url_params.py
       Reads dict(st.query_params) and writes into session state.
       Validates metric values against known-valid sets before applying.
       Only writes keys that are present; absent keys keep their session-state defaults.
+
+MODULE: nhl/schedule.py
+  Live game detection and featured player selection for chart auto-population.
+  Called once per browser session via the _default_loaded guard in app.py.
+  Skipped entirely when URL params have already populated players/teams.
+  Imports: nhl.constants (ACTIVE_TEAMS, ROSTER_URL), nhl.data_loaders (load_historical_data)
+  Score API endpoints (both undocumented, no auth):
+    https://api-web.nhle.com/v1/score/now        — today's games with live game states
+    https://api-web.nhle.com/v1/score/{date}     — scores for a specific YYYY-MM-DD date
+  Game states recognized: LIVE, CRIT (live); FINAL, OVER, OFF (finished).
+  Valid game types: 2 (regular season), 3 (playoffs). Preseason and all-star ignored.
+  Exports:
+    get_live_or_recent_game() -> tuple[str, str] | None   [ttl=300]
+      Checks score/now for a live or finished game. If none found today, walks back
+      up to 7 calendar days. Returns (home_abbr, away_abbr) or None.
+    get_featured_players(home_abbr, away_abbr) -> dict    [ttl=3600]
+      For each team: fetches ROSTER_URL directly (raw firstName/lastName fields),
+      cross-references skater IDs with historical parquet (PlayerID + Points) to
+      pick the highest career-points skater, picks the first-listed goalie.
+      Returns {'players': {id: name, ...}, 'teams': {abbr: name, ...}}.
+      Falls back to first roster forward if no parquet match (rookie roster).
+  Session state integration:
+    _default_loaded guard in app.py (fires once per session after URL params load).
+    Auto-population is skipped when st.session_state.players or .teams are non-empty
+    (i.e. a shared URL was opened).

@@ -52,6 +52,18 @@ ACTIVE_TEAMS = {
 }
 """32-team abbreviation -> full name mapping used across sidebar and pipeline."""
 
+TEAM_FOUNDED: dict[str, int] = {
+    "ANA": 1993, "BOS": 1924, "BUF": 1970, "CGY": 1972,
+    "CAR": 1979, "CHI": 1926, "COL": 1972, "CBJ": 2000,
+    "DAL": 1967, "DET": 1926, "EDM": 1979, "FLA": 1993,
+    "LAK": 1967, "MIN": 2000, "MTL": 1917, "NSH": 1998,
+    "NJD": 1974, "NYI": 1972, "NYR": 1926, "OTT": 1992,
+    "PHI": 1967, "PIT": 1967, "SJS": 1991, "SEA": 2021,
+    "STL": 1967, "TBL": 1992, "TOR": 1917, "UTA": 2024,
+    "VAN": 1970, "VGK": 2017, "WSH": 1974, "WPG": 1999,
+}
+"""NHL franchise founding year (year the current org entered the NHL)."""
+
 # ---------------------------------------------------------------------------
 # Stat classification sets
 # ---------------------------------------------------------------------------

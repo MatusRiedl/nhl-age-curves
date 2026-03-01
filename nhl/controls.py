@@ -52,7 +52,7 @@ def render_controls() -> tuple:
     team_mode  = st.session_state.stat_category == "Team"
     games_mode = st.session_state.x_axis_mode == "Games Played"
 
-    with st.expander("📊 Category & Metric", expanded=True):
+    with st.expander("📊 Category & Metric", expanded=False):
         # ------------------------------------------------------------------
         # Row 1: Compact toggles row
         # ------------------------------------------------------------------
