@@ -54,7 +54,7 @@ def render_controls() -> tuple:
 
     with st.expander("📊 Category & Metric", expanded=True):
         # ------------------------------------------------------------------
-        # Row 1: Category radio + compact toggles (no wasted desktop space)
+        # Row 1: Compact toggles row
         # ------------------------------------------------------------------
         _cumul_rate_set = TEAM_RATE_STATS if team_mode else RATE_STATS
 
@@ -70,11 +70,11 @@ def render_controls() -> tuple:
             )
 
         with c_t1:
-            st.toggle("3-Season Rolling Avg", key="do_smooth")
+            st.toggle("Smoothing", key="do_smooth")
 
         if not team_mode:
             with c_t2:
-                st.toggle("Project to 40", key="do_predict",
+                st.toggle("Forecast", key="do_predict",
                           disabled=games_mode)
             with c_t3:
                 st.toggle("Era-Adjust", key="do_era")
@@ -83,7 +83,7 @@ def render_controls() -> tuple:
             st.toggle("Cumulative", key="do_cumul_toggle")
 
         with c_t5:
-            st.toggle("Show Baseline", key="do_base", disabled=games_mode)
+            st.toggle("Baseline", key="do_base", disabled=games_mode)
 
         # ------------------------------------------------------------------
         # Row 2: X-Axis | Select Metric | Season Type | Leagues dropdowns

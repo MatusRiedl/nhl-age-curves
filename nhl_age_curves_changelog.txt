@@ -921,3 +921,9 @@ v0.46.0 - Category Radio Moved to Sidebar + Foldable Truncation
   replacing the old asymmetric layout that reserved space for the radio.
 - ADDED: CSS toggle-label ellipsis truncation so labels stay on one row at intermediate
   screen widths (foldable/tablet ~900px) instead of wrapping to a second line.
+
+v0.46.1 - Shorten Toggle Labels
+---------------------------------------------------------
+- CHANGED: "3-Season Rolling Avg" toggle renamed to "Smoothing".
+- CHANGED: "Project to 40" toggle renamed to "Forecast".
+- CHANGED: "Show Baseline" toggle renamed to "Baseline".
