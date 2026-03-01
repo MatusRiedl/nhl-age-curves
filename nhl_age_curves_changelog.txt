@@ -910,3 +910,14 @@ v0.45.3 - KNN Era-Adjust Hoisted Before Player Loop
 - ADDED: do_predict guard on knn_hist assignment: when projection is off, hist_df is
   passed as-is (no copy). Era-adjusted copy is only made when both do_predict=True and
   do_era=True.
+
+v0.46.0 - Category Radio Moved to Sidebar + Foldable Truncation
+---------------------------------------------------------
+- CHANGED: Skater/Goalie/Team radio moved from the Category & Metric expander to the
+  top of the sidebar, above Global Search. The radio logically belongs there since it
+  directly controls what the sidebar shows.
+- CHANGED: Toggle columns in the Category & Metric expander now spread across the full
+  expander width using equal 1:1:1:1:1 proportions (skater/goalie) and 1:1:1 (team),
+  replacing the old asymmetric layout that reserved space for the radio.
+- ADDED: CSS toggle-label ellipsis truncation so labels stay on one row at intermediate
+  screen widths (foldable/tablet ~900px) instead of wrapping to a second line.

@@ -103,8 +103,9 @@ def _render_ram_footer() -> None:
 def render_sidebar() -> dict:
     """Render the full sidebar UI and return chart cache-busting keys.
 
-    Dispatches to _render_player_sidebar() or _render_team_sidebar() based on
-    st.session_state.stat_category.
+    Renders the Skater/Goalie/Team category radio at the top of the sidebar,
+    then dispatches to _render_player_sidebar() or _render_team_sidebar() based
+    on st.session_state.stat_category.
 
     Returns:
         Dict with keys 'search_term', 'top_selected', 'team_abbr', 'roster_player'.
@@ -113,6 +114,14 @@ def render_sidebar() -> dict:
         selections change.
     """
     with st.sidebar:
+        st.radio(
+            "Category:",
+            ["Skater", "Goalie", "Team"],
+            horizontal=True,
+            key="stat_category",
+            label_visibility="collapsed",
+        )
+        st.markdown("---")
         if st.session_state.stat_category != "Team":
             return _render_player_sidebar()
         else:

@@ -94,6 +94,29 @@ _CSS = """
             gap: 0.25rem !important;
         }
 
+        /* Allow controls toggle columns to shrink below content width (enables ellipsis) */
+        div:has(> #controls-row1) + div [data-testid="stColumn"] {
+            min-width: 0 !important;
+            overflow: hidden !important;
+        }
+
+        /* Truncate toggle labels on narrow/intermediate screen widths */
+        [data-testid="stExpander"] [data-testid="stToggle"] label {
+            display: flex !important;
+            align-items: center !important;
+            overflow: hidden !important;
+            max-width: 100% !important;
+            flex-wrap: nowrap !important;
+        }
+        [data-testid="stExpander"] [data-testid="stToggle"] label > p,
+        [data-testid="stExpander"] [data-testid="stToggle"] label > span:not([data-testid]) {
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            min-width: 0 !important;
+            flex: 1 1 0 !important;
+        }
+
         .player-name {
             font-size: 15px;
             white-space: nowrap;
@@ -198,8 +221,9 @@ def inject_css() -> None:
     """Inject the NHL Age Curves custom CSS into the Streamlit page.
 
     Covers: animated gradient title, spinning NHL logo, sidebar compact layout,
-    blue Add-Legend button override, mobile responsive controls-bottom row wrapping
-    (~3 columns per row via #controls-bottom marker),
+    blue Add-Legend button override, toggle label ellipsis truncation for intermediate
+    screen widths (foldable/tablet), mobile responsive controls row wrapping
+    (~3 columns per row via #controls-row1 marker),
     responsive stacking of the chart/stats panel split on narrow screens, and
     Plotly modebar sizing for desktop and mobile.
 

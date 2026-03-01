@@ -3,7 +3,8 @@ nhl.controls — Category/Metric expander for the NHL Age Curves app.
 
 Renders a single "Category & Metric" expander that appears below the page title.
 It contains all controls in two rows:
-    Row 1: category radio (Skater / Goalie / Team) + all 5 toggles on the same row
+    Row 1: 5 toggles spread across the full expander width (category radio lives
+           in the sidebar)
     Row 2: X-Axis, Select Metric, Season Type, Leagues dropdowns (compact, left→right)
 
 The expander uses expanded=True so it is always open on every rerun, ensuring toggles
@@ -29,16 +30,17 @@ def render_controls() -> tuple:
     toggles remain visible and accessible after player add/remove actions.
 
     A single expander holds two rows:
-        Row 1 — Category radio (Skater/Goalie/Team) + all 5 toggles on the same row.
+        Row 1 — 5 toggles spread across the full expander width. The category
+                radio (Skater/Goalie/Team) is rendered in the sidebar instead.
         Row 2 — X-Axis, Select Metric, Season Type, Leagues dropdowns.
 
     Reads:
-        st.session_state.stat_category   — drives metric radio options
+        st.session_state.stat_category   — drives metric selectbox options
         st.session_state.x_axis_mode     — determines which mode note to show
         st.session_state.do_cumul_toggle — raw toggle value
         st.session_state.league_filter   — current league multiselect
     Writes (via widget keys):
-        stat_category, x_axis_mode, league_filter, season_type,
+        x_axis_mode, league_filter, season_type,
         do_smooth, do_predict, do_era, do_cumul_toggle, do_base
 
     Returns:
@@ -59,21 +61,12 @@ def render_controls() -> tuple:
         st.markdown("<div id='controls-row1'></div>", unsafe_allow_html=True)
 
         if team_mode:
-            c_category, c_t1, c_t4, c_t5 = st.columns(
-                [2.5, 2, 1.8, 1.8], vertical_alignment="center"
+            c_t1, c_t4, c_t5 = st.columns(
+                [1, 1, 1], vertical_alignment="center"
             )
         else:
-            c_category, c_t1, c_t2, c_t3, c_t4, c_t5 = st.columns(
-                [2.5, 2, 1.8, 1.5, 1.8, 1.8], vertical_alignment="center"
-            )
-
-        with c_category:
-            st.radio(
-                "Category:",
-                ["Skater", "Goalie", "Team"],
-                horizontal=True,
-                key="stat_category",
-                label_visibility="collapsed",
+            c_t1, c_t2, c_t3, c_t4, c_t5 = st.columns(
+                [1, 1, 1, 1, 1], vertical_alignment="center"
             )
 
         with c_t1:
