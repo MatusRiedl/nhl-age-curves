@@ -151,7 +151,7 @@ def render_chart(
     _y_min  = max(0.0, float(_y_vals.min()))
     _y_max  = float(_y_vals.max()) + _y_pad
     _is_age_mode   = (x_col == "Age")
-    _is_games_mode = (x_col == "Games Played")
+    _is_games_mode = games_mode
 
     # ------------------------------------------------------------------
     # Build Plotly figure

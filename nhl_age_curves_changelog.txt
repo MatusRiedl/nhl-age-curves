@@ -927,3 +927,11 @@ v0.46.1 - Shorten Toggle Labels
 - CHANGED: "3-Season Rolling Avg" toggle renamed to "Smoothing".
 - CHANGED: "Project to 40" toggle renamed to "Forecast".
 - CHANGED: "Show Baseline" toggle renamed to "Baseline".
+
+v0.46.2 - Fix Games Played X-Axis Crowding
+---------------------------------------------------------
+- FIXED: Games Played mode X-axis was completely unreadable due to hundreds of tick
+  marks. Root cause: _is_games_mode was set by comparing x_col to "Games Played" but
+  x_col is "CumGP" in that mode, so IS_GAMES_MODE was always false in the JS injection.
+  The Season Year dtick of 2 was applied to career GP ranges of 1400+, producing 700
+  tick marks. Fixed by using the games_mode bool directly.
