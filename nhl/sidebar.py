@@ -41,7 +41,6 @@ def _check_api_health() -> list:
         List of (label, ok) tuples where ok is True when the endpoint
         responds with an HTTP status below 400, False on any error or timeout.
     """
-    import requests
     probes = [
         ("Search",       "https://search.d3.nhle.com/api/v1/search/player?q=Mc&limit=1&culture=en-us"),
         ("Player Stats", "https://api-web.nhle.com/v1/player/8478402/landing"),
@@ -49,6 +48,10 @@ def _check_api_health() -> list:
         ("Team Stats",   "https://api.nhle.com/stats/rest/en/team/summary?limit=1"),
         ("Records",      "https://records.nhl.com/site/api/skater-career-scoring-regular-season"),
     ]
+    try:
+        import requests
+    except Exception:
+        return [(label, False) for label, _ in probes]
     results = []
     for label, url in probes:
         try:
@@ -86,12 +89,15 @@ def _render_ram_footer() -> None:
             pass
     st.markdown("---")
     st.caption(f"RAM: {rss_mb}")
-    statuses = _check_api_health()
-    lines = ["**API Health** *(5 min cache)*"]
-    for label, ok in statuses:
-        dot = "🟢" if ok else "🟡"
-        lines.append(f"{dot} {label}")
-    st.caption("\n\n".join(lines))
+    try:
+        statuses = _check_api_health()
+        lines = ["**API Health** *(5 min cache)*"]
+        for label, ok in statuses:
+            dot = "🟢" if ok else "🟡"
+            lines.append(f"{dot} {label}")
+        st.caption("\n\n".join(lines))
+    except Exception:
+        st.caption("API Health: unavailable")
 
 
 def render_sidebar() -> dict:

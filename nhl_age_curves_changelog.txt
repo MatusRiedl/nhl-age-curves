@@ -870,3 +870,15 @@ v0.45.0 - API Health Check in Sidebar
 - ADDED: _render_ram_footer() now renders a traffic-light API Health block below the
   RAM readout: green dot (🟢) when an endpoint returns HTTP < 400, yellow (🟡) on
   any error or timeout. Cache age is noted as "5 min cache" in the label.
+
+
+v0.45.1 - Fix API Health Not Showing on Streamlit Cloud
+---------------------------------------------------------
+- FIXED: API health traffic light section was invisible on Streamlit Cloud because
+  _check_api_health() could raise an unguarded exception (import requests outside
+  try/except, or @st.cache_data internal error on Linux), stopping _render_ram_footer()
+  after the RAM caption rendered.
+- FIXED: Moved import requests into its own try/except inside _check_api_health(); on
+  ImportError returns all-False probe list so the section still renders with yellow dots.
+- FIXED: Wrapped the _check_api_health() call and render block in _render_ram_footer()
+  with try/except; falls back to "API Health: unavailable" caption on any failure.
