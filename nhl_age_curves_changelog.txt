@@ -847,3 +847,26 @@ v0.43.3 - Robust RAM Footer Fallback
 - CHANGED: _render_ram_footer() now falls back to reading /proc/self/status (VmRSS)
   when psutil is unavailable. Guarantees live MB on Streamlit Cloud (Linux)
   with zero external dependencies. Windows without psutil still shows N/A.
+
+v0.44.0 - Shareable URLs via Query Params
+---------------------------------------------------------
+- ADDED: nhl/url_params.py with encode_state_to_params() and apply_params_to_state()
+  to serialize and deserialize full app state to/from URL query parameters.
+- ADDED: URL loading block in app.py runs once per session (guarded by _url_loaded)
+  before session state defaults are applied, so URL values are not overwritten.
+- ADDED: URL sync at end of every app.py cycle writes current state back to
+  st.query_params (does not trigger a rerun in Streamlit 1.30+).
+- Encoded params: cat, sk_m, go_m, tm_m, sp, xm, lg, sm, pr, era, cu, bl, sk, go, tm.
+  All three metric keys (skater/goalie/team) are encoded independently.
+  Player entries use pipe-separated id|name pairs joined by semicolons.
+  Empty player/team dicts are omitted from the URL entirely.
+
+v0.45.0 - API Health Check in Sidebar
+---------------------------------------------------------
+- ADDED: _check_api_health() in nhl/sidebar.py probes all five NHL API endpoints
+  (Search, Player Stats, Roster, Team Stats, Records) with a 3-second timeout.
+  Uses stream=True to avoid downloading large response bodies.
+  Results are cached via @st.cache_data(ttl=300) to avoid hammering APIs on every rerun.
+- ADDED: _render_ram_footer() now renders a traffic-light API Health block below the
+  RAM readout: green dot (🟢) when an endpoint returns HTTP < 400, yellow (🟡) on
+  any error or timeout. Cache age is noted as "5 min cache" in the label.

@@ -165,7 +165,6 @@ def render_controls() -> tuple:
                 st.multiselect(
                     "Leagues",
                     options=list(NHLE_MULTIPLIERS.keys()),
-                    default=["NHL"],
                     key="league_filter",
                     help=(
                         "NHL only by default. Select additional leagues to include "

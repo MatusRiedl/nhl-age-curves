@@ -32,12 +32,14 @@ app.py                     — Thin orchestrator. Initializes session state,
                              ~200 lines. No business logic here.
 
 scraper.py                 — Standalone script. Run manually to refresh parquet.
-                             Hits NHL API, era-adjusts Points only, maps positions,
-                             calculates ages, exports to parquet.
-                             NOTE: scraper only era-adjusts Points. The app now
-                             adjusts Points, Goals, AND Assists independently (FIX #4).
-                             This means the parquet has era-adjusted Points but raw
-                             Goals/Assists — the app re-applies era adjustment on top.
+                             Hits NHL API, maps positions, calculates ages, exports
+                             fully raw (unadjusted) Points, Goals, and Assists to
+                             parquet. Era adjustment is NOT applied at export time.
+                             The KNN engine applies era adjustment at query time via
+                             apply_era_to_hist() before computing L1 distance, and
+                             the live player pipeline applies it independently via
+                             get_era_multiplier() — both using the same 8-period
+                             multiplier table so comparisons are always symmetric.
 
 nhl_historical_seasons.parquet — Local database. Loaded once at startup.
 
@@ -57,6 +59,10 @@ nhl/ package (all logic lives here — see Section 12 for full detail):
   sidebar.py               — Player/team sidebar UI.
   dialog.py                — @st.dialog season-detail popup.
   chart.py                 — Plotly chart rendering + JS pan-clamp injection.
+  comparison.py            — render_comparison_panel() side-by-side player stat cards.
+  url_params.py            — encode_state_to_params() / apply_params_to_state().
+                             Serializes full session state to URL query params and
+                             restores it on first page load. No Streamlit import.
 
 SECTION 3 — EXTERNAL API ENDPOINTS
 --------------------------------------
@@ -85,19 +91,23 @@ All are wrapped in try/except with silent fallbacks.
 
 SECTION 4 — SESSION STATE
 ---------------------------
-All 11 persistent session state keys (initialized at top of script):
+All 14 persistent session state keys (initialized at top of script):
 
-  st.session_state.skater_players   dict: {player_id (int): "Player Name" (str)} — Skater board
-  st.session_state.goalie_players   dict: {player_id (int): "Player Name" (str)} — Goalie board
-  st.session_state.stat_category    str: "Skater" or "Goalie"
+  st.session_state.skater_players   dict: {player_id (str): "Player Name (TEAM)"} — Skater board
+  st.session_state.goalie_players   dict: {player_id (str): "Player Name (TEAM)"} — Goalie board
+  st.session_state.teams            dict: {team_abbr (str): full_name (str)} — Team board
+  st.session_state.team_sel_abbr    str: active team abbreviation for roster filtering
+  st.session_state.stat_category    str: "Skater", "Goalie", or "Team"
   st.session_state.season_type      str: "Regular", "Playoffs", or "Both"
   st.session_state.do_smooth        bool: Data Smoothing toggle
   st.session_state.do_predict       bool: Project to 40 toggle
   st.session_state.do_era           bool: Era-Adjust toggle
   st.session_state.do_cumul_toggle  bool: Cumulative toggle (raw; see do_cumul below)
   st.session_state.do_base          bool: Show Baseline toggle
-  st.session_state.x_axis_mode      str: "Age" or "Games Played"
+  st.session_state.x_axis_mode      str: "Age", "Games Played", or "Season Year" (team mode)
   st.session_state.league_filter    list[str]: subset of NHLE_MULTIPLIERS keys, default ['NHL']
+  st.session_state._url_loaded      bool: set True after URL params are read on first page load;
+                                    prevents re-reading on subsequent reruns this session
 
   do_cumul (not in session state) is derived each render:
     do_cumul = do_cumul_toggle AND metric not in RATE_STATS AND not games_mode
@@ -376,9 +386,11 @@ package. app.py is now a thin orchestrator (~200 lines). This section describes
 each module's responsibility, its public interface, and its import dependencies.
 
 IMPORT DEPENDENCY GRAPH (no cycles):
-  constants, era, styles          no project imports (leaf modules)
+  constants, era, styles,
+  url_params                      no project imports (leaf modules)
   baselines, data_loaders,
-  controls, team_pipeline         import from constants only
+  controls, team_pipeline,
+  comparison                      import from constants only
   knn_engine                      imports from constants, era
   player_pipeline                 imports from constants, era, data_loaders, knn_engine
   sidebar                         imports from constants, data_loaders
@@ -489,3 +501,35 @@ MODULE: nhl/chart.py
                  do_base, do_smooth, stat_category, historical_baselines,
                  team_baselines, raw_dfs_cache, ml_clones_dict,
                  season_type, sidebar_keys) -> None
+
+MODULE: nhl/comparison.py
+  Right-column player stat comparison cards rendered alongside the chart.
+  Reads all needed values via function parameters (no direct session_state reads).
+  Exports:
+    render_comparison_panel(processed_dfs, players, peak_info, metric,
+                            stat_category, season_type) -> None
+
+MODULE: nhl/url_params.py
+  URL query param serialization and deserialization. No Streamlit import. No project imports.
+  Called from app.py: loaded once per session via _url_loaded guard, synced at end of every run.
+  Setting st.query_params does not trigger a rerun (Streamlit 1.30+).
+  Exports:
+    encode_state_to_params(ss) -> dict
+      Converts session state to a flat dict for st.query_params.update().
+      Encoded URL param keys:
+        cat    — stat_category: S / G / T
+        sk_m   — skater_metric (stat name string)
+        go_m   — goalie_metric (stat name string)
+        tm_m   — team_metric (stat name string)
+        sp     — season_type: Regular / Playoffs / Both
+        xm     — x_axis_mode: A / GP / SY
+        lg     — league_filter: comma-joined list
+        sm / pr / era / cu / bl — bool toggles: 1 or 0
+        sk     — skater_players: semicolon-joined "pid|name" pairs
+        go     — goalie_players: semicolon-joined "pid|name" pairs
+        tm     — teams: semicolon-joined "abbr|name" pairs
+      Empty player/team dicts are omitted from output entirely.
+    apply_params_to_state(params, ss) -> None
+      Reads dict(st.query_params) and writes into session state.
+      Validates metric values against known-valid sets before applying.
+      Only writes keys that are present; absent keys keep their session-state defaults.

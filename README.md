@@ -24,6 +24,8 @@ https://nhl-age-curves.streamlit.app/
 
 * **Season Snapshot:** Click any data point to see that player's exact season stats at that age and their projected all-time career rank.
 
+* **Shareable URLs:** All chart state (players on board, metric, toggles, category, season type) is encoded into the browser URL automatically. Copy the URL to share an exact comparison with anyone.
+
 * **Dynamic Search:** Type a player's first or last name to get live results. Selecting a match immediately adds them to the chart — no separate button required.
 
 * **Mobile-Friendly Layout:** Controls are organized into collapsible expander sections so the chart stays front-and-center on smaller screens.
@@ -58,6 +60,8 @@ nhl/
     sidebar.py           player and team sidebar UI
     dialog.py            season-detail popup dialog
     chart.py             Plotly chart rendering and JS pan-clamp
+    comparison.py        player stat comparison panel
+    url_params.py        URL query param encode/decode for shareable links
 scraper.py               standalone script to refresh the parquet file
 nhl_historical_seasons.parquet   ML backbone (generate with scraper.py)
 ```

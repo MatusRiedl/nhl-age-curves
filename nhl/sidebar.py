@@ -28,12 +28,47 @@ from nhl.data_loaders import (
 )
 
 
+@st.cache_data(ttl=300)
+def _check_api_health() -> list:
+    """Probe each NHL API endpoint and return (label, ok) pairs.
+
+    Uses stream=True + close() to check HTTP status without downloading
+    response bodies — critical for the Records endpoint which returns
+    all-time career data and would be very large to fully download.
+    Results are cached for 5 minutes to avoid hammering APIs on every rerun.
+
+    Returns:
+        List of (label, ok) tuples where ok is True when the endpoint
+        responds with an HTTP status below 400, False on any error or timeout.
+    """
+    import requests
+    probes = [
+        ("Search",       "https://search.d3.nhle.com/api/v1/search/player?q=Mc&limit=1&culture=en-us"),
+        ("Player Stats", "https://api-web.nhle.com/v1/player/8478402/landing"),
+        ("Roster",       "https://api-web.nhle.com/v1/roster/EDM/current"),
+        ("Team Stats",   "https://api.nhle.com/stats/rest/en/team/summary?limit=1"),
+        ("Records",      "https://records.nhl.com/site/api/skater-career-scoring-regular-season"),
+    ]
+    results = []
+    for label, url in probes:
+        try:
+            r = requests.get(url, timeout=3, stream=True)
+            r.close()
+            results.append((label, r.status_code < 400))
+        except Exception:
+            results.append((label, False))
+    return results
+
+
 def _render_ram_footer() -> None:
-    """Render a live process RAM readout at the bottom of the sidebar.
+    """Render a live process RAM readout and API health check at the bottom of the sidebar.
 
     Tries psutil first (cross-platform). Falls back to /proc/self/status
     (Linux / Streamlit Cloud, no external deps). Shows 'N/A' on Windows
     without psutil installed.
+
+    API health shows a 🟢/🟡 traffic light for each NHL endpoint, cached
+    for 5 minutes via _check_api_health().
     """
     rss_mb = "N/A"
     try:
@@ -51,6 +86,12 @@ def _render_ram_footer() -> None:
             pass
     st.markdown("---")
     st.caption(f"RAM: {rss_mb}")
+    statuses = _check_api_health()
+    lines = ["**API Health** *(5 min cache)*"]
+    for label, ok in statuses:
+        dot = "🟢" if ok else "🟡"
+        lines.append(f"{dot} {label}")
+    st.caption("\n\n".join(lines))
 
 
 def render_sidebar() -> dict:

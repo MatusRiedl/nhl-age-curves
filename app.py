@@ -36,6 +36,7 @@ from nhl.player_pipeline import process_players
 from nhl.sidebar import render_sidebar
 from nhl.styles import inject_css
 from nhl.team_pipeline import process_teams
+from nhl.url_params import apply_params_to_state, encode_state_to_params
 
 # =============================================================================
 # Page configuration — must be the first Streamlit call
@@ -46,6 +47,14 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 inject_css()
+
+# =============================================================================
+# URL params — load once per session, before session state defaults are applied.
+# The "not in" guards below mean URL-loaded values will not be overwritten.
+# =============================================================================
+if "_url_loaded" not in st.session_state:
+    apply_params_to_state(dict(st.query_params), st.session_state)
+    st.session_state["_url_loaded"] = True
 
 # =============================================================================
 # Session state initialization
@@ -224,6 +233,12 @@ if col_stats is not None:
             stat_category = st.session_state.stat_category,
             season_type   = st.session_state.season_type,
         )
+
+# =============================================================================
+# Sync current state to URL (does not trigger a rerun in Streamlit 1.30+)
+# =============================================================================
+st.query_params.clear()
+st.query_params.update(encode_state_to_params(st.session_state))
 
 # =============================================================================
 # Footer
