@@ -94,7 +94,7 @@ if "_default_loaded" not in st.session_state:
 st.markdown("""
     <h1 style='display:flex;align-items:center;padding-bottom:0;margin-bottom:0;'>
         <img src='https://assets.nhle.com/logos/nhl/svg/NHL_light.svg' class='nhl-logo'>
-        <span class='animated-title'>NHL Age Curves</span>
+        <span class='animated-title' style='font-size:0.9em;'>Age Curves</span>
     </h1>
 """, unsafe_allow_html=True)
 st.markdown("---")
@@ -220,7 +220,7 @@ with col_chart:
         team_mode            = team_mode,
         games_mode           = games_mode,
         do_cumul             = do_cumul,
-        do_base              = st.session_state.do_base,
+        do_base              = st.session_state.do_base and st.session_state.stat_category != "Goalie",
         do_smooth            = st.session_state.do_smooth,
         stat_category        = st.session_state.stat_category,
         historical_baselines = historical_baselines,
@@ -260,7 +260,7 @@ st.query_params.update(encode_state_to_params(st.session_state))
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.52.3 <br>"
+    "Created by Iksperial. v0.54 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

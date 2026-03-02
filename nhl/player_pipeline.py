@@ -23,7 +23,7 @@ No Streamlit import — all session-state values are passed as plain parameters,
 making this module independently testable.
 
 Imports from project:
-    nhl.constants      — RATE_STATS, NHLE_MULTIPLIERS, ML_SUPPORTED_METRICS
+    nhl.constants      — RATE_STATS, NHLE_MULTIPLIERS, ML_SUPPORTED_METRICS, NO_PROJECTION_METRICS
     nhl.era            — apply_era_to_hist, get_era_multiplier, get_goalie_era_sv_offset
     nhl.data_loaders   — get_player_raw_stats
     nhl.knn_engine     — run_knn_projection, run_linear_fallback
@@ -31,7 +31,7 @@ Imports from project:
 
 import pandas as pd
 
-from nhl.constants import ML_SUPPORTED_METRICS, NHLE_MULTIPLIERS, RATE_STATS
+from nhl.constants import ML_SUPPORTED_METRICS, NHLE_MULTIPLIERS, NO_PROJECTION_METRICS, RATE_STATS
 from nhl.data_loaders import get_player_raw_stats
 from nhl.era import apply_era_to_hist, get_era_multiplier, get_goalie_era_sv_offset
 from nhl.knn_engine import run_knn_projection, run_linear_fallback
@@ -272,7 +272,7 @@ def process_players(
 
         # --- Step 9: KNN projection or linear fallback ---
         max_age = df['Age'].max()
-        if not games_mode and do_predict and max_age < 40:
+        if not games_mode and do_predict and not is_goalie and max_age < 40 and metric not in NO_PROJECTION_METRICS:
             career_df = df.copy()
             use_ml    = not hist_df.empty and metric in ML_SUPPORTED_METRICS
 

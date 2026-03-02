@@ -18,7 +18,7 @@ https://nhl-age-curves.streamlit.app/
 
 * **Games Played X-Axis Mode:** Switch the X-axis from Age to career Games Played. Every player shares a common (0, 0) origin so you can directly compare players at the same point in career experience, normalizing for injuries and missed time.
 
-* **Dual Class Architecture:** Natively separates skaters from goaltenders, rendering entirely different metric sets (Save Percentage vs. Points Per Game, etc.).
+* **Triple Class Architecture:** Natively separates skaters, goaltenders and teams, rendering entirely different metric sets (Save Percentage vs. Points Per Game, etc.).
 
 * **Cumulative Tracking:** Toggle a race chart view to see cumulative career stats rather than single-season values.
 
@@ -28,7 +28,7 @@ https://nhl-age-curves.streamlit.app/
 
 * **Dynamic Search:** Type a player's first or last name to get live results. Selecting a match immediately adds them to the chart, no separate button required.
 
-* **Mobile-Friendly Layout:** Controls are organized into collapsible expander sections so the chart stays front-and-center on smaller screens.
+* **Mobile Friendly Layout:** Controls are organized into collapsible expander sections so the chart stays front-and-center on smaller screens.
 
 * **Player Headshots:** Each active roster entry in the sidebar shows the player's circular headshot thumbnail pulled from the NHL API.
 
@@ -67,7 +67,10 @@ nhl_historical_seasons.parquet   ML backbone (generate with scraper.py)
 ```
 
 ## How to Run Locally
-1. Clone this repository.
-2. Install the requirements: `pip install -r requirements.txt`
-3. Ensure `nhl_historical_seasons.parquet` is present in the root directory (required for ML projections and baseline). Run `scraper.py` to generate or refresh it.
-4. Run the app: `streamlit run app.py`
+1. Download latest standalone Python installer from https://www.python.org/downloads/ and during installation, check the box to "add Python to PATH"
+2. Download this repository https://github.com/MatusRiedl/nhl-age-curves/archive/refs/heads/main.zip and extract it somewhere
+3. Open the extracted folder, hold Shift and right click on empty space in the folder and click on "Open in Terminal"
+4. Type this into terminal and hit Enter: `pip install -r requirements.txt`
+5. Ensure `nhl_historical_seasons.parquet` is present in the root directory (required for ML projections and baseline)
+6. If you want to update the historical file, open terminal in the folder and write `python scraper.py` to generate it
+7. Launch the app by opening a terminal in the folder and write `streamlit run app.py`

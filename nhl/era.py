@@ -116,7 +116,7 @@ def apply_era_to_hist(
             d['GAA'] = (d['GAA'] * mult).clip(lower=0)
         if 'Save %' in d.columns:
             sv_offsets = d['SeasonYear'].apply(get_goalie_era_sv_offset)
-            d['Save %'] = (d['Save %'] + sv_offsets).clip(0, 1)
+            d['Save %'] = (d['Save %'] + sv_offsets * 100).clip(0, 100)
         if 'Shutouts' in d.columns:
             d['Shutouts'] = d['Shutouts'] / mult
     return d

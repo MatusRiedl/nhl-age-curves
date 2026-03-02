@@ -243,10 +243,15 @@ def run_knn_projection(
                 if len(recent_clone_avgs) > 3:
                     recent_clone_avgs.pop(0)
             elif len(recent_clone_avgs) >= 2:
-                # No clone data — extrapolate the % decline from the last known averages
+                # No clone data — extrapolate the % change from the last known averages.
+                # GAA increases (worsens) with age so allow positive pct_per_step;
+                # all other metrics decline, so cap at 0.0 to prevent artificial growth.
                 pct_per_step  = (recent_clone_avgs[-1] / max(recent_clone_avgs[0], 1e-6)) - 1
                 pct_per_step /= max(1, len(recent_clone_avgs) - 1)
-                pct_per_step  = max(-0.08, min(0.0, pct_per_step))
+                if metric == 'GAA':
+                    pct_per_step = max(-0.08, min(0.08, pct_per_step))
+                else:
+                    pct_per_step = max(-0.08, min(0.0, pct_per_step))
                 next_avg      = recent_clone_avgs[-1] * (1 + pct_per_step)
                 recent_clone_avgs.append(next_avg)
                 if len(recent_clone_avgs) > 3:

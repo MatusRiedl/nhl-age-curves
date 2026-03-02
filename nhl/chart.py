@@ -104,7 +104,18 @@ def render_chart(
                         if pd.isna(val):
                             val = 0
                     else:
+                        # For late ages absent from data, continue the prior decline
+                        # slope rather than defaulting to 0 (avoids the sparse-data
+                        # cliff at age 40 where no players have 40+ GP).
                         val = 0
+                        if age >= 38 and metric in base_df.columns:
+                            prior = [a for a in (age - 1, age - 2) if a in base_df.index]
+                            if len(prior) == 2:
+                                p1 = base_df.loc[prior[0], metric]
+                                p2 = base_df.loc[prior[1], metric]
+                                if p2 > 0 and p1 > 0 and not pd.isna(p1) and not pd.isna(p2):
+                                    slope = max(min(p1 / p2, 1.0), 0.75)
+                                    val = p1 * slope
 
                     if do_cumul and metric in [
                         'Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves', '+/-'
@@ -337,6 +348,7 @@ def render_chart(
     var IS_AGE_MODE   = {'true' if _is_age_mode else 'false'};
     var IS_GAMES_MODE = {'true' if _is_games_mode else 'false'};
 
+
     function calcDtick(width) {{
         var xRange = X_MAX - X_MIN;
         if (IS_AGE_MODE) {{
@@ -365,10 +377,12 @@ def render_chart(
         return 20;
     }}
 
+
     function applySettings(plot, Plotly) {{
         var updates = {{'xaxis.dtick': calcDtick(plot.offsetWidth || window.parent.innerWidth)}};
         updates['xaxis.tickangle'] = (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45;
         Plotly.relayout(plot, updates);
+
 
         // Clamp pan/zoom to data region
         var _clamping = false;
@@ -386,6 +400,70 @@ def render_chart(
         }});
     }}
 
+
+    // Share link button helpers
+    function injectShareStyles(parent) {{
+        if (parent.document.getElementById('nhl-share-btn-style')) return;
+        var s = parent.document.createElement('style');
+        s.id = 'nhl-share-btn-style';
+        s.textContent = [
+            '#nhl-share-btn {{',
+            '  position:absolute; left:8px; top:0; z-index:1001;',
+            '  cursor:pointer; padding:8px 10px;',
+            '  display:flex; align-items:center;',
+            '  opacity:0.5; transition:opacity 0.2s, color 0.3s;',
+            '  color:#a8b2c1;',
+            '}}',
+            '#nhl-share-btn:hover {{ opacity:1; }}',
+            '#nhl-share-btn svg {{ width:22px; height:22px; display:block; }}',
+            '@media (max-width:768px) {{',
+            '  #nhl-share-btn {{ padding:3px 5px; }}',
+            '  #nhl-share-btn svg {{ width:14px; height:14px; }}',
+            '}}',
+        ].join('');
+        parent.document.head.appendChild(s);
+    }}
+
+    function addShareBtn(plot, parent) {{
+        var existing = parent.document.getElementById('nhl-share-btn');
+        if (existing) existing.remove();
+
+        var btn = parent.document.createElement('div');
+        btn.id = 'nhl-share-btn';
+        btn.title = 'Copy share link';
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"'
+            + ' fill="none" stroke="currentColor" stroke-width="2"'
+            + ' stroke-linecap="round" stroke-linejoin="round">'
+            + '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>'
+            + '<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'
+            + '</svg>';
+
+        btn.addEventListener('click', function() {{
+            var url = parent.location.href;
+            var succeed = function() {{
+                btn.style.color = '#4caf50';
+                setTimeout(function() {{ btn.style.color = ''; }}, 1500);
+            }};
+            if (parent.navigator && parent.navigator.clipboard) {{
+                parent.navigator.clipboard.writeText(url).then(succeed).catch(function() {{
+                    var t = parent.document.createElement('input');
+                    t.value = url; parent.document.body.appendChild(t);
+                    t.select(); parent.document.execCommand('copy');
+                    parent.document.body.removeChild(t); succeed();
+                }});
+            }} else {{
+                var t = parent.document.createElement('input');
+                t.value = url; parent.document.body.appendChild(t);
+                t.select(); parent.document.execCommand('copy');
+                parent.document.body.removeChild(t); succeed();
+            }}
+        }});
+
+        plot.style.position = 'relative';
+        plot.appendChild(btn);
+    }}
+
+
     function init() {{
         var parent = window.parent;
         var Plotly = parent.Plotly;
@@ -394,12 +472,17 @@ def render_chart(
         if (!plots.length) {{ setTimeout(init, 200); return; }}
         plots.forEach(function(p) {{ applySettings(p, Plotly); }});
 
+        // Inject share button
+        injectShareStyles(parent);
+        if (plots.length) addShareBtn(plots[0], parent);
+
         parent.addEventListener('resize', function() {{
             parent.document.querySelectorAll('.js-plotly-plot').forEach(function(p) {{
                 Plotly.relayout(p, {{'xaxis.dtick': calcDtick(p.offsetWidth || parent.innerWidth), 'xaxis.tickangle': (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45}});
             }});
         }});
     }}
+
 
     setTimeout(init, 500);
 }})();

@@ -90,6 +90,14 @@ GP is intentionally excluded — survivorship bias makes KNN unreliable for game
 GP projection uses the dedicated 4-phase durability curve instead.
 """
 
+NO_PROJECTION_METRICS = {'GP', 'SH%', 'TOI'}
+"""
+Metrics for which the Forecast projection line is suppressed entirely.
+Neither KNN nor the linear fallback runs for these metrics.
+GP: survivorship bias corrupts both skater and goalie projections.
+SH%/TOI: linear extrapolation yields implausible results for skaters.
+"""
+
 # ---------------------------------------------------------------------------
 # NHLe (NHL Equivalency) multipliers — 2024 Bacon/Chatel model values
 # ---------------------------------------------------------------------------

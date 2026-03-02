@@ -208,6 +208,18 @@ _CSS = """
                 height: 14px !important;
             }
         }
+
+        /* ── Sidebar toggle: always visible ────────────────────────────── */
+        [data-testid="stSidebarCollapseButton"] button,
+        [data-testid="collapsedControl"] {
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+        [data-testid="stSidebarCollapseButton"] button,
+        [data-testid="collapsedControl"] button {
+            min-width: 36px;
+            min-height: 36px;
+        }
     </style>
 """
 """Full CSS block injected into the Streamlit page head."""

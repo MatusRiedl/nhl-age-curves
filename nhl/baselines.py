@@ -33,6 +33,12 @@ def build_historical_baselines(df: pd.DataFrame) -> dict:
 
     A 3-period centered rolling mean is applied first to smooth noisy raw percentiles.
 
+    Late-career slope extrapolation applied after survivorship rules for ages 40-41:
+        The centered rolling mean at age 40 incorporates near-empty age-41 data, which
+        can pull the smoothed value to near-zero. After the survivorship loop, ages 40
+        and 41 are floored at the value implied by continuing the slope from the prior
+        two ages (clamped to a max drop of 25% per year).
+
     Args:
         df: Historical seasons DataFrame from load_historical_data().
             Must contain 'GP', 'Age', and 'Position' columns.
@@ -75,6 +81,24 @@ def build_historical_baselines(df: pd.DataFrame) -> dict:
                     elif curr < prev * 0.85:
                         # Rule B: cap single-year drops at 15%
                         base.loc[age, col] = prev * 0.85
+
+            # Slope extrapolation for ages 40-41: continue the decline rate
+            # established by the prior two ages rather than accepting the
+            # near-zero values produced by the centered rolling mean over
+            # sparse late-career data.
+            for age in [40, 41]:
+                if (
+                    age in base.index
+                    and (age - 1) in base.index
+                    and (age - 2) in base.index
+                ):
+                    prev = base.loc[age - 1, col]
+                    prev2 = base.loc[age - 2, col]
+                    if prev2 > 0 and prev > 0:
+                        slope = max(min(prev / prev2, 1.0), 0.75)
+                        extrapolated = prev * slope
+                        if base.loc[age, col] < extrapolated:
+                            base.loc[age, col] = extrapolated
 
     return {'Skater': skater_base, 'Goalie': goalie_base}
 

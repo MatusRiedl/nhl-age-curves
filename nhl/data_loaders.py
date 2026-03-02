@@ -48,7 +48,7 @@ def load_historical_data() -> pd.DataFrame:
         if os.path.exists("nhl_historical_seasons.parquet"):
             df = pd.read_parquet("nhl_historical_seasons.parquet")
             df['PPG'] = df['Points'] / df['GP']
-            df['Save %'] = df['SavePct']
+            df['Save %'] = df['SavePct'] * 100
             return df
     except Exception:
         pass

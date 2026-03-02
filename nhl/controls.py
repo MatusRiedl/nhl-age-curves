@@ -49,8 +49,9 @@ def render_controls() -> tuple:
             do_cumul — resolved cumulative flag: True only when the toggle is on,
                        the metric is not a rate stat, and games_mode is False.
     """
-    team_mode  = st.session_state.stat_category == "Team"
-    games_mode = st.session_state.x_axis_mode == "Games Played"
+    team_mode   = st.session_state.stat_category == "Team"
+    goalie_mode = st.session_state.stat_category == "Goalie"
+    games_mode  = st.session_state.x_axis_mode == "Games Played"
 
     with st.expander("📊 Category & Metric", expanded=False):
         # ------------------------------------------------------------------
@@ -75,7 +76,7 @@ def render_controls() -> tuple:
         if not team_mode:
             with c_t2:
                 st.toggle("Forecast", key="do_predict",
-                          disabled=games_mode)
+                          disabled=games_mode or goalie_mode)
             with c_t3:
                 st.toggle("Era-Adjust", key="do_era")
 
@@ -83,7 +84,7 @@ def render_controls() -> tuple:
             st.toggle("Cumulative", key="do_cumul_toggle")
 
         with c_t5:
-            st.toggle("Baseline", key="do_base", disabled=games_mode)
+            st.toggle("Baseline", key="do_base", disabled=games_mode or goalie_mode)
 
         # ------------------------------------------------------------------
         # Row 2: X-Axis | Select Metric | Season Type | Leagues dropdowns
@@ -179,6 +180,8 @@ def render_controls() -> tuple:
                 else "ℹ️ Projection & Baseline unavailable in Games mode."
             )
             st.caption(_gm_note)
+        if goalie_mode:
+            st.caption("ℹ️ Forecast & Baseline unavailable for Goalies.")
         _ERA_GOALIE_STATS = {'Save %', 'GAA', 'Shutouts'}
         if (
             st.session_state.do_era
