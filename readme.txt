@@ -68,6 +68,9 @@ nhl/ package (all logic lives here — see Section 12 for full detail):
                              Fetches live or recent NHL game via score API and
                              identifies best skater + starting goalie per team for
                              chart auto-population on first open.
+  async_preloader.py       — preload_all_categories(). Background cache warming
+                             for Goalie and Team data using threading. Loads
+                             non-active categories while user views current category.
 
 SECTION 3 — EXTERNAL API ENDPOINTS
 --------------------------------------
@@ -565,3 +568,26 @@ MODULE: nhl/schedule.py
     _default_loaded guard in app.py (fires once per session after URL params load).
     Auto-population is skipped when st.session_state.players or .teams are non-empty
     (i.e. a shared URL was opened).
+
+MODULE: nhl/async_preloader.py
+  Background cache warming using threading. Preloads data for non-active categories
+  so users don't wait when switching between Skater, Goalie, and Team modes.
+  Called once per session via _preloaded guard in app.py, after session state init.
+  No Streamlit imports. Only imports from nhl.data_loaders.
+  Design note:
+    Uses Python threading (not asyncio) for simplicity with Streamlit's synchronous
+    execution model. Daemon threads call @st.cache_data functions; results are stored
+    in Streamlit's cache for subsequent synchronous calls.
+  Exports:
+    preload_all_categories(current_category: str) -> None
+      Spawns background threads to warm cache for categories other than current.
+      When viewing Skaters: preloads Goalie (id_to_name_map, clone_details_map)
+      and Team (load_all_team_seasons) data.
+      When viewing Goalies or Teams: preloads the other two categories.
+    preload_goalie_data() -> None
+      Internal helper. Spawns threads for get_id_to_name_map("Goalie") and
+      get_clone_details_map("Goalie").
+    preload_team_data() -> None
+      Internal helper. Spawns thread for load_all_team_seasons().
+    _preload_in_thread(target: Callable, name: str) -> None
+      Internal helper. Creates and starts a daemon thread for the target function.

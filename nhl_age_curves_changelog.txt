@@ -186,3 +186,7 @@ v0.54.1 - Adjusted comparison.py
 v0.54.2 - Live games fix
 ---------------------------------------------------------
 - CHANGED: Latest games will be picked to compare players on the start up of app.
+
+v0.54.3 - Live games fix
+---------------------------------------------------------
+- CHANGED: Async loading for all categories.

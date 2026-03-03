@@ -62,6 +62,7 @@ nhl/
     comparison.py        player stat comparison panel
     url_params.py        URL query param encode/decode for shareable links
     schedule.py          live/recent game detection for chart auto-population
+    async_preloader.py   background cache warming for Goalie/Team categories
 scraper.py               standalone script to refresh the parquet file
 nhl_historical_seasons.parquet   ML backbone (generate with scraper.py)
 ```

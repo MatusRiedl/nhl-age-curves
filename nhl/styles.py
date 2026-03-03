@@ -220,6 +220,48 @@ _CSS = """
             min-width: 36px;
             min-height: 36px;
         }
+
+        /* ── Custom animated progress bar for cache spinners ───────────── */
+        /* Hide the default "Running function_name()" text */
+        [data-testid="stSpinner"] .stMarkdown p {
+            display: none !important;
+        }
+        /* Replace with animated progress bar */
+        [data-testid="stSpinner"] {
+            position: relative !important;
+            width: 100% !important;
+            max-width: 400px !important;
+            margin: 1rem auto !important;
+        }
+        [data-testid="stSpinner"]::before {
+            content: '';
+            display: block;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg,
+                #2b71c7 0%,
+                #ff4b4b 50%,
+                #2b71c7 100%);
+            background-size: 200% 100%;
+            border-radius: 2px;
+            animation: progress-sweep 2s ease-in-out infinite;
+        }
+        [data-testid="stSpinner"]::after {
+            content: 'Loading data...';
+            display: block;
+            text-align: center;
+            font-size: 14px;
+            color: #888;
+            margin-top: 8px;
+        }
+        @keyframes progress-sweep {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        /* Keep the spinner icon itself hidden since we have our own animation */
+        [data-testid="stSpinner"] > div:first-child {
+            display: none !important;
+        }
     </style>
 """
 """Full CSS block injected into the Streamlit page head."""

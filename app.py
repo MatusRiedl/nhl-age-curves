@@ -21,6 +21,7 @@ Module responsibilities:
 import streamlit as st
 
 # --- nhl package imports (each module is documented in nhl/__init__.py) ---
+from nhl.async_preloader import preload_all_categories
 from nhl.baselines import build_historical_baselines, build_team_baselines
 from nhl.chart import render_chart
 from nhl.constants import ACTIVE_TEAMS
@@ -87,6 +88,14 @@ if "_default_loaded" not in st.session_state:
             _featured = get_featured_players(*_game)
             st.session_state.players.update(_featured["players"])
             st.session_state.teams.update(_featured["teams"])
+
+# =============================================================================
+# Async preloading — warm the cache for other categories in the background
+# Fires once per session. Goalie and Team data load while user views Skaters.
+# =============================================================================
+if "_preloaded" not in st.session_state:
+    st.session_state["_preloaded"] = True
+    preload_all_categories(st.session_state.stat_category)
 
 # =============================================================================
 # Page header
@@ -260,7 +269,7 @@ st.query_params.update(encode_state_to_params(st.session_state))
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.54.2 <br>"
+    "Created by Iksperial. v0.54.3 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,
