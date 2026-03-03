@@ -203,12 +203,12 @@ def render_chart(
     fig.update_layout(
         uirevision  = 'constant',
         margin      = dict(l=0, r=0, t=40, b=80),
-        height      = 600,
-        font        = dict(size=16),
-        hoverlabel  = dict(font_size=18, font_family="Arial", bgcolor="#1E1E1E"),
+        height      = 500,
+        font        = dict(size=17),
+        hoverlabel  = dict(font_size=17, font_family="Arial", bgcolor="#1E1E1E"),
         legend      = dict(
             title=None, orientation="h",
-            yanchor="top", y=-0.15,
+            yanchor="top", y=-0.18,
             xanchor="center", x=0.5,
         ),
         clickmode   = 'event+select',
@@ -223,7 +223,7 @@ def render_chart(
     if team_mode and not games_mode:
         fig.update_layout(
             margin = dict(l=0, r=0, t=40, b=140),
-            legend = dict(y=-0.28),
+            legend = dict(y=-0.30),
         )
         fig.update_traces(
             connectgaps    = True,

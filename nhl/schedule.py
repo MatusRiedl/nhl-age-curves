@@ -11,7 +11,7 @@ that any network failure leaves the app in its normal empty state.
 
 import streamlit as st
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from nhl.constants import ACTIVE_TEAMS
 
@@ -149,6 +149,19 @@ def _find_game_from_url(url: str, reverse_dates: bool = False) -> tuple[str, str
         all_games.extend(day.get("games", []))
 
     valid = [g for g in all_games if g.get("gameType") in _VALID_GAME_TYPES]
+
+    # Sort games by start time (most recent first) to ensure we pick the latest game
+    # even if multiple games are live or finished on the same day
+    def _get_start_time(game: dict) -> datetime:
+        start_time_utc = game.get("startTimeUTC")
+        if start_time_utc:
+            try:
+                return datetime.fromisoformat(start_time_utc.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                pass
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+    valid.sort(key=_get_start_time, reverse=True)
 
     # Priority: live first, finished second
     for state_set in (_LIVE_STATES, _FINAL_STATES):

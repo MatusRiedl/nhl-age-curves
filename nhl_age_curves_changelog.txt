@@ -182,3 +182,7 @@ v0.54 - Added URL clipboard button
 v0.54.1 - Adjusted comparison.py
 ---------------------------------------------------------
 - CHANGED: Formatting and layout of text for comparison table.
+
+v0.54.2 - Live games fix
+---------------------------------------------------------
+- CHANGED: Latest games will be picked to compare players on the start up of app.
