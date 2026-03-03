@@ -16,6 +16,7 @@ Imports from project:
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from nhl.constants import ACTIVE_TEAMS
 from nhl.data_loaders import (
@@ -104,6 +105,49 @@ def _render_ram_footer() -> None:
             st.caption("API Health: unavailable")
 
 
+def _inject_no_keyboard() -> None:
+    """Prevent mobile virtual keyboard from opening on st.selectbox widgets.
+
+    Injects JavaScript that sets inputmode='none' and readonly='readonly'
+    on BaseWeb Select component inputs. This explicitly instructs mobile
+    browsers not to show a virtual keyboard when dropdown menus receive focus.
+
+    Uses st.components.v1.html() which renders inside an iframe, allowing
+    access to the parent document via window.parent.document. A MutationObserver
+    re-applies attributes after each Streamlit rerun since DOM nodes are re-mounted.
+
+    Note: The readonly attribute disables the built-in selectbox search/filter
+    feature (typing to filter options). This is acceptable for pure selector
+    dropdowns that don't require free-text search.
+    """
+    components.html(
+        """
+        <script>
+        (function() {
+            function fixInputs() {
+                window.parent.document
+                    .querySelectorAll('[data-baseweb="select"] input')
+                    .forEach(function(el) {
+                        el.setAttribute('inputmode', 'none');
+                        el.setAttribute('readonly', 'readonly');
+                    });
+            }
+
+            // Run immediately on load
+            fixInputs();
+
+            // Re-apply after every Streamlit rerun (DOM mutation)
+            new MutationObserver(fixInputs).observe(
+                window.parent.document.body,
+                { childList: true, subtree: true }
+            );
+        })();
+        </script>
+        """,
+        height=0,   # invisible — zero visual footprint
+    )
+
+
 def render_sidebar() -> dict:
     """Render the full sidebar UI and return chart cache-busting keys.
 
@@ -118,6 +162,7 @@ def render_sidebar() -> dict:
         selections change.
     """
     with st.sidebar:
+        _inject_no_keyboard()   # Prevent mobile keyboard on dropdowns
         st.radio(
             "Category:",
             ["Skater", "Goalie", "Team"],
