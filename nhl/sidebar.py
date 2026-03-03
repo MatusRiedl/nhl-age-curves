@@ -72,6 +72,9 @@ def _render_ram_footer() -> None:
 
     API health shows a 🟢/🟡 traffic light for each NHL endpoint, cached
     for 5 minutes via _check_api_health().
+
+    All status info is wrapped in an expandable "App status" section that
+    is collapsed by default.
     """
     rss_mb = "N/A"
     try:
@@ -87,17 +90,18 @@ def _render_ram_footer() -> None:
                         break
         except Exception:
             pass
-    st.markdown("---")
-    st.caption(f"RAM: {rss_mb}")
-    try:
-        statuses = _check_api_health()
-        lines = ["**API Health** *(5 min cache)*"]
-        for label, ok in statuses:
-            dot = "🟢" if ok else "🟡"
-            lines.append(f"{dot} {label}")
-        st.caption("\n\n".join(lines))
-    except Exception:
-        st.caption("API Health: unavailable")
+
+    with st.expander("App status", expanded=False):
+        st.caption(f"RAM: {rss_mb}")
+        try:
+            statuses = _check_api_health()
+            lines = ["**API Health** *(5 min cache)*"]
+            for label, ok in statuses:
+                dot = "🟢" if ok else "🟡"
+                lines.append(f"{dot} {label}")
+            st.caption("\n\n".join(lines))
+        except Exception:
+            st.caption("API Health: unavailable")
 
 
 def render_sidebar() -> dict:
