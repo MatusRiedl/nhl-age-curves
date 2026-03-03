@@ -291,13 +291,12 @@ def inject_css() -> None:
 
 
 def inject_mobile_dropdown_fix() -> None:
-    """Inject CSS to prevent mobile keyboard from opening on dropdown taps.
+    """Inject JavaScript to prevent mobile keyboard from opening on dropdown taps.
 
     Streamlit's selectbox/multiselect use React Select which has a searchable
     input field. On mobile touch devices, focusing this input triggers the
-    on-screen keyboard. This CSS disables pointer events on the input field
-    for touch devices only, preventing keyboard popup while preserving full
-    dropdown functionality.
+    on-screen keyboard. This script intercepts touch events and prevents the
+    input from receiving focus on mobile devices only.
 
     The fix targets:
         - Top 50 All-Time Skaters/Goalies dropdown
@@ -307,35 +306,73 @@ def inject_mobile_dropdown_fix() -> None:
 
     Must be called once per app run, after st.set_page_config().
     """
-    mobile_css = """
-    <style>
-        /* Disable search input in dropdowns on touch devices (mobile/tablet)
-           to prevent on-screen keyboard from opening when tapping dropdowns */
-        @media (pointer: coarse) {
-            /* Target the input inside Streamlit selectbox/multiselect dropdowns */
-            div[data-baseweb="select"] input,
-            div[data-baseweb="popover"] input,
-            div[data-baseweb="select"] [role="combobox"] input {
-                pointer-events: none !important;
-                caret-color: transparent !important;
-                -webkit-user-select: none !important;
-                user-select: none !important;
-            }
+    mobile_js = """
+    <script>
+    (function() {
+        // Detect touch devices
+        const isTouchDevice = window.matchMedia('(pointer: coarse)').matches ||
+                              'ontouchstart' in window ||
+                              navigator.maxTouchPoints > 0;
 
-            /* Ensure the dropdown container remains fully clickable */
-            div[data-baseweb="select"] {
-                cursor: pointer !important;
-            }
+        if (!isTouchDevice) return; // Only run on mobile/touch devices
+
+        // Function to disable search inputs in dropdowns
+        function disableDropdownSearch() {
+            // Target all inputs within dropdown popovers/menus
+            const inputs = document.querySelectorAll('div[data-baseweb="popover"] input, div[data-baseweb="menu"] input, [role="listbox"] input, [role="combobox"] input');
+            inputs.forEach(function(input) {
+                if (input && !input._mobileFixed) {
+                    input._mobileFixed = true;
+                    // Prevent the input from receiving focus
+                    input.setAttribute('readonly', 'readonly');
+                    input.style.pointerEvents = 'none';
+                    input.style.caretColor = 'transparent';
+                }
+            });
         }
 
-        /* Additional targeting for iOS Safari and older mobile browsers */
-        @media (hover: none) and (pointer: coarse) {
-            [role="combobox"] input,
-            [role="listbox"] input {
-                pointer-events: none !important;
-                caret-color: transparent !important;
+        // Monitor for dropdown menu appearances
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes.length > 0) {
+                    // Check if any added nodes contain dropdown menus
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1) { // Element node
+                            if (node.matches && (node.matches('[data-baseweb="popover"]') || node.matches('[data-baseweb="menu"]') || node.querySelector('[data-baseweb="popover"], [data-baseweb="menu"]'))) {
+                                setTimeout(disableDropdownSearch, 0);
+                            }
+                        }
+                    });
+                }
+            });
+        });
+
+        // Start observing the body for dropdown additions
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Also handle clicks on selectboxes to catch the initial open
+        document.addEventListener('click', function(e) {
+            const selectbox = e.target.closest('div[data-baseweb="select"]');
+            if (selectbox) {
+                // Small delay to let the dropdown render
+                setTimeout(disableDropdownSearch, 50);
+                setTimeout(disableDropdownSearch, 150);
             }
-        }
-    </style>
+        }, true);
+
+        // Handle touch events specifically
+        document.addEventListener('touchstart', function(e) {
+            const selectbox = e.target.closest('div[data-baseweb="select"]');
+            if (selectbox) {
+                setTimeout(disableDropdownSearch, 50);
+                setTimeout(disableDropdownSearch, 150);
+            }
+        }, { passive: true, capture: true });
+    })();
+    </script>
     """
-    st.markdown(mobile_css, unsafe_allow_html=True)
+    import streamlit.components.v1 as components
+    components.html(mobile_js, height=0)
