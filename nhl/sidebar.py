@@ -346,7 +346,7 @@ def _render_player_sidebar() -> dict:
     st.markdown("---")
     if st.session_state.players:
         for pid, name in list(st.session_state.players.items()):
-            c_name, c_btn = st.columns([5, 1], vertical_alignment="center", gap="small")
+            c_name, c_btn = st.columns([8, 1], vertical_alignment="center", gap="small")
             with c_name:
                 headshot = get_player_headshot(pid)
                 img_html = (
@@ -355,14 +355,14 @@ def _render_player_sidebar() -> dict:
                     if headshot else ""
                 )
                 st.markdown(
-                    f"<div style='display:flex;align-items:center;gap:8px;'>"
+                    f"<div style='display:flex;align-items:center;gap:8px;margin:0;'>"
                     f"{img_html}"
                     f"<div class='player-name'>{name}</div>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
             with c_btn:
-                if st.button("✖", key=f"drop_{pid}", type="primary"):
+                if st.button("✖", key=f"drop_{pid}", type="secondary"):
                     del st.session_state.players[pid]
                     st.rerun()
     else:
@@ -435,7 +435,7 @@ def _render_team_sidebar() -> dict:
             with c_name:
                 _logo_url = f"https://assets.nhle.com/logos/nhl/svg/{_abbr}_light.svg"
                 st.markdown(
-                    f"<div style='display:flex;align-items:center;gap:8px;'>"
+                    f"<div style='display:flex;align-items:center;gap:8px;margin:0;'>"
                     f"<img src='{_logo_url}' style='width:32px;height:32px;"
                     f"object-fit:contain;flex-shrink:0;'>"
                     f"<div class='player-name'>{_name}</div>"
@@ -443,7 +443,7 @@ def _render_team_sidebar() -> dict:
                     unsafe_allow_html=True,
                 )
             with c_btn:
-                if st.button("✖", key=f"drop_team_{_abbr}", type="primary"):
+                if st.button("✖", key=f"drop_team_{_abbr}", type="secondary"):
                     del st.session_state.teams[_abbr]
                     st.rerun()
     else:

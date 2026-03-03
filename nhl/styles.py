@@ -49,10 +49,50 @@ _CSS = """
             float: right;
         }
 
+        /* Remove button styling - transparent background with white X */
+        [data-testid="stSidebar"] button[kind="secondary"][data-testid="stBaseButton-secondary"] {
+            background-color: transparent !important;
+            border: none !important;
+            color: white !important;
+            padding: 0 !important;
+            min-width: 24px !important;
+            width: 24px !important;
+            height: 32px !important;
+            font-size: 18px !important;
+            line-height: 32px !important;
+            margin-left: -8px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        [data-testid="stSidebar"] button[kind="secondary"][data-testid="stBaseButton-secondary"]:hover {
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            color: #ff4b4b !important;
+        }
+
+        /* Stretch columns to equal height, then center content within each */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
-            align-items: center !important;
+            align-items: stretch !important;
             gap: 0 !important;
+        }
+
+        /* Each column becomes a flex container so its inner block can be centered */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+            display: flex !important;
+            align-items: center !important;
+        }
+
+        /* The inner vertical block — centered, no margin leakage */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"] {
+            width: 100% !important;
+            justify-content: center !important;
+        }
+
+        /* Zero out all margins inside these rows */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] .element-container {
+            margin: 0 !important;
+            padding: 0 !important;
         }
 
         /* Tighten sidebar vertical spacing */
@@ -132,6 +172,23 @@ _CSS = """
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            line-height: 32px !important;
+        }
+
+        /* Center the markdown wrapper itself */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stMarkdown"] {
+            display: flex !important;
+            align-items: center !important;
+            margin: 0 !important;
+        }
+
+        /* Center the button wrapper */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stButton"],
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] .stButton {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-end !important;
+            margin: 0 !important;
         }
 
         div.element-container:has(.blue-btn-anchor) + div.element-container button {
