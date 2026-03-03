@@ -196,3 +196,7 @@ v0.54.4 - Live games fix
 - CHANGED: Added section to sidebar.
 - CHANGED: Keyboard won't open when clicking on phone device.
 - CHANGED: Global Search text is now in line with Top 50.
+
+v0.54.5 - Polish update
+---------------------------------------------------------
+- CHANGED: Chart user interface update

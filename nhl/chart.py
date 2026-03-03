@@ -164,13 +164,29 @@ def render_chart(
     _is_age_mode   = (x_col == "Age")
     _is_games_mode = games_mode
 
+    # Full data range for clamping
+    _x_full_range = float(_x_vals.max() - _x_vals.min())
+
+    # Initial 20-year zoom for team mode (users can double-click to see full history)
+    _team_initial_range = None
+    if team_mode and not games_mode and _x_full_range > 20:
+        _max_year = float(_x_vals.max())
+        _zoom_min = _max_year - 20
+        _zoom_max = _max_year + (_x_pad * 0.5)  # Small padding on the right
+        _team_initial_range = [_zoom_min, _zoom_max] if _zoom_min >= _x_min else None
+
     # Python-side dtick for team/season-year mode (applied immediately, before JS lands)
-    _x_range_size = float(_x_vals.max() - _x_vals.min())
-    if _x_range_size <= 30:
+    # Use zoomed range size if applicable, otherwise full range
+    if _team_initial_range:
+        _x_range_size = _team_initial_range[1] - _team_initial_range[0]
+    else:
+        _x_range_size = _x_full_range
+
+    if _x_range_size <= 25:
         _team_dtick = 2
-    elif _x_range_size <= 65:
+    elif _x_range_size <= 50:
         _team_dtick = 5
-    elif _x_range_size <= 120:
+    elif _x_range_size <= 100:
         _team_dtick = 10
     else:
         _team_dtick = 20
@@ -241,6 +257,7 @@ def render_chart(
             automargin  = True,
             title_font  = dict(size=25, family='Arial Black'),
             tickfont    = dict(size=18, family='Arial Black'),
+            range       = _team_initial_range,
         )
     elif games_mode:
         fig.update_traces(
@@ -323,6 +340,7 @@ def render_chart(
         "modeBarButtonsToRemove": [
             "lasso2d", "select2d", "toggleSpikelines",
             "hoverCompareCartesian", "hoverClosestCartesian", "autoScale2d",
+            "resetScale2d",
         ],
         "displaylogo": False,
     }
@@ -339,18 +357,24 @@ def render_chart(
     # ------------------------------------------------------------------
     # JS: responsive dtick + pan/zoom clamping
     # ------------------------------------------------------------------
+    # Zoom range for JS (used for responsive dtick in season year mode)
+    _x_zoom_min = _team_initial_range[0] if _team_initial_range else _x_min
+    _x_zoom_max = _team_initial_range[1] if _team_initial_range else _x_max
+
     components.html(f"""<script>
 (function() {{
     var X_MIN = {_x_min:.4f};
     var X_MAX = {_x_max:.4f};
+    var X_ZOOM_MIN = {_x_zoom_min:.4f};
+    var X_ZOOM_MAX = {_x_zoom_max:.4f};
     var Y_MIN = {_y_min:.4f};
     var Y_MAX = {_y_max:.4f};
     var IS_AGE_MODE   = {'true' if _is_age_mode else 'false'};
     var IS_GAMES_MODE = {'true' if _is_games_mode else 'false'};
 
 
-    function calcDtick(width) {{
-        var xRange = X_MAX - X_MIN;
+    function calcDtick(width, currentRange) {{
+        var xRange = currentRange || (X_MAX - X_MIN);
         if (IS_AGE_MODE) {{
             var pixPerAge = width / xRange;
             if (pixPerAge >= 32) return 1;
@@ -368,35 +392,67 @@ def render_chart(
             if (rawDtick <= 750)  return 500;
             return Math.ceil(rawDtick / 500) * 500;
         }}
-        // Season Year mode — 4-digit labels need ~60px each
+        // Season Year mode — use zoom range for initial calculation
+        // 4-digit labels need ~50px each at typical chart widths
         var pixPerYear = width / xRange;
-        if (pixPerYear >= 60) return 1;
-        if (pixPerYear >= 30) return 2;
-        if (pixPerYear >= 12) return 5;
-        if (pixPerYear >= 6)  return 10;
+        if (pixPerYear >= 50) return 1;
+        if (pixPerYear >= 25) return 2;
+        if (pixPerYear >= 10) return 5;
+        if (pixPerYear >= 5)  return 10;
         return 20;
     }}
 
 
+    function getCurrentXRange(plot) {{
+        // Get the current visible X-axis range from the plot layout
+        if (plot.layout && plot.layout.xaxis) {{
+            var rng = plot.layout.xaxis.range;
+            if (rng && rng.length === 2) {{
+                return rng[1] - rng[0];
+            }}
+        }}
+        return null;
+    }}
+
     function applySettings(plot, Plotly) {{
-        var updates = {{'xaxis.dtick': calcDtick(plot.offsetWidth || window.parent.innerWidth)}};
+        var width = plot.offsetWidth || window.parent.innerWidth;
+        // For season year mode with zoom, use zoom range for initial dtick
+        var initialRange = (!IS_AGE_MODE && !IS_GAMES_MODE && X_ZOOM_MAX > X_ZOOM_MIN)
+            ? (X_ZOOM_MAX - X_ZOOM_MIN) : null;
+        var updates = {{'xaxis.dtick': calcDtick(width, initialRange)}};
         updates['xaxis.tickangle'] = (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45;
         Plotly.relayout(plot, updates);
 
 
-        // Clamp pan/zoom to data region
-        var _clamping = false;
+        // Clamp pan/zoom to data region and update dtick on zoom
+        var _updating = false;
         plot.on('plotly_relayout', function(evt) {{
-            if (_clamping) return;
+            if (_updating) return;
+
+            // Handle clamping
             var clamps = {{}};
-            var needs  = false;
+            var needsClamp  = false;
             var r0 = evt['xaxis.range[0]'], r1 = evt['xaxis.range[1]'];
             var y0 = evt['yaxis.range[0]'], y1 = evt['yaxis.range[1]'];
-            if (r0 !== undefined && r0 < X_MIN) {{ clamps['xaxis.range[0]'] = X_MIN; needs = true; }}
-            if (r1 !== undefined && r1 > X_MAX) {{ clamps['xaxis.range[1]'] = X_MAX; needs = true; }}
-            if (y0 !== undefined && y0 < Y_MIN) {{ clamps['yaxis.range[0]'] = Y_MIN; needs = true; }}
-            if (y1 !== undefined && y1 > Y_MAX) {{ clamps['yaxis.range[1]'] = Y_MAX; needs = true; }}
-            if (needs) {{ _clamping = true; Plotly.relayout(plot, clamps); _clamping = false; }}
+            if (r0 !== undefined && r0 < X_MIN) {{ clamps['xaxis.range[0]'] = X_MIN; needsClamp = true; }}
+            if (r1 !== undefined && r1 > X_MAX) {{ clamps['xaxis.range[1]'] = X_MAX; needsClamp = true; }}
+            if (y0 !== undefined && y0 < Y_MIN) {{ clamps['yaxis.range[0]'] = Y_MIN; needsClamp = true; }}
+            if (y1 !== undefined && y1 > Y_MAX) {{ clamps['yaxis.range[1]'] = Y_MAX; needsClamp = true; }}
+            if (needsClamp) {{ _updating = true; Plotly.relayout(plot, clamps); _updating = false; }}
+
+            // For season year mode, update dtick based on current visible range
+            if (!IS_AGE_MODE && !IS_GAMES_MODE && (r0 !== undefined || r1 !== undefined)) {{
+                var currentRange = getCurrentXRange(plot);
+                if (currentRange !== null) {{
+                    var newDtick = calcDtick(width, currentRange);
+                    // Only update if dtick actually changed
+                    if (plot.layout && plot.layout.xaxis && plot.layout.xaxis.dtick !== newDtick) {{
+                        _updating = true;
+                        Plotly.relayout(plot, {{'xaxis.dtick': newDtick}});
+                        _updating = false;
+                    }}
+                }}
+            }}
         }});
     }}
 
@@ -408,13 +464,14 @@ def render_chart(
         s.id = 'nhl-share-btn-style';
         s.textContent = [
             '#nhl-share-btn {{',
-            '  position:absolute; left:8px; top:0; z-index:1001;',
-            '  cursor:pointer; padding:8px 10px;',
+            '  position:absolute; left:10px; top:4px; z-index:1001;',
+            '  cursor:pointer; padding:4px;',
             '  display:flex; align-items:center;',
-            '  opacity:0.5; transition:opacity 0.2s, color 0.3s;',
-            '  color:#a8b2c1;',
+            '  opacity:1; transition:opacity 0.2s, color 0.3s;',
+            '  color:#c0c0c0;',
+            '  background:none;',
             '}}',
-            '#nhl-share-btn:hover {{ opacity:1; }}',
+            '#nhl-share-btn:hover {{ color:#ffffff; }}',
             '#nhl-share-btn svg {{ width:22px; height:22px; display:block; }}',
             '@media (max-width:768px) {{',
             '  #nhl-share-btn {{ padding:3px 5px; }}',

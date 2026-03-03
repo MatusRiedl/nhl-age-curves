@@ -71,7 +71,7 @@ if 'do_smooth'         not in st.session_state: st.session_state.do_smooth      
 if 'do_predict'        not in st.session_state: st.session_state.do_predict        = True
 if 'do_era'            not in st.session_state: st.session_state.do_era            = False
 if 'do_cumul_toggle'   not in st.session_state: st.session_state.do_cumul_toggle   = False
-if 'do_base'           not in st.session_state: st.session_state.do_base           = False
+if 'do_base'           not in st.session_state: st.session_state.do_base           = True
 if 'x_axis_mode'       not in st.session_state: st.session_state.x_axis_mode       = "Age"
 if 'league_filter'     not in st.session_state: st.session_state.league_filter     = ['NHL']
 if 'team_sel_abbr'     not in st.session_state:
@@ -270,7 +270,7 @@ st.query_params.update(encode_state_to_params(st.session_state))
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.54.3 <br>"
+    "Created by Iksperial. v0.54.5 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,
