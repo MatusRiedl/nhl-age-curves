@@ -60,6 +60,10 @@ _CSS = """
             margin-top: 6px !important;
             margin-bottom: 6px !important;
         }
+        /* Reduce top margin on first text input (Global Search) after divider */
+        [data-testid="stSidebar"] hr + .element-container .stTextInput {
+            margin-top: -4px !important;
+        }
         [data-testid="stSidebar"] .element-container {
             margin-bottom: 4px !important;
         }
@@ -284,3 +288,54 @@ def inject_css() -> None:
     Must be called once per app run, after st.set_page_config().
     """
     st.markdown(_CSS, unsafe_allow_html=True)
+
+
+def inject_mobile_dropdown_fix() -> None:
+    """Inject CSS to prevent mobile keyboard from opening on dropdown taps.
+
+    Streamlit's selectbox/multiselect use React Select which has a searchable
+    input field. On mobile touch devices, focusing this input triggers the
+    on-screen keyboard. This CSS disables pointer events on the input field
+    for touch devices only, preventing keyboard popup while preserving full
+    dropdown functionality.
+
+    The fix targets:
+        - Top 50 All-Time Skaters/Goalies dropdown
+        - Active Rosters team selector
+        - Select Player roster dropdown
+        - X-Axis, Select Metric, Season Type, Leagues dropdowns
+
+    Must be called once per app run, after st.set_page_config().
+    """
+    mobile_css = """
+    <style>
+        /* Disable search input in dropdowns on touch devices (mobile/tablet)
+           to prevent on-screen keyboard from opening when tapping dropdowns */
+        @media (pointer: coarse) {
+            /* Target the input inside Streamlit selectbox/multiselect dropdowns */
+            div[data-baseweb="select"] input,
+            div[data-baseweb="popover"] input,
+            div[data-baseweb="select"] [role="combobox"] input {
+                pointer-events: none !important;
+                caret-color: transparent !important;
+                -webkit-user-select: none !important;
+                user-select: none !important;
+            }
+
+            /* Ensure the dropdown container remains fully clickable */
+            div[data-baseweb="select"] {
+                cursor: pointer !important;
+            }
+        }
+
+        /* Additional targeting for iOS Safari and older mobile browsers */
+        @media (hover: none) and (pointer: coarse) {
+            [role="combobox"] input,
+            [role="listbox"] input {
+                pointer-events: none !important;
+                caret-color: transparent !important;
+            }
+        }
+    </style>
+    """
+    st.markdown(mobile_css, unsafe_allow_html=True)

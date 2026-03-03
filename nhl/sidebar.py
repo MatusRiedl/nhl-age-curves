@@ -157,8 +157,6 @@ def _render_player_sidebar() -> dict:
     team_abbr     = ""
     roster_player = ""
 
-    st.subheader("Global Search")
-
     if 'search_ver' not in st.session_state:
         st.session_state.search_ver = 0
     if 'search_opts' not in st.session_state:
@@ -218,9 +216,8 @@ def _render_player_sidebar() -> dict:
         st.session_state.roster_ver = ver + 1
 
     search_term = st.text_input(
-        "Search player:",
+        "Global Search",
         placeholder="e.g., McDavid, Crosby, Connor…",
-        label_visibility="collapsed",
         key=f"search_input_{st.session_state.search_ver}",
     )
 

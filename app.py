@@ -35,7 +35,7 @@ from nhl.data_loaders import (
 )
 from nhl.player_pipeline import process_players
 from nhl.sidebar import render_sidebar
-from nhl.styles import inject_css
+from nhl.styles import inject_css, inject_mobile_dropdown_fix
 from nhl.team_pipeline import process_teams
 from nhl.schedule import get_featured_players, get_live_or_recent_game
 from nhl.url_params import apply_params_to_state, encode_state_to_params
@@ -49,6 +49,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 inject_css()
+inject_mobile_dropdown_fix()
 
 # =============================================================================
 # URL params — load once per session, before session state defaults are applied.
@@ -269,7 +270,7 @@ st.query_params.update(encode_state_to_params(st.session_state))
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.54.3 <br>"
+    "Created by Iksperial. v0.54.4 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

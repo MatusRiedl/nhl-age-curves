@@ -190,3 +190,9 @@ v0.54.2 - Live games fix
 v0.54.3 - Live games fix
 ---------------------------------------------------------
 - CHANGED: Async loading for all categories.
+
+v0.54.4 - Live games fix
+---------------------------------------------------------
+- CHANGED: Added section to sidebar.
+- CHANGED: Keyboard won't open when clicking on phone device.
+- CHANGED: Global Search text is now in line with Top 50.
