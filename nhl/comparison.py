@@ -24,20 +24,6 @@ from nhl.data_loaders import (
 _TEAM_LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbr}_light.svg"
 
 
-def _ordinal(n: int) -> str:
-    """Return ordinal string for a positive integer (e.g. 1 -> '1st').
-
-    Args:
-        n: Positive integer to convert.
-
-    Returns:
-        String with English ordinal suffix.
-    """
-    if 11 <= (n % 100) <= 13:
-        suffix = "th"
-    else:
-        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"
 
 
 def render_comparison_panel(
@@ -71,8 +57,8 @@ def render_comparison_panel(
             function so rankings match the active season filter.
     """
     is_goalie = stat_category == "Goalie"
-    _RANK_SUFFIX_MAP = {"Goals": "career Goals", "Assists": "career Assists"}
-    rank_suffix = "career Wins" if is_goalie else _RANK_SUFFIX_MAP.get(metric, "career Pts")
+    _RANK_SUFFIX_MAP = {"Goals": "Goals", "Assists": "Assists", "Points": "Points"}
+    rank_suffix = "Wins" if is_goalie else _RANK_SUFFIX_MAP.get(metric, "Points")
 
     # Build lookup: base_name -> proc_df for fast access
     proc_lookup: dict = {}
@@ -137,7 +123,7 @@ def render_comparison_panel(
         if rank is not None:
             rank_row = (
                 f"<br><span style='font-size:14px;color:#4caf50;font-weight:bold;'>"
-                f"#{_ordinal(rank)} all-time &mdash; {rank_suffix}"
+                f"#{rank} all-time {rank_suffix}"
                 f"</span>"
             )
 
@@ -161,10 +147,13 @@ def render_comparison_panel(
             else:
                 val_str = str(int(val))
 
+            # Map metric to short display label
+            _METRIC_SHORT_MAP = {"Points": "Pts", "Goals": "G", "Assists": "A"}
+            metric_short = _METRIC_SHORT_MAP.get(metric, metric)
             best_row = (
                 f"<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
                 f"Best: Age&nbsp;{age} ({sy_str})"
-                f" &mdash; {val_str}&nbsp;{metric} in {peak_gp}&nbsp;GP"
+                f" &mdash; {val_str}&nbsp;{metric_short} in {peak_gp}&nbsp;GP"
                 f"</span>"
             )
 
@@ -248,7 +237,7 @@ def render_team_comparison_panel(active_teams: dict, metric: str) -> None:
         )
         rank_row = (
             f"<br><span style='font-size:14px;color:#4caf50;font-weight:bold;'>"
-            f"#{_ordinal(wins_rank)} all-time &mdash; franchise Wins"
+            f"#{wins_rank} all-time Wins"
             f"</span>"
         )
         best_row = ""

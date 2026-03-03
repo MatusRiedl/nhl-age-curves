@@ -178,3 +178,7 @@ v0.54 - Added URL clipboard button
 ---------------------------------------------------------
 - CHANGED: Added chain-link icon appears at top-left of the chart at the same 
   vertical height as the modebar buttons.
+
+v0.54.1 - Adjusted comparison.py
+---------------------------------------------------------
+- CHANGED: Formatting and layout of text for comparison table.
