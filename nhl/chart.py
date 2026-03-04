@@ -218,13 +218,13 @@ def render_chart(
 
     fig.update_layout(
         uirevision  = 'constant',
-        margin      = dict(l=0, r=0, t=40, b=80),
+        margin      = dict(l=0, r=0, t=40, b=12),
         height      = 500,
         font        = dict(size=17),
         hoverlabel  = dict(font_size=17, font_family="Arial", bgcolor="#1E1E1E"),
         legend      = dict(
             title=None, orientation="h",
-            yanchor="top", y=-0.18,
+            yanchor="top", y=-0.22,
             xanchor="center", x=0.5,
         ),
         clickmode   = 'event+select',
@@ -238,8 +238,8 @@ def render_chart(
 
     if team_mode and not games_mode:
         fig.update_layout(
-            margin = dict(l=0, r=0, t=40, b=140),
-            legend = dict(y=-0.30),
+            margin = dict(l=0, r=0, t=40, b=18),
+            legend = dict(y=-0.35),
         )
         fig.update_traces(
             connectgaps    = True,
@@ -406,19 +406,26 @@ def render_chart(
     function getCurrentXRange(plot) {{
         // Get the current visible X-axis range from the plot layout
         if (plot.layout && plot.layout.xaxis) {{
-            var rng = plot.layout.xaxis.range;
-            if (rng && rng.length === 2) {{
-                return rng[1] - rng[0];
+            var axis = plot.layout.xaxis;
+            // First try explicit range
+            if (axis.range && axis.range.length === 2) {{
+                return axis.range[1] - axis.range[0];
+            }}
+            // Fall back: compute from axis data bounds (works with auto-range)
+            if (axis._fullRange && axis._fullRange.length === 2) {{
+                return axis._fullRange[1] - axis._fullRange[0];
             }}
         }}
-        return null;
+        // Ultimate fallback: use X_MAX - X_MIN from Python
+        return X_MAX - X_MIN;
     }}
 
     function applySettings(plot, Plotly) {{
         var width = plot.offsetWidth || window.parent.innerWidth;
         // For season year mode with zoom, use zoom range for initial dtick
+        // Otherwise use full data range (X_MAX - X_MIN) so all years display properly
         var initialRange = (!IS_AGE_MODE && !IS_GAMES_MODE && X_ZOOM_MAX > X_ZOOM_MIN)
-            ? (X_ZOOM_MAX - X_ZOOM_MIN) : null;
+            ? (X_ZOOM_MAX - X_ZOOM_MIN) : (X_MAX - X_MIN);
         var updates = {{'xaxis.dtick': calcDtick(width, initialRange)}};
         updates['xaxis.tickangle'] = (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45;
         Plotly.relayout(plot, updates);
@@ -441,9 +448,12 @@ def render_chart(
             if (needsClamp) {{ _updating = true; Plotly.relayout(plot, clamps); _updating = false; }}
 
             // For season year mode, update dtick based on current visible range
-            if (!IS_AGE_MODE && !IS_GAMES_MODE && (r0 !== undefined || r1 !== undefined)) {{
-                var currentRange = getCurrentXRange(plot);
-                if (currentRange !== null) {{
+            // Handle both zoom (r0 or r1 defined) and double-click reset (both undefined)
+            if (!IS_AGE_MODE && !IS_GAMES_MODE) {{
+                // Check for double-click reset (both ranges are undefined)
+                var isReset = (r0 === undefined && r1 === undefined);
+                if (isReset || r0 !== undefined || r1 !== undefined) {{
+                    var currentRange = getCurrentXRange(plot);
                     var newDtick = calcDtick(width, currentRange);
                     // Only update if dtick actually changed
                     if (plot.layout && plot.layout.xaxis && plot.layout.xaxis.dtick !== newDtick) {{
@@ -535,7 +545,8 @@ def render_chart(
 
         parent.addEventListener('resize', function() {{
             parent.document.querySelectorAll('.js-plotly-plot').forEach(function(p) {{
-                Plotly.relayout(p, {{'xaxis.dtick': calcDtick(p.offsetWidth || parent.innerWidth), 'xaxis.tickangle': (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45}});
+                var range = getCurrentXRange(p);
+                Plotly.relayout(p, {{'xaxis.dtick': calcDtick(p.offsetWidth || parent.innerWidth, range), 'xaxis.tickangle': (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45}});
             }});
         }});
     }}
