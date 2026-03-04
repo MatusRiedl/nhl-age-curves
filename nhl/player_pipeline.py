@@ -91,15 +91,15 @@ def process_players(
 
     _league_filter = [] if league_filter is None else league_filter
 
-    # Era-adjust the historical DataFrame once before the player loop rather than
-    # once per player inside knn_engine.py.  apply_era_to_hist returns df unchanged
-    # when do_era=False (no copy), so this is free in the era-off case.
-    # Guard on do_predict: when projection is off, knn_hist is never consumed.
-    knn_hist = (
-        apply_era_to_hist(hist_df, do_era, is_goalie=(stat_category == "Goalie"))
-        if do_predict
-        else hist_df
-    )
+    # Era-adjust historical data once per category before the player loop.
+    # This avoids per-player era adjustment inside the projection path and keeps
+    # skater/goalie adjustments isolated from each other.
+    if do_predict:
+        hist_df_skater = apply_era_to_hist(hist_df, do_era, is_goalie=False)
+        hist_df_goalie = apply_era_to_hist(hist_df, do_era, is_goalie=True)
+    else:
+        hist_df_skater = hist_df
+        hist_df_goalie = hist_df
 
     for pid, name in players.items():
         raw_df, base_name, pos_code = get_player_raw_stats(pid, name)
@@ -289,17 +289,19 @@ def process_players(
 
         # --- Step 9: KNN projection or linear fallback ---
         max_age = df['Age'].max()
-        if not games_mode and do_predict and not is_goalie and max_age < 40 and metric not in NO_PROJECTION_METRICS:
+        if not games_mode and do_predict and max_age < 40 and metric not in NO_PROJECTION_METRICS:
             career_df = df.copy()
-            use_ml    = not hist_df.empty and metric in ML_SUPPORTED_METRICS
+            player_knn_hist = hist_df_goalie if is_goalie else hist_df_skater
+            player_pos_code = 'G' if is_goalie else pos_code
+            use_ml    = not player_knn_hist.empty and metric in ML_SUPPORTED_METRICS
 
             if use_ml:
                 proj_rows, clone_names = run_knn_projection(
                     career_df      = career_df,
                     metric         = metric,
-                    hist_df        = knn_hist,
+                    hist_df        = player_knn_hist,
                     is_goalie      = is_goalie,
-                    pos_code       = pos_code,
+                    pos_code       = player_pos_code,
                     do_era         = False,
                     season_type    = season_type,
                     stat_category  = stat_category,

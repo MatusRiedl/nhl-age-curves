@@ -94,28 +94,74 @@ def render_chart(
                 final_df = pd.concat([final_df, pd.DataFrame(base_data)], ignore_index=True)
         else:
             # Player baseline: 75th pct by age from parquet
-            base_df = historical_baselines.get(stat_category)
+            base_key = "Goalie" if stat_category == "Goalie" else "Skater"
+            base_df = historical_baselines.get(base_key)
             if base_df is not None and not base_df.empty:
                 base_data  = []
                 cumul_val  = 0
+                is_goalie_save = (stat_category == "Goalie" and metric == "Save %")
                 for age in range(18, 41):
-                    if age in base_df.index and metric in base_df.columns:
-                        val = base_df.loc[age, metric]
-                        if pd.isna(val):
+                    val = None
+                    has_metric = metric in base_df.columns
+                    if age in base_df.index and has_metric:
+                        v = base_df.loc[age, metric]
+                        if not pd.isna(v):
+                            val = float(v)
+
+                    if val is None:
+                        if is_goalie_save:
+                            if age < 19:
+                                val = float('nan')
+                            elif age == 19:
+                                val = 88.0
+                            else:
+                                prev_age = None
+                                prev_val = None
+                                if has_metric:
+                                    prev_known = [
+                                        int(a) for a in base_df.index
+                                        if a < age and not pd.isna(base_df.loc[a, metric])
+                                    ]
+                                    if prev_known:
+                                        prev_age = max(prev_known)
+                                        prev_val = float(base_df.loc[prev_age, metric])
+                                if prev_age is None and age > 19:
+                                    prev_age = 19
+                                    prev_val = 88.0
+
+                                next_age = None
+                                next_val = None
+                                if has_metric:
+                                    next_known = [
+                                        int(a) for a in base_df.index
+                                        if a > age and not pd.isna(base_df.loc[a, metric])
+                                    ]
+                                    if next_known:
+                                        next_age = min(next_known)
+                                        next_val = float(base_df.loc[next_age, metric])
+
+                                if prev_age is not None and next_age is not None and next_age != prev_age:
+                                    step = (next_val - prev_val) / (next_age - prev_age)
+                                    val = prev_val + step * (age - prev_age)
+                                elif prev_val is not None:
+                                    val = prev_val
+                                elif next_val is not None:
+                                    val = next_val
+                                else:
+                                    val = 88.0
+                        else:
+                            # For late ages absent from data, continue the prior decline
+                            # slope rather than defaulting to 0 (avoids the sparse-data
+                            # cliff at age 40 where no players have 40+ GP).
                             val = 0
-                    else:
-                        # For late ages absent from data, continue the prior decline
-                        # slope rather than defaulting to 0 (avoids the sparse-data
-                        # cliff at age 40 where no players have 40+ GP).
-                        val = 0
-                        if age >= 38 and metric in base_df.columns:
-                            prior = [a for a in (age - 1, age - 2) if a in base_df.index]
-                            if len(prior) == 2:
-                                p1 = base_df.loc[prior[0], metric]
-                                p2 = base_df.loc[prior[1], metric]
-                                if p2 > 0 and p1 > 0 and not pd.isna(p1) and not pd.isna(p2):
-                                    slope = max(min(p1 / p2, 1.0), 0.75)
-                                    val = p1 * slope
+                            if age >= 38 and has_metric:
+                                prior = [a for a in (age - 1, age - 2) if a in base_df.index]
+                                if len(prior) == 2:
+                                    p1 = base_df.loc[prior[0], metric]
+                                    p2 = base_df.loc[prior[1], metric]
+                                    if p2 > 0 and p1 > 0 and not pd.isna(p1) and not pd.isna(p2):
+                                        slope = max(min(p1 / p2, 1.0), 0.75)
+                                        val = p1 * slope
 
                     if do_cumul and metric in [
                         'Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves', '+/-'

@@ -246,18 +246,29 @@ def run_knn_projection(
                 # No clone data — extrapolate the % change from the last known averages.
                 # GAA increases (worsens) with age so allow positive pct_per_step;
                 # all other metrics decline, so cap at 0.0 to prevent artificial growth.
-                pct_per_step  = (recent_clone_avgs[-1] / max(recent_clone_avgs[0], 1e-6)) - 1
-                pct_per_step /= max(1, len(recent_clone_avgs) - 1)
-                if metric == 'GAA':
-                    pct_per_step = max(-0.08, min(0.08, pct_per_step))
+                if metric == 'Save %':
+                    add_step = (recent_clone_avgs[-1] - recent_clone_avgs[0]) / max(
+                        1, len(recent_clone_avgs) - 1
+                    )
+                    add_step = max(-0.7, min(0.2, add_step))
+                    next_avg = recent_clone_avgs[-1] + add_step
                 else:
-                    pct_per_step = max(-0.08, min(0.0, pct_per_step))
-                next_avg      = recent_clone_avgs[-1] * (1 + pct_per_step)
+                    pct_per_step  = (recent_clone_avgs[-1] / max(recent_clone_avgs[0], 1e-6)) - 1
+                    pct_per_step /= max(1, len(recent_clone_avgs) - 1)
+                    if metric == 'GAA':
+                        pct_per_step = max(-0.08, min(0.08, pct_per_step))
+                    else:
+                        pct_per_step = max(-0.08, min(0.0, pct_per_step))
+                    next_avg      = recent_clone_avgs[-1] * (1 + pct_per_step)
                 recent_clone_avgs.append(next_avg)
                 if len(recent_clone_avgs) > 3:
                     recent_clone_avgs.pop(0)
             elif len(recent_clone_avgs) == 1:
-                next_avg = recent_clone_avgs[0] * 0.92
+                next_avg = (
+                    recent_clone_avgs[0] - 0.3
+                    if metric == 'Save %'
+                    else recent_clone_avgs[0] * 0.92
+                )
                 recent_clone_avgs.append(next_avg)
             else:
                 next_avg = 0
@@ -268,7 +279,11 @@ def run_knn_projection(
             next_avg = 0
 
         # Update current_val via delta or pct_change
-        if metric in ['+/-', 'GAA', 'Save %']:
+        if metric == 'Save %':
+            delta = next_avg - last_avg
+            delta = max(-1.2, min(0.6, delta))
+            current_val += delta
+        elif metric in ['+/-', 'GAA']:
             current_val += (next_avg - last_avg)
         else:
             if last_avg > 0:
@@ -283,6 +298,17 @@ def run_knn_projection(
             current_val = max(0, current_val)
 
         current_val = _apply_stat_cap(current_val, metric, stat_category)
+
+        if metric == 'Save %' and stat_category == 'Goalie':
+            late_floor = {
+                36: 90.0,
+                37: 89.7,
+                38: 89.4,
+                39: 89.2,
+                40: 89.0,
+            }
+            if age in late_floor:
+                current_val = max(current_val, late_floor[age])
 
         proj_rows.append({
             "Age":      age,

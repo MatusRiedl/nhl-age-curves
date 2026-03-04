@@ -49,6 +49,21 @@ def load_historical_data() -> pd.DataFrame:
     try:
         if os.path.exists("nhl_historical_seasons.parquet"):
             df = pd.read_parquet("nhl_historical_seasons.parquet")
+            if "Position" not in df.columns:
+                df["Position"] = "S"
+
+            # Some historical parquet variants label all rows as skaters.
+            # When no explicit goalie rows exist, infer goalies from
+            # goalie-only counting stats so downstream Position=='G' filters work.
+            _pos = df["Position"].astype(str).str.upper()
+            if (_pos == "G").sum() == 0:
+                goalie_mask = pd.Series(False, index=df.index)
+                for col in ("Saves", "Wins", "Shutouts"):
+                    if col in df.columns:
+                        goalie_mask = goalie_mask | df[col].fillna(0).gt(0)
+                if goalie_mask.any():
+                    df.loc[goalie_mask, "Position"] = "G"
+
             df['PPG'] = df['Points'] / df['GP']
             df['Save %'] = df['SavePct'] * 100
             return df

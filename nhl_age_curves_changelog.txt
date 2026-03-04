@@ -208,3 +208,7 @@ v0.54.6 - Teams stats now corrected
 v0.55 - Added Trophies section
 ---------------------------------------------------------
 - CHANGED: Added Trophies section in comparison.
+
+v0.56 - Added Goalies predictions and Leagues
+---------------------------------------------------------
+- CHANGED: Added Goalies predictions and Leagues

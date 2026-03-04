@@ -24,8 +24,9 @@ from nhl.constants import TEAM_METRICS
 def build_historical_baselines(df: pd.DataFrame) -> dict:
     """Build 75th-percentile age-curve baselines for skaters and goalies.
 
-    Uses only seasons where the player appeared in >= 40 games to filter out
-    cup-of-coffee appearances that would drag down the percentile.
+    Uses role-specific GP thresholds to reduce low-sample noise:
+        - Skaters: GP >= 40
+        - Goalies: GP >= 20
 
     Survivorship bias corrections applied column-by-column for ages 32-41:
         Rule A: If baseline rises vs prior year, cap at prior * 0.92.
@@ -50,15 +51,20 @@ def build_historical_baselines(df: pd.DataFrame) -> dict:
     """
     if df.empty:
         return {}
-    full_time = df[df['GP'] >= 40]
+
+    goalie_df = df[(df['Position'] == 'G') & (df['GP'] >= 20)].copy()
+    # Historical scrape artifacts can produce impossible Save% outliers (>100).
+    # Clip only goalie Save% before quantiles so one bad row cannot warp the curve.
+    if 'Save %' in goalie_df.columns:
+        goalie_df['Save %'] = goalie_df['Save %'].clip(lower=80.0, upper=95.0)
 
     skater_base = (
-        full_time[full_time['Position'] != 'G']
+        df[(df['Position'] != 'G') & (df['GP'] >= 40)]
         .groupby('Age')
         .quantile(0.75, numeric_only=True)
     )
     goalie_base = (
-        full_time[full_time['Position'] == 'G']
+        goalie_df
         .groupby('Age')
         .quantile(0.75, numeric_only=True)
     )
@@ -99,6 +105,29 @@ def build_historical_baselines(df: pd.DataFrame) -> dict:
                         extrapolated = prev * slope
                         if base.loc[age, col] < extrapolated:
                             base.loc[age, col] = extrapolated
+
+    # Smooth abnormal mid-prime hump for goalie Save% (ages 29-31) by bridging
+    # between surrounding anchors when the hump is clearly out of family.
+    if (
+        'Save %' in goalie_base.columns
+        and all(a in goalie_base.index for a in (28, 29, 30, 31, 32))
+    ):
+        a28 = float(goalie_base.loc[28, 'Save %'])
+        a32 = float(goalie_base.loc[32, 'Save %'])
+        mids = [float(goalie_base.loc[a, 'Save %']) for a in (29, 30, 31)]
+        if any(v > max(a28, a32) + 1.5 for v in mids):
+            for age in (29, 30, 31):
+                t = (age - 28) / 4.0
+                goalie_base.loc[age, 'Save %'] = a28 + (a32 - a28) * t
+
+    # Enforce a realistic late-career goalie Save% tail:
+    # gradual decline from age 34 to 89.0 by age 40.
+    if 'Save %' in goalie_base.columns and all(a in goalie_base.index for a in (34, 40)):
+        start = float(goalie_base.loc[34, 'Save %'])
+        end = 89.0
+        for age in range(34, 41):
+            t = (age - 34) / 6.0
+            goalie_base.loc[age, 'Save %'] = start + (end - start) * t
 
     return {'Skater': skater_base, 'Goalie': goalie_base}
 

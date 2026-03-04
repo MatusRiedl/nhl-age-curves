@@ -233,7 +233,7 @@ with col_chart:
         team_mode            = team_mode,
         games_mode           = games_mode,
         do_cumul             = do_cumul,
-        do_base              = st.session_state.do_base and st.session_state.stat_category != "Goalie",
+        do_base              = st.session_state.do_base,
         do_smooth            = st.session_state.do_smooth,
         stat_category        = st.session_state.stat_category,
         historical_baselines = historical_baselines,
@@ -269,7 +269,7 @@ st.query_params.update(encode_state_to_params(st.session_state))
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.55 <br>"
+    "Created by Iksperial. v0.56 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,
