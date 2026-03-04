@@ -200,3 +200,7 @@ v0.54.4 - Live games fix
 v0.54.5 - Polish update
 ---------------------------------------------------------
 - CHANGED: Chart user interface update
+
+v0.54.6 - Teams stats now corrected
+---------------------------------------------------------
+- CHANGED: Play off and Regular work correctly now

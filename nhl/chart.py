@@ -137,12 +137,23 @@ def render_chart(
         st.info("Add players from the sidebar to get started.")
         return
 
+    # Team season-year hover should display season spans (e.g., 2024 -> 24-25)
+    if team_mode and not games_mode and "SeasonYear" in final_df.columns:
+        def _season_span_label(start_year: float) -> str:
+            try:
+                sy = int(start_year)
+                return f"{str(sy)[2:]}-{str(sy + 1)[2:]}"
+            except Exception:
+                return str(start_year)
+
+        final_df["SeasonLabel"] = final_df["SeasonYear"].apply(_season_span_label)
+
     # ------------------------------------------------------------------
     # Determine x-axis column and custom_data columns
     # ------------------------------------------------------------------
     if team_mode and not games_mode:
         x_col       = "SeasonYear"
-        custom_cols = ["BaseName", "Player"]
+        custom_cols = ["BaseName", "Player", "SeasonLabel"]
     elif games_mode:
         x_col       = "CumGP"
         custom_cols = ["BaseName", "Player", "Age"] if not team_mode else ["BaseName", "Player"]
@@ -246,7 +257,7 @@ def render_chart(
             line           = dict(width=4, shape='spline', smoothing=0.6),
             marker         = dict(size=8),
             hovertemplate  = (
-                f"<b>%{{customdata[1]}}</b><br>Season %{{x}}<br>"
+                f"<b>%{{customdata[1]}}</b><br>Season %{{customdata[2]}}<br>"
                 f"{metric}: %{{y:{_val_fmt}}}<extra></extra>"
             ),
         )
@@ -305,7 +316,7 @@ def render_chart(
         if team_mode and not games_mode:
             fig.update_traces(
                 hovertemplate=(
-                    f"<b>%{{customdata[1]}}</b><br>Season %{{x}}<br>%{{y:.1f}}%<extra></extra>"
+                    f"<b>%{{customdata[1]}}</b><br>Season %{{customdata[2]}}<br>%{{y:.1f}}%<extra></extra>"
                 )
             )
         else:
@@ -473,37 +484,61 @@ def render_chart(
         var s = parent.document.createElement('style');
         s.id = 'nhl-share-btn-style';
         s.textContent = [
-            '#nhl-share-btn {{',
-            '  position:absolute; left:10px; top:4px; z-index:1001;',
+            '.nhl-share-btn {{',
+            '  position:absolute; left:10px; z-index:1001;',
             '  cursor:pointer; padding:4px;',
             '  display:flex; align-items:center;',
+            '  gap:6px;',
             '  opacity:1; transition:opacity 0.2s, color 0.3s;',
             '  color:#c0c0c0;',
             '  background:none;',
+            '  font-size:13px; font-weight:600;',
             '}}',
-            '#nhl-share-btn:hover {{ color:#ffffff; }}',
-            '#nhl-share-btn svg {{ width:22px; height:22px; display:block; }}',
+            '.nhl-share-btn:hover {{ color:#ffffff; }}',
+            '.nhl-share-btn svg {{ width:22px; height:22px; display:block; }}',
             '@media (max-width:768px) {{',
-            '  #nhl-share-btn {{ padding:3px 5px; }}',
-            '  #nhl-share-btn svg {{ width:14px; height:14px; }}',
+            '  .nhl-share-btn {{ padding:3px 5px; gap:4px; font-size:11px; }}',
+            '  .nhl-share-btn svg {{ width:14px; height:14px; }}',
             '}}',
         ].join('');
         parent.document.head.appendChild(s);
     }}
 
+    function positionShareBtn(plot, btn, parent) {{
+        // Keep the button centered in the top gutter above the plotting area.
+        var topGutter = 40;
+        if (
+            plot && plot._fullLayout && plot._fullLayout._size &&
+            typeof plot._fullLayout._size.t === 'number'
+        ) {{
+            topGutter = plot._fullLayout._size.t;
+        }} else if (
+            plot && plot.layout && plot.layout.margin &&
+            typeof plot.layout.margin.t === 'number'
+        ) {{
+            topGutter = plot.layout.margin.t;
+        }}
+
+        var fallbackHeight = ((parent.innerWidth || 1024) <= 768) ? 20 : 28;
+        var btnHeight = btn.offsetHeight || fallbackHeight;
+        var topPx = Math.max(4, Math.round((topGutter - btnHeight) / 2));
+        btn.style.top = topPx + 'px';
+    }}
+
     function addShareBtn(plot, parent) {{
-        var existing = parent.document.getElementById('nhl-share-btn');
+        var existing = plot.querySelector('.nhl-share-btn');
         if (existing) existing.remove();
 
         var btn = parent.document.createElement('div');
-        btn.id = 'nhl-share-btn';
+        btn.className = 'nhl-share-btn';
         btn.title = 'Copy share link';
         btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"'
             + ' fill="none" stroke="currentColor" stroke-width="2"'
             + ' stroke-linecap="round" stroke-linejoin="round">'
             + '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>'
             + '<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'
-            + '</svg>';
+            + '</svg>'
+            + '<span>Copy link</span>';
 
         btn.addEventListener('click', function() {{
             var url = parent.location.href;
@@ -528,6 +563,7 @@ def render_chart(
 
         plot.style.position = 'relative';
         plot.appendChild(btn);
+        positionShareBtn(plot, btn, parent);
     }}
 
 
@@ -541,12 +577,14 @@ def render_chart(
 
         // Inject share button
         injectShareStyles(parent);
-        if (plots.length) addShareBtn(plots[0], parent);
+        if (plots.length) plots.forEach(function(p) {{ addShareBtn(p, parent); }});
 
         parent.addEventListener('resize', function() {{
             parent.document.querySelectorAll('.js-plotly-plot').forEach(function(p) {{
                 var range = getCurrentXRange(p);
                 Plotly.relayout(p, {{'xaxis.dtick': calcDtick(p.offsetWidth || parent.innerWidth, range), 'xaxis.tickangle': (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45}});
+                var btn = p.querySelector('.nhl-share-btn');
+                if (btn) positionShareBtn(p, btn, parent);
             }});
         }});
     }}

@@ -59,7 +59,8 @@ def load_historical_data() -> pd.DataFrame:
 def load_all_team_seasons() -> pd.DataFrame:
     """Fetch all team-season records from the NHL stats REST API.
 
-    The summary endpoint returns regular-season data with powerPlayPct included.
+    Fetches regular-season and playoff rows separately (gameTypeId 2 and 3),
+    then concatenates them into one table with an explicit gameTypeId column.
     teamAbbrev (triCode) is joined from the separate team-list endpoint.
     Permanently cached — historical records don't change.
 
@@ -75,19 +76,33 @@ def load_all_team_seasons() -> pd.DataFrame:
             if "id" in t and "triCode" in t
         }
 
-        # Fetch all team-season summary rows
-        resp = requests.get(TEAM_STATS_URL, params={"limit": -1}, timeout=30)
-        resp.raise_for_status()
-        summary_rows = resp.json().get("data", [])
-        if not summary_rows:
+        def _fetch_team_summary_by_type(game_type_id: int) -> pd.DataFrame:
+            """Fetch team/summary rows filtered by game type."""
+            try:
+                resp = requests.get(
+                    TEAM_STATS_URL,
+                    params={"limit": -1, "cayenneExp": f"gameTypeId={game_type_id}"},
+                    timeout=30,
+                )
+                resp.raise_for_status()
+                rows = resp.json().get("data", [])
+                if not rows:
+                    return pd.DataFrame()
+                dfx = pd.DataFrame(rows)
+                dfx["gameTypeId"] = game_type_id
+                return dfx
+            except Exception:
+                return pd.DataFrame()
+
+        # Fetch regular season and playoffs separately.
+        reg_df = _fetch_team_summary_by_type(2)
+        ply_df = _fetch_team_summary_by_type(3)
+        if reg_df.empty and ply_df.empty:
             return pd.DataFrame()
-        df = pd.DataFrame(summary_rows)
+        df = pd.concat([d for d in (reg_df, ply_df) if not d.empty], ignore_index=True)
 
         # Attach teamAbbrev from the triCode map
         df["teamAbbrev"] = df["teamId"].map(id_to_tricode)
-        # Tag as regular season (this endpoint serves regular-season data by default)
-        df["gameTypeId"] = 2
-
         # Derive columns
         df["SeasonYear"] = df["seasonId"] // 10000
         df["GP"]     = df["gamesPlayed"]
