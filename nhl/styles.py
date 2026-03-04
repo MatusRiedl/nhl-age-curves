@@ -235,6 +235,49 @@ _CSS = """
             font-size: 12px;
         }
 
+        /* Comparison tab row (native st.tabs) */
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] {
+            margin-top: -2px !important;
+        }
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-list"] {
+            gap: 0.35rem !important;
+            flex-wrap: wrap !important;
+            margin-bottom: 0.3rem !important;
+            min-height: 38px !important;
+            align-items: center !important;
+            border-bottom: 0 !important;
+        }
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-border"] {
+            display: none !important;
+        }
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] button[role="tab"] {
+            margin: 0 !important;
+            border: 1px solid #2a2a2a !important;
+            border-radius: 999px !important;
+            background: rgba(17, 24, 39, 0.7) !important;
+            padding: 4px 10px !important;
+            min-height: 0 !important;
+            height: auto !important;
+        }
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] button[role="tab"] p {
+            margin: 0 !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            color: #d9d9d9 !important;
+        }
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+            border-color: #ff4b4b !important;
+            background: rgba(255, 75, 75, 0.14) !important;
+        }
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-panel"] {
+            padding-top: 0.1rem !important;
+        }
+        @media (max-width: 768px) {
+            div:has(> #comparison-tabs) + div [data-testid="stTabs"] button[role="tab"] {
+                padding: 3px 8px !important;
+            }
+        }
+
         /* Responsive: stack chart and stats panel vertically on mobile */
         @media screen and (max-width: 768px) {
             .main [data-testid="stHorizontalBlock"] {

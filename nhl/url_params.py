@@ -12,7 +12,10 @@ Provides two public functions:
 Player entries are encoded as semicolon-separated "id|name" pairs.
 Team entries use the same format with abbreviation instead of numeric id.
 Setting st.query_params does not trigger a Streamlit rerun (Streamlit 1.30+).
+Panel tab selections are encoded per category via pt_s / pt_g / pt_t.
 """
+
+import re
 
 _VALID_SKATER_METRICS = {"Points", "Goals", "Assists", "+/-", "GP", "PPG", "SH%", "PIM", "TOI"}
 _VALID_GOALIE_METRICS = {"Save %", "GAA", "Shutouts", "Wins", "GP", "Saves"}
@@ -31,6 +34,20 @@ _BOOL_PARAMS = {
     "cu":  "do_cumul_toggle",
     "bl":  "do_base",
 }
+
+
+def _sanitize_panel_tab(value: str) -> str:
+    """Validate and normalize comparison-panel tab IDs from session/URL."""
+    if value is None:
+        return "overview"
+    v = str(value).strip().lower()
+    if not v:
+        return "overview"
+    if len(v) > 32:
+        return "overview"
+    if not re.fullmatch(r"[a-z0-9_-]+", v):
+        return "overview"
+    return v
 
 
 def encode_state_to_params(ss) -> dict:
@@ -60,6 +77,10 @@ def encode_state_to_params(ss) -> dict:
 
     for url_key, ss_key in _BOOL_PARAMS.items():
         params[url_key] = "1" if ss.get(ss_key) else "0"
+
+    params["pt_s"] = _sanitize_panel_tab(ss.get("panel_tab_skater", "overview"))
+    params["pt_g"] = _sanitize_panel_tab(ss.get("panel_tab_goalie", "overview"))
+    params["pt_t"] = _sanitize_panel_tab(ss.get("panel_tab_team", "overview"))
 
     pl = ss.get("players") or {}
     if pl:
@@ -113,6 +134,13 @@ def apply_params_to_state(params: dict, ss) -> None:
     for url_key, ss_key in _BOOL_PARAMS.items():
         if url_key in params:
             ss[ss_key] = params[url_key] == "1"
+
+    if "pt_s" in params:
+        ss["panel_tab_skater"] = _sanitize_panel_tab(params["pt_s"])
+    if "pt_g" in params:
+        ss["panel_tab_goalie"] = _sanitize_panel_tab(params["pt_g"])
+    if "pt_t" in params:
+        ss["panel_tab_team"] = _sanitize_panel_tab(params["pt_t"])
 
     # Decode unified players param; also accept legacy sk/go params for backward compat.
     _players = {}

@@ -15,7 +15,7 @@ Module responsibilities:
     nhl.player_pipeline — process_players(): full per-player data pipeline
     nhl.team_pipeline   — process_teams(): per-team data pipeline
     nhl.chart           — render_chart(): Plotly figure + JS clamping + click dialog
-    nhl.comparison      — render_comparison_panel(): right-column player stat cards
+    nhl.comparison      — render_comparison_area(): tabbed right-column comparison panel
 """
 
 import streamlit as st
@@ -26,7 +26,7 @@ from nhl.baselines import build_historical_baselines, build_team_baselines
 from nhl.chart import render_chart
 from nhl.constants import ACTIVE_TEAMS
 from nhl.controls import render_controls
-from nhl.comparison import render_comparison_panel, render_team_comparison_panel
+from nhl.comparison import render_comparison_area
 from nhl.data_loaders import (
     get_clone_details_map,
     get_id_to_name_map,
@@ -76,6 +76,9 @@ if 'x_axis_mode'       not in st.session_state: st.session_state.x_axis_mode    
 if 'league_filter'     not in st.session_state: st.session_state.league_filter     = ['NHL']
 if 'team_sel_abbr'     not in st.session_state:
     st.session_state.team_sel_abbr = list(ACTIVE_TEAMS.keys())[0]
+if 'panel_tab_skater'  not in st.session_state: st.session_state.panel_tab_skater  = "overview"
+if 'panel_tab_goalie'  not in st.session_state: st.session_state.panel_tab_goalie  = "overview"
+if 'panel_tab_team'    not in st.session_state: st.session_state.panel_tab_team    = "overview"
 
 # =============================================================================
 # Auto-populate from live/recent NHL game — fires once per session, only when
@@ -243,20 +246,16 @@ with col_chart:
 
 if col_stats is not None:
     with col_stats:
-        if team_mode:
-            render_team_comparison_panel(
-                active_teams = st.session_state.teams,
-                metric       = metric,
-            )
-        else:
-            render_comparison_panel(
-                processed_dfs = processed_dfs,
-                players       = active_players,
-                peak_info     = peak_info,
-                metric        = metric,
-                stat_category = st.session_state.stat_category,
-                season_type   = st.session_state.season_type,
-            )
+        render_comparison_area(
+            processed_dfs = processed_dfs,
+            players       = active_players,
+            teams         = st.session_state.teams,
+            peak_info     = peak_info,
+            metric        = metric,
+            stat_category = st.session_state.stat_category,
+            season_type   = st.session_state.season_type,
+            team_mode     = team_mode,
+        )
 
 # =============================================================================
 # Sync current state to URL (does not trigger a rerun in Streamlit 1.30+)
@@ -270,7 +269,7 @@ st.query_params.update(encode_state_to_params(st.session_state))
 st.markdown("---")
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.54.6 <br>"
+    "Created by Iksperial. v0.55 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

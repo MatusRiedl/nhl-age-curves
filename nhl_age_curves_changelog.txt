@@ -204,3 +204,7 @@ v0.54.5 - Polish update
 v0.54.6 - Teams stats now corrected
 ---------------------------------------------------------
 - CHANGED: Play off and Regular work correctly now
+
+v0.55 - Added Trophies section
+---------------------------------------------------------
+- CHANGED: Added Trophies section in comparison.

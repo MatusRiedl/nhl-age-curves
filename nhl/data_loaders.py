@@ -504,6 +504,93 @@ def get_player_hero_image(player_id: int) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Awards / trophies
+# ---------------------------------------------------------------------------
+
+@st.cache_data(ttl=3600)
+def get_player_awards(player_id: int) -> list:
+    """Return the player's awards list from the NHL landing endpoint.
+
+    Args:
+        player_id: Numeric NHL player ID.
+
+    Returns:
+        List of award dicts (possibly empty). Returns [] on API failure.
+    """
+    try:
+        res = requests.get(STATS_URL.format(player_id), timeout=5).json()
+        awards = res.get('awards', [])
+        return awards if isinstance(awards, list) else []
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=3600)
+def get_team_trophy_summary() -> dict:
+    """Return team trophy summary keyed by tricode (Stanley Cup count + latest season).
+
+    Source endpoint:
+        records.nhl.com franchise-team-totals
+        records.nhl.com franchise-season-results
+
+    Returns:
+        Dict of {triCode: {'stanley_cups': int, 'latest_cup_season': int | None}}
+        for active NHL teams.
+        Returns {} on failure.
+    """
+    try:
+        totals_url = "https://records.nhl.com/site/api/franchise-team-totals?limit=2000"
+        totals_rows = requests.get(totals_url, timeout=15).json().get("data", [])
+        result: dict = {}
+        for row in totals_rows:
+            if not isinstance(row, dict):
+                continue
+            if not row.get("activeTeam"):
+                continue
+            if int(row.get("gameTypeId", 0) or 0) != 2:
+                continue
+            tri = str(row.get("triCode", "")).strip().upper()
+            if not tri:
+                continue
+            cups = row.get("cups")
+            try:
+                cups_int = int(cups) if cups is not None else 0
+            except Exception:
+                cups_int = 0
+            result[tri] = {"stanley_cups": cups_int, "latest_cup_season": None}
+
+        # Derive latest Stanley Cup season per team from SCF-winning rows.
+        # Some seasons appear twice (gameTypeId 2 and 3), so dedupe by seasonId.
+        seasons_url = "https://records.nhl.com/site/api/franchise-season-results?limit=5000"
+        season_rows = requests.get(seasons_url, timeout=20).json().get("data", [])
+        cup_seasons: dict[str, set[int]] = {}
+        for row in season_rows:
+            if not isinstance(row, dict):
+                continue
+            tri = str(row.get("triCode", "")).strip().upper()
+            if not tri:
+                continue
+            if str(row.get("seriesAbbrev", "")).strip().upper() != "SCF":
+                continue
+            if str(row.get("decision", "")).strip().upper() != "W":
+                continue
+            sid = row.get("seasonId")
+            try:
+                sid_int = int(sid)
+            except Exception:
+                continue
+            cup_seasons.setdefault(tri, set()).add(sid_int)
+
+        for tri, data in result.items():
+            seasons = cup_seasons.get(tri)
+            if seasons:
+                data["latest_cup_season"] = max(seasons)
+        return result
+    except Exception:
+        return {}
+
+
+# ---------------------------------------------------------------------------
 # Per-player raw stats
 # ---------------------------------------------------------------------------
 

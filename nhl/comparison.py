@@ -1,32 +1,147 @@
 """
-nhl.comparison -- Right-column player comparison panel for the NHL Age Curves app.
+nhl.comparison -- Tabbed right-column comparison panel for the NHL Age Curves app.
 
-Renders one stat card per selected player showing a full-body hero image,
-career counting stats totals, all-time ranking, and best season highlight.
-Imported and called from app.py whenever players are loaded (always visible).
+Renders a native Streamlit st.tabs row above the comparison cards:
+    - Overview: existing player/team stat cards
+    - Trophies: awards/cup summary cards
 
-Imports from project:
-    nhl.data_loaders  -- get_player_hero_image(), get_player_current_team(),
-                         get_player_career_rank()
+Imported and called from app.py when chart data exists.
 """
+
+from dataclasses import dataclass
+from typing import Callable
 
 import streamlit as st
 
 from nhl.constants import TEAM_FOUNDED
 from nhl.data_loaders import (
+    get_player_awards,
     get_player_career_rank,
     get_player_current_team,
     get_player_hero_image,
     get_player_roster_info,
     get_team_all_time_stats,
+    get_team_trophy_summary,
 )
 
 _TEAM_LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbr}_light.svg"
+_DEFAULT_PANEL_TAB = "overview"
+_CATEGORY_TAB_KEYS = {
+    "Skater": "panel_tab_skater",
+    "Goalie": "panel_tab_goalie",
+    "Team": "panel_tab_team",
+}
 
 
+@dataclass(frozen=True)
+class PanelTabSpec:
+    """Definition of one comparison panel tab."""
+
+    id: str
+    label: str
+    render_player: Callable[..., None]
+    render_team: Callable[..., None]
 
 
-def render_comparison_panel(
+def _season_span_label_from_id(season_id: int | None) -> str:
+    """Convert seasonId (e.g. 20222023) to a short span (2022-23)."""
+    if season_id is None:
+        return "?"
+    try:
+        raw = int(season_id)
+        raw_str = str(raw)
+        if len(raw_str) >= 8:
+            start = int(raw_str[:4])
+        else:
+            start = raw
+        return f"{start}-{str(start + 1)[2:]}"
+    except Exception:
+        return "?"
+
+
+def _get_category_tab_key(stat_category: str) -> str:
+    return _CATEGORY_TAB_KEYS.get(stat_category, "panel_tab_skater")
+
+
+def get_panel_tab_ids() -> set[str]:
+    """Return all registered panel tab IDs."""
+    return {t.id for t in _PANEL_TABS}
+
+
+def _iter_visible_players_for_category(processed_dfs: list, players: dict):
+    """Yield selected players that are visible in the current category pipeline."""
+    proc_lookup: dict = {}
+    for proc_df in processed_dfs:
+        if proc_df.empty or "BaseName" not in proc_df.columns or "Player" not in proc_df.columns:
+            continue
+        base = proc_df["BaseName"].iloc[0]
+        proc_lookup[base] = proc_df
+
+    # Preserve insertion order from the selected players dict.
+    for pid, name in players.items():
+        proc_df = proc_lookup.get(name)
+        if proc_df is None:
+            continue
+        real = proc_df[~proc_df["Player"].str.contains(r"\(Proj\)", na=False)]
+        if real.empty:
+            continue
+        yield pid, name, proc_df
+
+
+def render_comparison_area(
+    processed_dfs: list,
+    players: dict,
+    teams: dict,
+    peak_info: dict,
+    metric: str,
+    stat_category: str,
+    season_type: str,
+    team_mode: bool,
+) -> None:
+    """Render tabs and comparison tab contents."""
+    tab_lookup = {tab.id: tab for tab in _PANEL_TABS}
+    tab_ids = list(tab_lookup.keys())
+    if not tab_ids:
+        st.info("No comparison tabs configured.")
+        return
+
+    tab_key = _get_category_tab_key(stat_category)
+    if tab_key not in st.session_state:
+        st.session_state[tab_key] = _DEFAULT_PANEL_TAB
+
+    if st.session_state[tab_key] not in tab_lookup:
+        st.session_state[tab_key] = _DEFAULT_PANEL_TAB
+
+    default_tab_id = st.session_state.get(tab_key, _DEFAULT_PANEL_TAB)
+    default_tab = tab_lookup.get(default_tab_id, tab_lookup[_DEFAULT_PANEL_TAB])
+    default_label = default_tab.label
+
+    st.markdown("<div id='comparison-tabs'></div>", unsafe_allow_html=True)
+    tab_containers = st.tabs(
+        [tab_lookup[tab_id].label for tab_id in tab_ids],
+        default=default_label,
+    )
+
+    for tab_id, tab_container in zip(tab_ids, tab_containers):
+        tab_spec = tab_lookup[tab_id]
+        with tab_container:
+            if team_mode:
+                tab_spec.render_team(
+                    active_teams=teams,
+                    metric=metric,
+                )
+            else:
+                tab_spec.render_player(
+                    processed_dfs=processed_dfs,
+                    players=players,
+                    peak_info=peak_info,
+                    metric=metric,
+                    stat_category=stat_category,
+                    season_type=season_type,
+                )
+
+
+def _render_overview_players(
     processed_dfs: list,
     players: dict,
     peak_info: dict,
@@ -34,77 +149,28 @@ def render_comparison_panel(
     stat_category: str,
     season_type: str,
 ) -> None:
-    """Render the right-column player comparison panel.
-
-    Displays one stat card per player stacked vertically. Each card shows a
-    full-body hero image on the left and on the right: player name with current
-    team logo, career totals, all-time career rank (by player ID lookup), and
-    best season highlight. All text rows are packed into one HTML block to
-    eliminate Streamlit's default inter-paragraph gaps.
-
-    Args:
-        processed_dfs: List of per-player DataFrames from process_players().
-            Each DataFrame contains post-pipeline stats with a BaseName column.
-        players: Dict mapping player ID (int or str) to display name (str).
-        peak_info: Dict mapping base_name (str) to peak season metadata dict
-            with keys: age, season_year, y, raw_peak_val, pid.
-        metric: Currently selected stat metric label (e.g., 'Points', 'Goals', 'Assists').
-            Controls the all-time ranking stat (Points/Goals/Assists for skaters; Wins for
-            goalies always) and the rank badge label in each player card.
-        stat_category: 'Skater' or 'Goalie' — controls which counting stats
-            are shown in career totals and which stat is used for ranking.
-        season_type: 'Regular', 'Playoffs', or 'Both' — passed to the rank
-            function so rankings match the active season filter.
-    """
+    """Overview tab: existing right-column player comparison cards."""
     is_goalie = stat_category == "Goalie"
-    _RANK_SUFFIX_MAP = {"Goals": "Goals", "Assists": "Assists", "Points": "Points"}
-    rank_suffix = "Wins" if is_goalie else _RANK_SUFFIX_MAP.get(metric, "Points")
+    rank_suffix_map = {"Goals": "Goals", "Assists": "Assists", "Points": "Points"}
+    rank_suffix = "Wins" if is_goalie else rank_suffix_map.get(metric, "Points")
 
-    # Build lookup: base_name -> proc_df for fast access
-    proc_lookup: dict = {}
-    for proc_df in processed_dfs:
-        if proc_df.empty or 'BaseName' not in proc_df.columns:
-            continue
-        base = proc_df['BaseName'].iloc[0]
-        proc_lookup[base] = proc_df
+    for pid, name, proc_df in _iter_visible_players_for_category(processed_dfs, players):
+        real = proc_df[~proc_df["Player"].str.contains(r"\(Proj\)", na=False)]
 
-    for pid, name in players.items():
-        proc_df = proc_lookup.get(name)
-        if proc_df is None:
-            continue
-
-        # Real (non-projected) seasons only
-        real = proc_df[~proc_df['Player'].str.contains(r'\(Proj\)', na=False)]
-        if real.empty:
-            continue
-
-        hero_url  = get_player_hero_image(int(pid))
+        hero_url = get_player_hero_image(int(pid))
         team_abbr = get_player_current_team(int(pid))
         logo_html = (
             f"<img src='{_TEAM_LOGO_URL.format(abbr=team_abbr)}' "
             f"height='18' style='vertical-align:middle;margin-left:6px;opacity:0.9;'>"
-            if team_abbr else ""
+            if team_abbr
+            else ""
         )
 
-        # Career totals from post-pipeline processed data
-        career_gp = int(real['GP'].sum()) if 'GP' in real.columns else 0
+        career_gp = int(real["GP"].sum()) if "GP" in real.columns else 0
         if is_goalie:
-            career_w  = int(real['Wins'].sum())     if 'Wins'     in real.columns else 0
-            career_so = int(real['Shutouts'].sum())  if 'Shutouts' in real.columns else 0
-            career_sv = int(real['Saves'].sum())    if 'Saves'    in real.columns else 0
-        else:
-            career_g  = int(real['Goals'].sum())    if 'Goals'   in real.columns else 0
-            career_a  = int(real['Assists'].sum())   if 'Assists' in real.columns else 0
-            career_pt = int(real['Points'].sum())    if 'Points'  in real.columns else 0
-
-        # All-time rank by playerId — exact lookup, no value drift
-        rank = get_player_career_rank(int(pid), stat_category, season_type, metric)
-
-        # Best season from peak_info (metric-aware, pre-computed by pipeline)
-        peak = peak_info.get(name)
-
-        # Build stat rows HTML (conditionally include rank and best season)
-        if is_goalie:
+            career_w = int(real["Wins"].sum()) if "Wins" in real.columns else 0
+            career_so = int(real["Shutouts"].sum()) if "Shutouts" in real.columns else 0
+            career_sv = int(real["Saves"].sum()) if "Saves" in real.columns else 0
             stats_row = (
                 f"W:&nbsp;{career_w} &nbsp;|&nbsp; "
                 f"SO:&nbsp;{career_so} &nbsp;|&nbsp; "
@@ -112,6 +178,9 @@ def render_comparison_panel(
                 f"GP:&nbsp;{career_gp}"
             )
         else:
+            career_g = int(real["Goals"].sum()) if "Goals" in real.columns else 0
+            career_a = int(real["Assists"].sum()) if "Assists" in real.columns else 0
+            career_pt = int(real["Points"].sum()) if "Points" in real.columns else 0
             stats_row = (
                 f"G:&nbsp;{career_g} &nbsp;|&nbsp; "
                 f"A:&nbsp;{career_a} &nbsp;|&nbsp; "
@@ -119,47 +188,46 @@ def render_comparison_panel(
                 f"GP:&nbsp;{career_gp}"
             )
 
+        rank = get_player_career_rank(int(pid), stat_category, season_type, metric)
         rank_row = ""
         if rank is not None:
             rank_row = (
-                f"<br><span style='font-size:14px;color:#4caf50;font-weight:bold;'>"
+                "<br><span style='font-size:14px;color:#4caf50;font-weight:bold;'>"
                 f"#{rank} all-time {rank_suffix}"
-                f"</span>"
+                "</span>"
             )
 
+        peak = peak_info.get(name)
         best_row = ""
         if peak:
-            age = peak.get('age', '?')
-            sy  = peak.get('season_year')
-            val = peak.get('y')
-
-            peak_row_df = real[real['Age'] == age]
+            age = peak.get("age", "?")
+            sy = peak.get("season_year")
+            val = peak.get("y")
+            peak_row_df = real[real["Age"] == age]
             peak_gp = (
-                int(peak_row_df['GP'].iloc[0])
-                if not peak_row_df.empty and 'GP' in peak_row_df.columns
-                else '?'
+                int(peak_row_df["GP"].iloc[0])
+                if not peak_row_df.empty and "GP" in peak_row_df.columns
+                else "?"
             )
-            sy_str = f"{sy - 1}-{str(sy)[2:]}" if sy else '?'
+            sy_str = f"{sy - 1}-{str(sy)[2:]}" if sy else "?"
             if val is None:
-                val_str = '?'
+                val_str = "?"
             elif isinstance(val, float) and val % 1 != 0:
                 val_str = f"{val:.2f}"
             else:
                 val_str = str(int(val))
 
-            # Map metric to short display label
-            _METRIC_SHORT_MAP = {"Points": "Pts", "Goals": "G", "Assists": "A"}
-            metric_short = _METRIC_SHORT_MAP.get(metric, metric)
+            metric_short_map = {"Points": "Pts", "Goals": "G", "Assists": "A"}
+            metric_short = metric_short_map.get(metric, metric)
             best_row = (
-                f"<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
+                "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
                 f"Best: Age&nbsp;{age} ({sy_str})"
-                f" &mdash; {val_str}&nbsp;{metric_short} in {peak_gp}&nbsp;GP"
-                f"</span>"
+                f" -- {val_str}&nbsp;{metric_short} in {peak_gp}&nbsp;GP"
+                "</span>"
             )
 
         with st.container():
             img_col, stat_col = st.columns([1, 2], gap="small")
-
             with img_col:
                 if hero_url:
                     st.image(hero_url, use_container_width=True)
@@ -167,8 +235,8 @@ def render_comparison_panel(
             with stat_col:
                 roster_info = get_player_roster_info(int(pid))
                 if roster_info:
-                    pos = roster_info['position']
-                    num = roster_info['sweater_number']
+                    pos = roster_info["position"]
+                    num = roster_info["sweater_number"]
                     name_html = (
                         f"<span style='color:#aaa;font-size:13px;'>[{pos}]</span> "
                         f"<strong>{name}</strong> "
@@ -176,13 +244,14 @@ def render_comparison_panel(
                     )
                 else:
                     name_html = f"<strong>{name}</strong>"
+
                 st.markdown(
-                    f"<div style='line-height:1.4;margin:0;padding:0;'>"
+                    "<div style='line-height:1.4;margin:0;padding:0;'>"
                     f"{name_html}{logo_html}<br>"
                     f"{stats_row}"
                     f"{rank_row}"
                     f"{best_row}"
-                    f"</div>",
+                    "</div>",
                     unsafe_allow_html=True,
                 )
 
@@ -192,20 +261,8 @@ def render_comparison_panel(
         )
 
 
-def render_team_comparison_panel(active_teams: dict, metric: str) -> None:
-    """Render the right-column team comparison panel.
-
-    Displays one card per selected team: logo image (left column), franchise
-    name with founding year, career totals (W / Pts / GF / GP), all-time wins
-    rank badge in green, and best single season by wins. Mirrors the structure
-    of render_comparison_panel() for players.
-
-    Args:
-        active_teams: Dict mapping team abbreviation (str) to full team name
-            (str). Typically st.session_state.teams.
-        metric: Currently selected metric string (reserved for future
-            metric-aware ranking; not used in current card layout).
-    """
+def _render_overview_teams(active_teams: dict, metric: str) -> None:
+    """Overview tab: existing right-column team comparison cards."""
     team_stats = get_team_all_time_stats()
 
     for abbr, full_name in active_teams.items():
@@ -213,17 +270,16 @@ def render_team_comparison_panel(active_teams: dict, metric: str) -> None:
         if not stats:
             continue
 
-        founded   = TEAM_FOUNDED.get(abbr, '')
-        logo_url  = _TEAM_LOGO_URL.format(abbr=abbr)
-
-        total_w   = stats['total_wins']
-        total_pts = stats['total_points']
-        total_gf  = stats['total_goals']
-        total_gp  = stats['total_gp']
-        wins_rank = stats['wins_rank']
-        best_year = stats['best_year']
-        best_wins = stats['best_wins']
-        best_gp   = stats['best_gp']
+        founded = TEAM_FOUNDED.get(abbr, "")
+        logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
+        total_w = stats["total_wins"]
+        total_pts = stats["total_points"]
+        total_gf = stats["total_goals"]
+        total_gp = stats["total_gp"]
+        wins_rank = stats["wins_rank"]
+        best_year = stats["best_year"]
+        best_wins = stats["best_wins"]
+        best_gp = stats["best_gp"]
 
         name_html = (
             f"<strong>{full_name}</strong> "
@@ -236,30 +292,30 @@ def render_team_comparison_panel(active_teams: dict, metric: str) -> None:
             f"GP:&nbsp;{total_gp:,}"
         )
         rank_row = (
-            f"<br><span style='font-size:14px;color:#4caf50;font-weight:bold;'>"
+            "<br><span style='font-size:14px;color:#4caf50;font-weight:bold;'>"
             f"#{wins_rank} all-time Wins"
-            f"</span>"
+            "</span>"
         )
         best_row = ""
         if best_year and best_wins is not None:
-            sy_str   = f"{best_year - 1}-{str(best_year)[2:]}"
+            sy_str = f"{best_year - 1}-{str(best_year)[2:]}"
             best_row = (
-                f"<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
-                f"Best: {sy_str} &mdash; {best_wins}&nbsp;W in {best_gp}&nbsp;GP"
-                f"</span>"
+                "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
+                f"Best: {sy_str} -- {best_wins}&nbsp;W in {best_gp}&nbsp;GP"
+                "</span>"
             )
 
         with st.container():
             st.markdown(
-                f"<div style='display:flex;align-items:flex-start;gap:14px;margin:4px 0;'>"
+                "<div style='display:flex;align-items:flex-start;gap:14px;margin:4px 0;'>"
                 f"<img src='{logo_url}' style='width:80px;flex-shrink:0;object-fit:contain;'>"
-                f"<div style='line-height:1.4;'>"
+                "<div style='line-height:1.4;'>"
                 f"{name_html}<br>"
                 f"{stats_row}"
                 f"{rank_row}"
                 f"{best_row}"
-                f"</div>"
-                f"</div>",
+                "</div>"
+                "</div>",
                 unsafe_allow_html=True,
             )
 
@@ -267,3 +323,210 @@ def render_team_comparison_panel(active_teams: dict, metric: str) -> None:
             "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
             unsafe_allow_html=True,
         )
+
+
+def _summarize_player_awards(awards: list[dict]) -> list[dict]:
+    """Aggregate raw landing-page awards list by trophy name."""
+    summary: dict[str, dict] = {}
+    for award in awards:
+        if not isinstance(award, dict):
+            continue
+        trophy_field = award.get("trophy")
+        if isinstance(trophy_field, dict):
+            trophy_name = trophy_field.get("default") or trophy_field.get("fr")
+        else:
+            trophy_name = str(trophy_field or "").strip()
+        if not trophy_name:
+            continue
+
+        seasons = award.get("seasons")
+        if not isinstance(seasons, list):
+            seasons = []
+        season_ids: list[int] = []
+        for season in seasons:
+            if not isinstance(season, dict):
+                continue
+            sid = season.get("seasonId")
+            if sid is None:
+                continue
+            try:
+                season_ids.append(int(sid))
+            except Exception:
+                continue
+
+        wins_here = len(season_ids) if season_ids else 1
+        item = summary.setdefault(trophy_name, {"count": 0, "latest": None})
+        item["count"] += wins_here
+        if season_ids:
+            latest = max(season_ids)
+            if item["latest"] is None or latest > item["latest"]:
+                item["latest"] = latest
+
+    rows = [
+        {"trophy": trophy, "count": data["count"], "latest": data["latest"]}
+        for trophy, data in summary.items()
+    ]
+    rows.sort(key=lambda x: (-x["count"], -(x["latest"] or 0), x["trophy"]))
+    return rows
+
+
+def _render_trophies_players(
+    processed_dfs: list,
+    players: dict,
+    peak_info: dict,
+    metric: str,
+    stat_category: str,
+    season_type: str,
+) -> None:
+    """Trophies tab for skater/goalie categories."""
+    del peak_info, metric, stat_category, season_type
+
+    for pid, name, _ in _iter_visible_players_for_category(processed_dfs, players):
+        hero_url = get_player_hero_image(int(pid))
+        team_abbr = get_player_current_team(int(pid))
+        logo_html = (
+            f"<img src='{_TEAM_LOGO_URL.format(abbr=team_abbr)}' "
+            f"height='18' style='vertical-align:middle;margin-left:6px;opacity:0.9;'>"
+            if team_abbr
+            else ""
+        )
+
+        roster_info = get_player_roster_info(int(pid))
+        if roster_info:
+            pos = roster_info["position"]
+            num = roster_info["sweater_number"]
+            name_html = (
+                f"<span style='color:#aaa;font-size:13px;'>[{pos}]</span> "
+                f"<strong>{name}</strong> "
+                f"<span style='color:#aaa;font-size:13px;'>#{num}</span>"
+            )
+        else:
+            name_html = f"<strong>{name}</strong>"
+
+        awards = get_player_awards(int(pid))
+        award_rows = _summarize_player_awards(awards)
+
+        lines: list[str] = []
+        for row in award_rows[:8]:
+            latest = row["latest"]
+            latest_str = (
+                f" (latest { _season_span_label_from_id(latest) })"
+                if latest is not None
+                else ""
+            )
+            lines.append(
+                f"<span style='font-size:14px;color:#ddd;'>"
+                f"{row['trophy']}: <strong>x{row['count']}</strong>{latest_str}"
+                f"</span>"
+            )
+        if not lines:
+            lines.append(
+                "<span style='font-size:14px;color:#999;font-weight:bold;'>"
+                "No trophy data available."
+                "</span>"
+            )
+
+        lines_html = "<br>".join(lines)
+        with st.container():
+            img_col, stat_col = st.columns([1, 2], gap="small")
+            with img_col:
+                if hero_url:
+                    st.image(hero_url, use_container_width=True)
+            with stat_col:
+                st.markdown(
+                    "<div style='line-height:1.5;margin:0;padding:0;'>"
+                    f"{name_html}{logo_html}<br>"
+                    f"{lines_html}"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+        st.markdown(
+            "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
+            unsafe_allow_html=True,
+        )
+
+
+def _render_trophies_teams(active_teams: dict, metric: str) -> None:
+    """Trophies tab for team category (v1: Stanley Cups)."""
+    del metric
+    trophy_summary = get_team_trophy_summary()
+
+    for abbr, full_name in active_teams.items():
+        founded = TEAM_FOUNDED.get(abbr, "")
+        logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
+        team_trophies = trophy_summary.get(abbr, {})
+        cup_count = team_trophies.get("stanley_cups")
+        latest_cup = team_trophies.get("latest_cup_season")
+
+        if cup_count is None:
+            cups_row = (
+                "<span style='font-size:14px;color:#999;font-weight:bold;'>"
+                "No trophy data available."
+                "</span>"
+            )
+        else:
+            latest_str = ""
+            if int(cup_count) > 0 and latest_cup is not None:
+                latest_str = f" (latest { _season_span_label_from_id(latest_cup) })"
+            cups_row = (
+                "<span style='font-size:16px;color:#f0c04a;font-weight:bold;'>"
+                f"Stanley Cups: {int(cup_count)}{latest_str}"
+                "</span>"
+            )
+
+        with st.container():
+            st.markdown(
+                "<div style='display:flex;align-items:flex-start;gap:14px;margin:4px 0;'>"
+                f"<img src='{logo_url}' style='width:80px;flex-shrink:0;object-fit:contain;'>"
+                "<div style='line-height:1.5;'>"
+                f"<strong>{full_name}</strong> "
+                f"<span style='color:#aaa;font-size:13px;'>{founded}</span><br>"
+                f"{cups_row}"
+                "</div>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
+            unsafe_allow_html=True,
+        )
+
+
+_PANEL_TABS = (
+    PanelTabSpec(
+        id="overview",
+        label="Overview",
+        render_player=_render_overview_players,
+        render_team=_render_overview_teams,
+    ),
+    PanelTabSpec(
+        id="trophies",
+        label="Trophies",
+        render_player=_render_trophies_players,
+        render_team=_render_trophies_teams,
+    ),
+)
+
+
+def render_comparison_panel(
+    processed_dfs: list,
+    players: dict,
+    peak_info: dict,
+    metric: str,
+    stat_category: str,
+    season_type: str,
+) -> None:
+    """Backward-compatible wrapper for Overview player cards."""
+    _render_overview_players(
+        processed_dfs=processed_dfs,
+        players=players,
+        peak_info=peak_info,
+        metric=metric,
+        stat_category=stat_category,
+        season_type=season_type,
+    )
+
+
+def render_team_comparison_panel(active_teams: dict, metric: str) -> None:
+    """Backward-compatible wrapper for Overview team cards."""
+    _render_overview_teams(active_teams=active_teams, metric=metric)
