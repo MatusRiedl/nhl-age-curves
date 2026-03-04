@@ -8,6 +8,8 @@ risk of circular dependencies.
 """
 
 from datetime import datetime
+import re
+import unicodedata
 
 # ---------------------------------------------------------------------------
 # API endpoint templates
@@ -102,23 +104,72 @@ SH%/TOI: linear extrapolation yields implausible results for skaters.
 # NHLe (NHL Equivalency) multipliers — 2024 Bacon/Chatel model values
 # ---------------------------------------------------------------------------
 
+def normalize_league_abbrev(league: str) -> str:
+    """Normalize NHL API league abbreviations for stable lookup keys.
+
+    The NHL API returns mixed casing and occasional diacritics/punctuation variants
+    (for example 'Liiga' vs 'LIIGA', 'Schüler-BL').  This function canonicalizes
+    values so key matching is robust.
+    """
+    text = str(league or "").strip()
+    if not text:
+        return ""
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"\s+", " ", text)
+    return text.upper()
+
+
+NHLE_DEFAULT_MULTIPLIER: float = 0.35
+"""Safe fallback NHLe multiplier for unrecognized/rare leagues."""
+
+
 NHLE_MULTIPLIERS = {
     'NHL':   1.0,
     'KHL':   0.77,
     'SHL':   0.57,
     'AHL':   0.39,
     'NLA':   0.46,
+    'NL':    0.46,  # Swiss top division alias/rename (NLA -> NL)
     'LIIGA': 0.44,
     'NCAA':  0.19,
     'OHL':   0.14,
     'WHL':   0.14,
     'QMJHL': 0.11,
+    'RUS-KHL': 0.77,  # API variant observed for KHL seasons
 }
 """
 League -> scoring-translation multiplier.  Applied to Points, Goals, Assists for
-non-NHL rows.  Leagues not listed are dropped (noise filter).
-Keys are uppercase to match the leagueAbbrev field returned by the NHL API.
+non-NHL rows. Unknown leagues should use NHLE_DEFAULT_MULTIPLIER at runtime.
+Keys are normalized with normalize_league_abbrev().
 """
+
+# Exhaustive league keys discovered from a curated 24-player multi-league sample.
+# Most tournament/youth tags do not have stable published NHLe translations, so they
+# default to NHLE_DEFAULT_MULTIPLIER while still being explicitly represented.
+_DISCOVERED_API_LEAGUES = [
+    '4 NATIONS', 'AYMBHL', 'CAN-CUP', 'CC', 'CHAMPIONS HL', 'CZECH',
+    'CZECH U16', 'CZECH U18', 'CZECH U20', 'CZECH-JR.', 'CZECH2', 'CZECH3',
+    'CZECHIA', 'CZECHIA2', 'CZR-U17', 'CZR-U18', 'CZREP', 'CZREP-2',
+    'CZREP-JR.', 'DEL', 'DNL', 'DNL U20', 'ECHL', 'EHT', 'EJC-A',
+    'ELITE JR. A', 'ELITE NOVIZEN', 'EUROLIGA', 'EYOF', 'FIN-JR.',
+    'FIN-U18', 'FINLAND', 'FINLAND-2', 'GERMAN-2', 'GERMANY U16 2',
+    'HOCKEYALLSVENSKAN', 'ITALY', 'IVAN HLINKA MEMORIAL', 'JR. A SM-LIIGA',
+    'JR. B SM-SARJA', 'JR. C I-DIVISIOONA', 'JR. C SM-SARJA',
+    'JR. C SM-SARJA Q', 'LIIGA', 'M-CUP', 'MESTIS', 'MHL', 'MIDGET',
+    'MINI A', 'MINOR-SK', 'NAPHL 14U', 'NLB', 'OG', 'OGQ', 'OJHL',
+    'OLYMPICS', 'QC INT PW', 'RUSSIA', 'RUSSIA-2', 'RUSSIA-3',
+    'RUSSIA-JR.', 'SBHL', 'SCHULER-BL', 'SJHL', 'SLOVAK-2', 'SLOVAK-JR.',
+    'SLOVAKIA', 'SMHL', 'SVK-U18', 'SWE-JR.', 'SWE-U18', 'SWEDEN',
+    'SWEDEN-2', 'SWISS-6', 'SWISS-JR.', 'SWISS-U17', 'T1EBHL',
+    'T1EHL 16U', 'TEL-CUP', 'TOP NOVIZEN', 'U-17', 'U-18', 'U15-ELIT',
+    'U15-TOP', 'U16 SM-SARJA', 'U17-ELIT', 'U17-TOP', 'U18 SM-SARJA',
+    'U20 I-DIVISIOONA', 'U20-ELIT', 'U20 SM-SARJA', 'USHL', 'VHL',
+    'W-CUP', 'WC', 'WC-A', 'WCUP', 'WEC-A', 'WJ18-A', 'WJC-18',
+    'WJC-18 D1A', 'WJC-20', 'WJC-20 D1A', 'WJC-A', 'WSI U14',
+]
+for _lg in _DISCOVERED_API_LEAGUES:
+    NHLE_MULTIPLIERS.setdefault(_lg, NHLE_DEFAULT_MULTIPLIER)
+del _lg
 
 # ---------------------------------------------------------------------------
 # Dynamic current season year

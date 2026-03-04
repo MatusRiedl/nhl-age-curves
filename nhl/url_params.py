@@ -126,8 +126,11 @@ def apply_params_to_state(params: dict, ss) -> None:
         ss["x_axis_mode"] = _XM_DECODE.get(params["xm"], "Age")
 
     if "lg" in params and params["lg"]:
-        from nhl.constants import NHLE_MULTIPLIERS
-        leagues = [lg for lg in params["lg"].split(",") if lg in NHLE_MULTIPLIERS]
+        leagues: list[str] = []
+        for lg in params["lg"].split(","):
+            clean = str(lg).strip()
+            if clean and clean not in leagues:
+                leagues.append(clean)
         if leagues:
             ss["league_filter"] = leagues
 

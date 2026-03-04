@@ -31,7 +31,14 @@ Imports from project:
 
 import pandas as pd
 
-from nhl.constants import ML_SUPPORTED_METRICS, NHLE_MULTIPLIERS, NO_PROJECTION_METRICS, RATE_STATS
+from nhl.constants import (
+    ML_SUPPORTED_METRICS,
+    NHLE_DEFAULT_MULTIPLIER,
+    NHLE_MULTIPLIERS,
+    NO_PROJECTION_METRICS,
+    RATE_STATS,
+    normalize_league_abbrev,
+)
 from nhl.data_loaders import get_player_raw_stats
 from nhl.era import apply_era_to_hist, get_era_multiplier, get_goalie_era_sv_offset
 from nhl.knn_engine import run_knn_projection, run_linear_fallback
@@ -82,7 +89,7 @@ def process_players(
     ml_clones_dict = {}
     peak_info      = {}
 
-    _league_filter = league_filter or ['NHL']
+    _league_filter = [] if league_filter is None else league_filter
 
     # Era-adjust the historical DataFrame once before the player loop rather than
     # once per player inside knn_engine.py.  apply_era_to_hist returns df unchanged
@@ -110,18 +117,28 @@ def process_players(
         raw_dfs_cache.append(raw_df.copy())
 
         # --- Step 3: League filter + NHLe conversion ---
-        raw_df = raw_df[raw_df['League'].isin(_league_filter)].copy()
+        _selected_norm = {
+            normalize_league_abbrev(_lg)
+            for _lg in _league_filter
+            if normalize_league_abbrev(_lg)
+        }
+        raw_df = raw_df[
+            raw_df['League'].apply(normalize_league_abbrev).isin(_selected_norm)
+        ].copy()
         if raw_df.empty:
             continue
-        # Apply NHLe multipliers to Points, Goals, Assists for non-NHL rows.
-        # GP kept raw per spec. All other stats (TOI, +/-, Shots) also kept raw.
-        for _lg, _mult in NHLE_MULTIPLIERS.items():
-            if _mult < 1.0:
-                _mask = raw_df['League'] == _lg
-                if _mask.any():
-                    raw_df.loc[_mask, 'Points']  *= _mult
-                    raw_df.loc[_mask, 'Goals']   *= _mult
-                    raw_df.loc[_mask, 'Assists']  *= _mult
+        # Apply per-row NHLe multipliers to scoring stats only.
+        # GP and all non-scoring stats are intentionally kept raw.
+        if 'NHLeMultiplier' not in raw_df.columns:
+            raw_df['NHLeMultiplier'] = raw_df['League'].apply(
+                lambda _lg: NHLE_MULTIPLIERS.get(
+                    normalize_league_abbrev(_lg), NHLE_DEFAULT_MULTIPLIER
+                )
+            )
+        _mult = raw_df['NHLeMultiplier'].fillna(NHLE_DEFAULT_MULTIPLIER)
+        raw_df['Points'] *= _mult
+        raw_df['Goals'] *= _mult
+        raw_df['Assists'] *= _mult
 
         # --- Step 4: Season type filter ---
         if season_type != "Both":
@@ -134,7 +151,7 @@ def process_players(
             # FIX #4: Adjust Goals and Assists independently, not just Points.
             # Era multipliers derived from NHL GF/GP data; apply to NHL rows only
             # so non-NHL rows are not double-adjusted (NHLe already scales them).
-            _nhl_mask = raw_df['League'] == 'NHL'
+            _nhl_mask = raw_df['League'].apply(normalize_league_abbrev) == 'NHL'
             if _nhl_mask.any():
                 _era_mults = raw_df.loc[_nhl_mask, 'SeasonYear'].apply(get_era_multiplier)
                 raw_df.loc[_nhl_mask, 'Points']  *= _era_mults.values
@@ -146,7 +163,7 @@ def process_players(
             # Must target WeightedGAA and WeightedSV — the GP-weighted pre-groupby sums —
             # because Save % and GAA don't exist in raw_df until post-groupby.
             # Shutouts adjusted inversely: harder to record in high-scoring eras.
-            _nhl_mask = raw_df['League'] == 'NHL'
+            _nhl_mask = raw_df['League'].apply(normalize_league_abbrev) == 'NHL'
             if _nhl_mask.any():
                 _era_mults  = raw_df.loc[_nhl_mask, 'SeasonYear'].apply(get_era_multiplier)
                 _sv_offsets = raw_df.loc[_nhl_mask, 'SeasonYear'].apply(get_goalie_era_sv_offset)

@@ -15,12 +15,14 @@ for widget state).  Returns (metric, do_cumul) so app.py can pass both values in
 the pipelines and chart renderer without reading session state itself.
 
 Imports from project:
-    nhl.constants — TEAM_METRICS, NHLE_MULTIPLIERS, RATE_STATS, TEAM_RATE_STATS
+    nhl.constants — TEAM_METRICS, RATE_STATS, TEAM_RATE_STATS
+    nhl.data_loaders — get_player_league_abbrevs
 """
 
 import streamlit as st
 
-from nhl.constants import NHLE_MULTIPLIERS, RATE_STATS, TEAM_METRICS, TEAM_RATE_STATS
+from nhl.constants import RATE_STATS, TEAM_METRICS, TEAM_RATE_STATS, normalize_league_abbrev
+from nhl.data_loaders import get_player_league_abbrevs
 
 
 def render_controls() -> tuple:
@@ -156,17 +158,59 @@ def render_controls() -> tuple:
 
         if not team_mode:
             with c_league:
+                # Dynamic league universe from currently loaded players.
+                _player_ids: set[int] = set()
+                for _board_key in ("players", "skater_players", "goalie_players"):
+                    _board = st.session_state.get(_board_key, {}) or {}
+                    if isinstance(_board, dict):
+                        for _pid in _board.keys():
+                            try:
+                                _player_ids.add(int(_pid))
+                            except Exception:
+                                continue
+
+                _league_set = {"NHL"}
+                for _pid in _player_ids:
+                    for _lg in get_player_league_abbrevs(_pid):
+                        if _lg:
+                            _league_set.add(_lg)
+
+                _non_nhl_sorted = sorted(
+                    (lg for lg in _league_set if normalize_league_abbrev(lg) != "NHL"),
+                    key=lambda s: s.upper(),
+                )
+                _league_options = ["NHL"] + _non_nhl_sorted
+
+                # Keep current selection valid against dynamic options via normalized match.
+                _current_selection = st.session_state.get("league_filter")
+                if _current_selection is None:
+                    _current_selection = ["NHL"]
+                _norm_to_display: dict[str, str] = {}
+                for _opt in _league_options:
+                    _norm = normalize_league_abbrev(_opt)
+                    if _norm and _norm not in _norm_to_display:
+                        _norm_to_display[_norm] = _opt
+                _resolved_selection: list[str] = []
+                for _sel in _current_selection:
+                    _mapped = _norm_to_display.get(normalize_league_abbrev(_sel))
+                    if _mapped and _mapped not in _resolved_selection:
+                        _resolved_selection.append(_mapped)
+                st.session_state.league_filter = _resolved_selection
+
                 st.multiselect(
                     "Leagues",
-                    options=list(NHLE_MULTIPLIERS.keys()),
+                    options=_league_options,
                     key="league_filter",
                     help=(
-                        "NHL only by default. Select additional leagues to include "
-                        "non-NHL seasons. Stats are multiplied by NHLe equivalency "
-                        "factors (Points, Goals, Assists only; GP kept raw)."
+                        "NHL is available but optional. Additional options are discovered from "
+                        "seasonTotals leagueAbbrev values of currently loaded players. "
+                        "Points, Goals, and Assists are NHLe-adjusted; GP stays raw."
                     ),
                 )
-                _non_nhl = [l for l in (st.session_state.league_filter or ['NHL']) if l != 'NHL']
+                _non_nhl = [
+                    l for l in (st.session_state.league_filter or [])
+                    if normalize_league_abbrev(l) != 'NHL'
+                ]
                 if _non_nhl:
                     st.caption(f"NHLe-adjusted: {', '.join(_non_nhl)}")
 

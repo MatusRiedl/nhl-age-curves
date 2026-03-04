@@ -210,7 +210,7 @@ elif active_players:
         do_smooth         = st.session_state.do_smooth,
         do_cumul          = do_cumul,
         games_mode        = games_mode,
-        league_filter     = st.session_state.league_filter or ['NHL'],
+        league_filter     = st.session_state.league_filter,
     )
 
 # =============================================================================

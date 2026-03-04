@@ -19,6 +19,7 @@ import requests
 import streamlit as st
 
 from nhl.constants import (
+    NHLE_DEFAULT_MULTIPLIER,
     NHLE_MULTIPLIERS,
     SEARCH_URL,
     STATS_URL,
@@ -26,6 +27,7 @@ from nhl.constants import (
     TEAM_LIST_URL,
     TEAM_STATS_URL,
     TEAM_METRICS,
+    normalize_league_abbrev,
 )
 
 
@@ -594,6 +596,56 @@ def get_team_trophy_summary() -> dict:
 # Per-player raw stats
 # ---------------------------------------------------------------------------
 
+def discover_all_leagues(sample_player_ids: list[str]) -> dict[str, int]:
+    """Discover all leagueAbbrev values from player landing API seasonTotals.
+
+    Standalone audit helper (not wired into app flow). Pass a curated multi-league
+    player list to enumerate observed league abbreviations and their frequencies.
+
+    Example diverse sample IDs (24 players):
+        8471214 (Ovechkin), 8448208 (Jagr), 8476453 (Kucherov), 8458520 (Forsberg),
+        8482116 (Stutzle), 8481542 (Seider), 8476834 (Cervenka), 8477970 (Vanecek),
+        8479318 (Matthews), 8477939 (Nylander), 8476887 (Filip Forsberg),
+        8478971 (Ingram), 8480947 (Lankinen), 8474550 (Antti Niemi),
+        8476914 (Korpisalo), 8475193 (Tatar), 8478416 (Cernak), 8480002 (Hischier),
+        8478414 (T. Meier), 8478009 (Sorokin), 8476412 (Binnington),
+        8476434 (J. Gibson), 8471276 (Krejci), 8478864 (Kaprizov).
+
+    Args:
+        sample_player_ids: List of NHL player IDs as str or int.
+
+    Returns:
+        Dict {leagueAbbrev: occurrence_count} sorted by descending count.
+    """
+    counts: dict[str, int] = {}
+    for pid in sample_player_ids:
+        try:
+            res = requests.get(STATS_URL.format(int(pid)), timeout=15).json()
+        except Exception:
+            continue
+        for season in res.get('seasonTotals', []) or []:
+            league = str(season.get('leagueAbbrev', '')).strip()
+            if not league:
+                continue
+            counts[league] = counts.get(league, 0) + 1
+    return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+@st.cache_data(ttl=3600)
+def get_player_league_abbrevs(player_id: int) -> list[str]:
+    """Return unique leagueAbbrev values from a player's seasonTotals rows."""
+    try:
+        res = requests.get(STATS_URL.format(player_id), timeout=10).json()
+        leagues = {
+            str(s.get('leagueAbbrev', '')).strip()
+            for s in (res.get('seasonTotals', []) or [])
+            if str(s.get('leagueAbbrev', '')).strip()
+        }
+        return sorted(leagues)
+    except Exception:
+        return []
+
+
 @st.cache_data
 def get_player_raw_stats(
     player_id: int,
@@ -601,10 +653,11 @@ def get_player_raw_stats(
 ) -> tuple:
     """Fetch raw season-by-season stats for a player from the NHL API.
 
-    Covers regular season (gameTypeId=2) and playoffs (gameTypeId=3) for all
-    leagues in NHLE_MULTIPLIERS.  NHLe multipliers are NOT applied here —
-    they are applied downstream in player_pipeline.py so the raw parquet-level
-    values are preserved.
+    Covers regular season (gameTypeId=2) and playoffs (gameTypeId=3) across all
+    leagues returned by the API (unknown leagues are kept, not dropped).
+    Each row carries NHLeMultiplier resolved from normalized league key with a
+    safe fallback (NHLE_DEFAULT_MULTIPLIER). Multipliers are applied downstream
+    in player_pipeline.py so raw parquet-level values are preserved.
 
     Saves calculation (FIX #5): prefers the 'saves' field; falls back to
     shotsAgainst - goalsAgainst only when shotsAgainst > 0, preventing
@@ -618,7 +671,7 @@ def get_player_raw_stats(
         Tuple of (DataFrame, base_name, position_code).
         DataFrame has one row per season with columns: League, Age, SeasonYear,
         GameType, GP, Points, Goals, Assists, PIM, +/-, Shots, TotalTOIMins,
-        Wins, Shutouts, Saves, WeightedSV, WeightedGAA.
+        Wins, Shutouts, Saves, WeightedSV, WeightedGAA, NHLeMultiplier.
         Returns (empty DataFrame, base_name, 'S') on failure.
     """
     try:
@@ -629,9 +682,11 @@ def get_player_raw_stats(
         data = []
 
         for s in res.get('seasonTotals', []):
-            league    = str(s.get('leagueAbbrev', '')).strip().upper()
+            league_raw = str(s.get('leagueAbbrev', '')).strip()
+            league_key = normalize_league_abbrev(league_raw)
+            nhle_mult  = NHLE_MULTIPLIERS.get(league_key, NHLE_DEFAULT_MULTIPLIER)
             game_type = str(s.get('gameTypeId', ''))
-            if league in NHLE_MULTIPLIERS and game_type in ['2', '3']:
+            if game_type in ['2', '3']:
                 season_str = str(s.get('season', ''))
                 season_year = int(season_str[:4]) if len(season_str) >= 4 else 2000
                 age = season_year - birth_year
@@ -654,7 +709,7 @@ def get_player_raw_stats(
                     calc_saves = max(0, sa - ga) if sa > 0 else 0
 
                 data.append({
-                    "League":     league,
+                    "League":     league_raw,
                     "Age":        age,
                     "SeasonYear": season_year,
                     "GameType":   "Regular" if game_type == '2' else "Playoffs",
@@ -671,6 +726,7 @@ def get_player_raw_stats(
                     "Saves":      calc_saves,
                     "WeightedSV": float(s.get('savePctg', 0.0)) * 100 * gp,
                     "WeightedGAA": float(s.get('goalsAgainstAvg', 0.0)) * gp,
+                    "NHLeMultiplier": nhle_mult,
                 })
         return pd.DataFrame(data), base_name, position
     except Exception:
