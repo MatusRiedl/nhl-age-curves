@@ -62,23 +62,23 @@ def render_controls() -> tuple:
 
         st.markdown("<div id='controls-row1'></div>", unsafe_allow_html=True)
 
-        if team_mode:
-            c_t1, c_t4, c_t5 = st.columns(
-                [1, 1, 1], vertical_alignment="center"
-            )
-        else:
-            c_t1, c_t2, c_t3, c_t4, c_t5 = st.columns(
-                [1, 1, 1, 1, 1], vertical_alignment="center"
-            )
+        c_t1, c_t2, c_t3, c_t4, c_t5 = st.columns(
+            [1, 1, 1, 1, 1], vertical_alignment="center"
+        )
 
         with c_t1:
             st.toggle("Smoothing", key="do_smooth")
 
-        if not team_mode:
-            with c_t2:
-                st.toggle("Forecast", key="do_predict",
-                          disabled=games_mode)
-            with c_t3:
+        with c_t2:
+            if team_mode:
+                st.toggle("Forecast", value=False, disabled=True)
+            else:
+                st.toggle("Forecast", key="do_predict", disabled=games_mode)
+
+        with c_t3:
+            if team_mode:
+                st.toggle("Era-Adjust", value=False, disabled=True)
+            else:
                 st.toggle("Era-Adjust", key="do_era")
 
         with c_t4:
