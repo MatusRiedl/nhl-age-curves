@@ -97,14 +97,9 @@ def render_controls() -> tuple:
         )
 
         st.markdown("<div id='controls-dropdowns'></div>", unsafe_allow_html=True)
-        if team_mode:
-            c_xaxis, c_metric, c_season = st.columns(
-                [1.5, 1.5, 1.5], vertical_alignment="top"
-            )
-        else:
-            c_xaxis, c_metric, c_season, c_league = st.columns(
-                [1.5, 1.5, 1.5, 2], vertical_alignment="top"
-            )
+        c_xaxis, c_metric, c_season, c_league = st.columns(
+            [1.5, 1.5, 1.5, 2], vertical_alignment="top"
+        )
 
         with c_xaxis:
             st.selectbox(
@@ -155,8 +150,16 @@ def render_controls() -> tuple:
         with c_season:
             st.selectbox("Season Type", ["Regular", "Playoffs", "Both"], key="season_type")
 
-        if not team_mode:
-            with c_league:
+        with c_league:
+            if team_mode:
+                st.multiselect(
+                    "Leagues",
+                    options=["NHL"],
+                    default=["NHL"],
+                    disabled=True,
+                    help="Unavailable in Team mode.",
+                )
+            else:
                 # Dynamic league universe from currently loaded players.
                 _player_ids: set[int] = set()
                 for _board_key in ("players", "skater_players", "goalie_players"):
