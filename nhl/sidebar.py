@@ -151,7 +151,7 @@ def _inject_no_keyboard() -> None:
 def render_sidebar() -> dict:
     """Render the full sidebar UI and return chart cache-busting keys.
 
-    Renders the Skater/Goalie/Team category radio at the top of the sidebar,
+    Renders the Skater/Goalie/Team category segmented control at the top of the sidebar,
     then dispatches to _render_player_sidebar() or _render_team_sidebar() based
     on st.session_state.stat_category.
 
@@ -163,12 +163,12 @@ def render_sidebar() -> dict:
     """
     with st.sidebar:
         _inject_no_keyboard()   # Prevent mobile keyboard on dropdowns
-        st.radio(
-            "Category:",
-            ["Skater", "Goalie", "Team"],
-            horizontal=True,
+        st.segmented_control(
+            "Category",
+            options=["Skater", "Goalie", "Team"],
             key="stat_category",
             label_visibility="collapsed",
+            width="stretch",
         )
         st.markdown("---")
         if st.session_state.stat_category != "Team":
