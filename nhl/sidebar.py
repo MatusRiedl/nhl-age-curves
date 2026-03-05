@@ -1,4 +1,3 @@
-"""
 nhl.sidebar — Player and team sidebar UI for the NHL Age Curves app.
 
 Renders the full sidebar, switching between player mode and team mode based on
@@ -151,7 +150,7 @@ def _inject_no_keyboard() -> None:
 def render_sidebar() -> dict:
     """Render the full sidebar UI and return chart cache-busting keys.
 
-    Renders the Skater/Goalie/Team category toggle at the top of the sidebar,
+    Renders the Skater/Goalie/Team category radio at the top of the sidebar,
     then dispatches to _render_player_sidebar() or _render_team_sidebar() based
     on st.session_state.stat_category.
 
@@ -163,27 +162,13 @@ def render_sidebar() -> dict:
     """
     with st.sidebar:
         _inject_no_keyboard()   # Prevent mobile keyboard on dropdowns
-
-        # --- Modern segmented control for Category ---
-        _category_labels = {
-            "⛸️ Skater": "Skater",
-            "🥅 Goalie": "Goalie",
-            "🏒 Team":   "Team",
-        }
-        _reverse = {v: k for k, v in _category_labels.items()}
-        _current = st.session_state.get("stat_category", "Skater")
-        _default_label = _reverse.get(_current, "⛸️ Skater")
-
-        ui_choice = st.segmented_control(
-            "Category",
-            options=list(_category_labels.keys()),
-            default=_default_label,
+        st.radio(
+            "Category:",
+            ["Skater", "Goalie", "Team"],
+            horizontal=True,
+            key="stat_category",
             label_visibility="collapsed",
-            width="stretch",
-            key="stat_category_ui",
         )
-        st.session_state.stat_category = _category_labels[ui_choice]
-
         st.markdown("---")
         if st.session_state.stat_category != "Team":
             return _render_player_sidebar()
@@ -470,4 +455,4 @@ def _render_team_sidebar() -> dict:
         "top_selected":  "",
         "team_abbr":     _team_sel if _team_sel != _SENT else "",
         "roster_player": "",
-    }
+    }```
