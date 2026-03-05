@@ -70,30 +70,42 @@ _CSS = """
             color: #ff4b4b !important;
         }
 
-        /* Stretch columns to equal height, then center content within each */
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
-            flex-wrap: nowrap !important;
-            align-items: stretch !important;
-            gap: 0 !important;
+        /* Only style rows that contain player/team name chips */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.player-name) {
+        flex-wrap: nowrap !important;
+        align-items: stretch !important;
+        gap: 0 !important;
         }
 
-        /* Each column becomes a flex container so its inner block can be centered */
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-            display: flex !important;
-            align-items: center !important;
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.player-name) > [data-testid="stColumn"] {
+        display: flex !important;
+        align-items: center !important;
         }
 
-        /* The inner vertical block — centered, no margin leakage */
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"] {
-            width: 100% !important;
-            justify-content: center !important;
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.player-name) [data-testid="stVerticalBlock"] {
+        width: 100% !important;
+        justify-content: center !important;
         }
 
-        /* Zero out all margins inside these rows */
-        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] .element-container {
-            margin: 0 !important;
-            padding: 0 !important;
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.player-name) .element-container {
+        margin: 0 !important;
+        padding: 0 !important;
         }
+
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.player-name) [data-testid="stMarkdown"] {
+        display: flex !important;
+        align-items: center !important;
+        margin: 0 !important;
+        }
+
+[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.player-name) [data-testid="stButton"],
+[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.player-name) .stButton {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    margin: 0 !important;
+}
+
 
         /* Tighten sidebar vertical spacing */
         [data-testid="stSidebar"] .stMarkdown hr {
@@ -445,6 +457,7 @@ def inject_mobile_dropdown_fix() -> None:
     </style>
     """
     st.markdown(mobile_css, unsafe_allow_html=True)
+
 
 
 
