@@ -660,3 +660,4 @@ def render_chart(
             historical_baselines = historical_baselines,
             stat_category        = stat_category,
         )
+
