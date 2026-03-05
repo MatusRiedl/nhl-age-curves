@@ -372,6 +372,36 @@ _CSS = """
         [data-testid="stSpinner"] > div:first-child {
             display: none !important;
         }
+
+        /* --- Sidebar segmented control: fix uneven corners + borders --- */
+        [data-testid="stSidebar"] [data-baseweb="segmented-control"] {
+        border-radius: 10px !important;
+        overflow: hidden !important;
+        border: 1px solid #2a2a2a !important;
+        background: rgba(17, 24, 39, 0.7) !important;
+        }
+
+        [data-testid="stSidebar"] [data-baseweb="segmented-control"] button {
+        border-radius: 0 !important;
+        margin: 0 !important;
+        min-height: 36px !important;
+        padding: 6px 10px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-left: 1px solid #2a2a2a !important;
+        }
+
+        [data-testid="stSidebar"] [data-baseweb="segmented-control"] button:first-child {
+        border-left: none !important;
+        border-top-left-radius: 10px !important;
+        border-bottom-left-radius: 10px !important;
+        }
+
+        [data-testid="stSidebar"] [data-baseweb="segmented-control"] button:last-child {
+        border-top-right-radius: 10px !important;
+        border-bottom-right-radius: 10px !important;
+        }
     </style>
 """
 """Full CSS block injected into the Streamlit page head."""
@@ -445,3 +475,4 @@ def inject_mobile_dropdown_fix() -> None:
     </style>
     """
     st.markdown(mobile_css, unsafe_allow_html=True)
+
