@@ -88,7 +88,7 @@ def render_controls() -> tuple:
             st.toggle("Baseline", key="do_base", disabled=games_mode)
 
         with c_t6:
-            st.toggle("Show Prime", key="do_prime")
+            st.toggle("Show Prime", key="do_prime", disabled=team_mode)
 
         # ------------------------------------------------------------------
         # Row 2: X-Axis | Select Metric | Season Type | Leagues dropdowns

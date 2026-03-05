@@ -372,7 +372,7 @@ def render_chart(
             ))
 
     # Add peak age highlights (translucent vertical rectangles)
-    if do_prime:
+    if do_prime and not team_mode:
         for player_name, peak_data in peak_info.items():
             player_color = player_colors.get(player_name)
             if player_color and peak_data.get('age'):
