@@ -170,15 +170,17 @@ def render_sidebar() -> dict:
             "Goalie": "🥅 Goalie",
             "Team":   "🏒 Team",
         }
-        st.segmented_control(
+        cat = st.segmented_control(
             "Category",
             options=["Skater", "Goalie", "Team"],
             default=st.session_state.get("stat_category", "Skater"),
             label_visibility="collapsed",
             width="stretch",
-            key="stat_category",
+            selection_mode="single",
             format_func=lambda x: _label[x],
+            key="stat_category_ui",
         )
+        st.session_state.stat_category = cat
 
         st.markdown("---")
         if st.session_state.stat_category != "Team":
@@ -467,3 +469,4 @@ def _render_team_sidebar() -> dict:
         "team_abbr":     _team_sel if _team_sel != _SENT else "",
         "roster_player": "",
     }
+
