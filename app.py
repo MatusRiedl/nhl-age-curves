@@ -106,7 +106,7 @@ if "_preloaded" not in st.session_state:
 # Page header
 # =============================================================================
 st.markdown("""
-    <h1 style='display:flex;align-items:center;padding-bottom:0;margin-bottom:0;'>
+    <h1 class='page-header'>
         <img src='https://assets.nhle.com/logos/nhl/svg/NHL_light.svg' class='nhl-logo'>
         <span class='animated-title' style='font-size:0.9em;'>Age Curves</span>
     </h1>
@@ -273,7 +273,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.57.6 <br>"
+    "Created by Iksperial. v0.57.7 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

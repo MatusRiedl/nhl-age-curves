@@ -55,3 +55,12 @@ v0.57.6 - cleaner control labels
   `Show Prime` to `Projection`, `Era adjust`, and `Prime years`.
 - CHANGED: Updated the goalie era-adjust helper caption and related inline docs
   so the control copy stays consistent.
+
+v0.57.7 - mobile header compaction
+---------------------------------------------------------
+- CHANGED: Added a dedicated `.page-header` style so the logo and `Age Curves`
+  title stay on a single line.
+- CHANGED: Reduced mobile top padding and shrank the mobile header title size
+  to free more above-the-fold space on phones.
+- CHANGED: Shrunk the NHL logo on mobile so the header reads cleaner on narrow
+  screens without changing the desktop layout.

@@ -16,12 +16,23 @@ _CSS = """
     <style>
         .block-container { padding-top: 2rem !important; padding-bottom: 0rem !important; }
 
+        .page-header {
+            display: flex;
+            align-items: center;
+            flex-wrap: nowrap;
+            gap: 0;
+            padding-bottom: 0;
+            margin-bottom: 0;
+            white-space: nowrap;
+        }
+
         .animated-title {
             background: linear-gradient(to right, #c0c0c0, #2b71c7, #ff4b4b, #c0c0c0);
             background-size: 300% auto;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             animation: sweep 6s linear infinite;
+            white-space: nowrap;
         }
 
         @keyframes sweep {
@@ -32,6 +43,24 @@ _CSS = """
             height: 45px;
             margin-right: 15px;
             animation: spin-pulse 4s infinite ease-in-out;
+        }
+
+        @media (max-width: 768px) {
+            .block-container {
+                padding-top: 0.75rem !important;
+            }
+            .page-header {
+                margin-top: 0 !important;
+                margin-bottom: 0 !important;
+            }
+            .page-header .animated-title {
+                font-size: 2.15rem !important;
+                line-height: 1 !important;
+            }
+            .nhl-logo {
+                height: 28px;
+                margin-right: 8px;
+            }
         }
 
         @keyframes spin-pulse {
@@ -386,7 +415,7 @@ def inject_css() -> None:
 
     Covers: animated gradient title, spinning NHL logo, sidebar compact layout,
     blue Add-Legend button override, toggle label ellipsis truncation for intermediate
-    screen widths (foldable/tablet), mobile responsive controls row wrapping
+    screen widths (foldable/tablet), compact mobile header sizing, mobile responsive controls row wrapping
     (~3 columns per row via #controls-row1 marker),
     responsive stacking of the chart/stats panel split on narrow screens, and
     Plotly modebar sizing for desktop and mobile.
