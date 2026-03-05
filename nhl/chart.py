@@ -422,7 +422,7 @@ def render_chart(
         "modeBarButtonsToRemove": [
             "lasso2d", "select2d", "toggleSpikelines",
             "hoverCompareCartesian", "hoverClosestCartesian", "autoScale2d",
-            "resetScale2d",
+            "resetScale2d", "zoomIn2d", "zoomOut2d",
         ],
         "displaylogo": False,
     }
