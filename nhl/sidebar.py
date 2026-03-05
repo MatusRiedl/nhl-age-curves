@@ -164,21 +164,25 @@ def render_sidebar() -> dict:
     with st.sidebar:
         _inject_no_keyboard()   # Prevent mobile keyboard on dropdowns
 
-        # --- Modern segmented control for Category (binds to stat_category) ---
-        _label = {
-            "Skater": "⛸️ Skater",
-            "Goalie": "🥅 Goalie",
-            "Team":   "🏒 Team",
+        # --- Modern segmented control for Category ---
+        _category_labels = {
+            "⛸️ Skater": "Skater",
+            "🥅 Goalie": "Goalie",
+            "🏒 Team":   "Team",
         }
-        st.segmented_control(
+        _reverse = {v: k for k, v in _category_labels.items()}
+        _current = st.session_state.get("stat_category", "Skater")
+        _default_label = _reverse.get(_current, "⛸️ Skater")
+
+        ui_choice = st.segmented_control(
             "Category",
-            options=["Skater", "Goalie", "Team"],
-            default=st.session_state.get("stat_category", "Skater"),
+            options=list(_category_labels.keys()),
+            default=_default_label,
             label_visibility="collapsed",
             width="stretch",
-            key="stat_category",
-            format_func=lambda x: _label[x],
+            key="stat_category_ui",
         )
+        st.session_state.stat_category = _category_labels[ui_choice]
 
         st.markdown("---")
         if st.session_state.stat_category != "Team":
