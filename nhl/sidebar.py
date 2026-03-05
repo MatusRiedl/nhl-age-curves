@@ -31,17 +31,7 @@ from nhl.data_loaders import (
 
 @st.cache_data(ttl=300)
 def _check_api_health() -> list:
-    """Probe each NHL API endpoint and return (label, ok) pairs.
-
-    Uses stream=True + close() to check HTTP status without downloading
-    response bodies — critical for the Records endpoint which returns
-    all-time career data and would be very large to fully download.
-    Results are cached for 5 minutes to avoid hammering APIs on every rerun.
-
-    Returns:
-        List of (label, ok) tuples where ok is True when the endpoint
-        responds with an HTTP status below 400, False on any error or timeout.
-    """
+    """Probe each NHL API endpoint and return (label, ok) pairs."""
     probes = [
         ("Search",       "https://search.d3.nhle.com/api/v1/search/player?q=Mc&limit=1&culture=en-us"),
         ("Player Stats", "https://api-web.nhle.com/v1/player/8478402/landing"),
@@ -65,18 +55,7 @@ def _check_api_health() -> list:
 
 
 def _render_ram_footer() -> None:
-    """Render a live process RAM readout and API health check at the bottom of the sidebar.
-
-    Tries psutil first (cross-platform). Falls back to /proc/self/status
-    (Linux / Streamlit Cloud, no external deps). Shows 'N/A' on Windows
-    without psutil installed.
-
-    API health shows a 🟢/🟡 traffic light for each NHL endpoint, cached
-    for 5 minutes via _check_api_health().
-
-    All status info is wrapped in an expandable "App status" section that
-    is collapsed by default.
-    """
+    """Render a live process RAM readout and API health check at the bottom of the sidebar."""
     rss_mb = "N/A"
     try:
         import os
@@ -106,20 +85,7 @@ def _render_ram_footer() -> None:
 
 
 def _inject_no_keyboard() -> None:
-    """Prevent mobile virtual keyboard from opening on st.selectbox widgets.
-
-    Injects JavaScript that sets inputmode='none' and readonly='readonly'
-    on BaseWeb Select component inputs. This explicitly instructs mobile
-    browsers not to show a virtual keyboard when dropdown menus receive focus.
-
-    Uses st.components.v1.html() which renders inside an iframe, allowing
-    access to the parent document via window.parent.document. A MutationObserver
-    re-applies attributes after each Streamlit rerun since DOM nodes are re-mounted.
-
-    Note: The readonly attribute disables the built-in selectbox search/filter
-    feature (typing to filter options). This is acceptable for pure selector
-    dropdowns that don't require free-text search.
-    """
+    """Prevent mobile virtual keyboard from opening on st.selectbox widgets."""
     components.html(
         """
         <script>
@@ -132,11 +98,7 @@ def _inject_no_keyboard() -> None:
                         el.setAttribute('readonly', 'readonly');
                     });
             }
-
-            // Run immediately on load
             fixInputs();
-
-            // Re-apply after every Streamlit rerun (DOM mutation)
             new MutationObserver(fixInputs).observe(
                 window.parent.document.body,
                 { childList: true, subtree: true }
@@ -144,12 +106,11 @@ def _inject_no_keyboard() -> None:
         })();
         </script>
         """,
-        height=0,   # invisible — zero visual footprint
+        height=0,
     )
 
 
 def _normalize_category(val: object) -> str:
-    """Ensure stat_category is a clean single string."""
     if isinstance(val, list):
         val = val[0] if val else "Skater"
     if val not in ("Skater", "Goalie", "Team"):
@@ -158,33 +119,22 @@ def _normalize_category(val: object) -> str:
 
 
 def render_sidebar() -> dict:
-    """Render the full sidebar UI and return chart cache-busting keys.
-
-    Renders the Skater/Goalie/Team category toggle at the top of the sidebar,
-    then dispatches to _render_player_sidebar() or _render_team_sidebar() based
-    on st.session_state.stat_category.
-
-    Returns:
-        Dict with keys 'search_term', 'top_selected', 'team_abbr', 'roster_player'.
-        Values are strings (empty string if the widget was not shown this run).
-        Used as part of the chart widget key to force a re-render when sidebar
-        selections change.
-    """
+    """Render the full sidebar UI and return chart cache-busting keys."""
     with st.sidebar:
-        _inject_no_keyboard()   # Prevent mobile keyboard on dropdowns
+        _inject_no_keyboard()
 
-        # --- Segmented control for Category (binds directly to stat_category) ---
         _label = {
             "Skater": "⛸️ Skater",
             "Goalie": "🥅 Goalie",
             "Team":   "🏒 Team",
         }
 
-        # Kill any old UI key left behind
-        if "stat_category_ui" in st.session_state:
-            del st.session_state["stat_category_ui"]
+        # Keep UI state separate from actual app state
+        def _on_category_change():
+            val = _normalize_category(st.session_state.get("stat_category_ui", "Skater"))
+            st.session_state.stat_category = val
 
-        cat = st.segmented_control(
+        st.segmented_control(
             "Category",
             options=["Skater", "Goalie", "Team"],
             default=st.session_state.get("stat_category", "Skater"),
@@ -192,12 +142,12 @@ def render_sidebar() -> dict:
             width="stretch",
             selection_mode="single",
             format_func=lambda x: _label[x],
-            key="stat_category",
+            key="stat_category_ui",
+            on_change=_on_category_change,
         )
 
-        # Normalize to a clean string value
-        cat = _normalize_category(cat)
-        st.session_state.stat_category = cat
+        # Use the normalized app state for branching
+        cat = _normalize_category(st.session_state.get("stat_category", "Skater"))
 
         st.markdown("---")
         if cat != "Team":
@@ -207,25 +157,7 @@ def render_sidebar() -> dict:
 
 
 def _render_player_sidebar() -> dict:
-    """Render the player-mode sidebar: search, top-50, roster, and player board.
-
-    Three ways to add a player:
-        1. Global search (D3 API + local records fallback).
-        2. Top 50 all-time dropdown (auto-adds on selection).
-        3. Active roster selector by team (auto-adds on selection).
-
-    Writes to:
-        st.session_state.players     — dict {pid: name} shared across Skater/Goalie modes
-        st.session_state.search_ver  — incrementing int to reset the search box
-        st.session_state.search_opts — current search result dict
-        st.session_state.top50_ver   — incrementing int to reset the top-50 box
-        st.session_state.top50_opts  — current top-50 dict for callback lookup
-        st.session_state.roster_ver  — incrementing int to reset the roster box
-        st.session_state.roster_opts — current roster dict for callback lookup
-
-    Returns:
-        Dict with sidebar keys for chart cache-busting.
-    """
+    """Render the player-mode sidebar."""
     search_term   = ""
     top_selected  = ""
     team_abbr     = ""
@@ -245,7 +177,6 @@ def _render_player_sidebar() -> dict:
         st.session_state.roster_opts = {}
 
     def _on_player_select():
-        """Callback: add the selected player to the shared board and reset the search box."""
         ver  = st.session_state.search_ver
         sel  = st.session_state.get(f"_player_pick_{ver}")
         _SENT = "— select a player —"
@@ -260,7 +191,6 @@ def _render_player_sidebar() -> dict:
         st.session_state.search_opts = {}
 
     def _on_top50_select():
-        """Callback: add the selected top-50 player to the shared board and reset the dropdown."""
         ver  = st.session_state.top50_ver
         sel  = st.session_state.get(f"_top50_pick_{ver}")
         _SENT = "— select a player —"
@@ -274,7 +204,6 @@ def _render_player_sidebar() -> dict:
         st.session_state.top50_ver = ver + 1
 
     def _on_roster_select():
-        """Callback: add the selected roster player to the shared board and reset the dropdown."""
         ver  = st.session_state.roster_ver
         sel  = st.session_state.get(f"_roster_pick_{ver}")
         _SENT = "— select a player —"
@@ -307,7 +236,6 @@ def _render_player_sidebar() -> dict:
         for label, pid in local.items():
             if pid not in opts.values():
                 opts[label] = pid
-        # Active players (have [TEAM] prefix) first, retired/free agents below
         active_opts   = {k: v for k, v in opts.items() if k.startswith("[")}
         inactive_opts = {k: v for k, v in opts.items() if not k.startswith("[")}
         opts = {**active_opts, **inactive_opts}
@@ -408,18 +336,7 @@ def _render_player_sidebar() -> dict:
 
 
 def _render_team_sidebar() -> dict:
-    """Render the team-mode sidebar: team selector (auto-adds on selection), team board.
-
-    The team logo is shown above the dropdown and reflects the current dropdown selection.
-    Selecting a team immediately adds it to the board and resets the dropdown.
-
-    Writes to:
-        st.session_state.teams    — dict {abbr: name}
-        st.session_state.team_ver — incrementing int to reset the team selectbox
-
-    Returns:
-        Dict with sidebar keys for chart cache-busting (only 'team_abbr' is relevant).
-    """
+    """Render the team-mode sidebar."""
     st.subheader("Team Comparison")
 
     if 'team_ver' not in st.session_state:
@@ -429,60 +346,9 @@ def _render_team_sidebar() -> dict:
     _team_keys = list(ACTIVE_TEAMS.keys())
 
     def _on_team_select():
-        """Callback: add the selected team to the board and reset the dropdown."""
         ver = st.session_state.team_ver
         sel = st.session_state.get(f"_team_pick_{ver}")
         if not sel or sel == _SENT:
             return
         st.session_state.teams[sel] = ACTIVE_TEAMS[sel]
-        st.session_state.team_ver = ver + 1
-
-    # Logo shown ABOVE the dropdown — reflects current dropdown selection
-    _logo_abbr = st.session_state.get(f"_team_pick_{st.session_state.team_ver}", _SENT)
-    if _logo_abbr and _logo_abbr != _SENT:
-        st.markdown(
-            f"<div style='text-align:center;margin-bottom:5px;'>"
-            f"<img src='https://assets.nhle.com/logos/nhl/svg/{_logo_abbr}_light.svg' height='40'>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-    _team_sel = st.selectbox(
-        "Select Team:",
-        [_SENT] + _team_keys,
-        format_func=lambda x: x if x == _SENT else f"{x} — {ACTIVE_TEAMS[x]}",
-        key=f"_team_pick_{st.session_state.team_ver}",
-        on_change=_on_team_select,
-        label_visibility="collapsed",
-    )
-
-    st.markdown("---")
-
-    if st.session_state.teams:
-        for _abbr, _name in list(st.session_state.teams.items()):
-            c_name, c_btn = st.columns([5, 1], vertical_alignment="center", gap="small")
-            with c_name:
-                _logo_url = f"https://assets.nhle.com/logos/nhl/svg/{_abbr}_light.svg"
-                st.markdown(
-                    f"<div style='display:flex;align-items:center;gap:8px;margin:0;'>"
-                    f"<img src='{_logo_url}' style='width:32px;height:32px;"
-                    f"object-fit:contain;flex-shrink:0;'>"
-                    f"<div class='player-name'>{_name}</div>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-            with c_btn:
-                if st.button("✖", key=f"drop_team_{_abbr}", type="secondary"):
-                    del st.session_state.teams[_abbr]
-                    st.rerun()
-    else:
-        st.info("Board is empty")
-
-    _render_ram_footer()
-
-    return {
-        "search_term":   "",
-        "top_selected":  "",
-        "team_abbr":     _team_sel if _team_sel != _SENT else "",
-        "roster_player": "",
-    }
+        st.session_state
