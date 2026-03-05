@@ -1,3 +1,4 @@
+"""
 nhl.sidebar — Player and team sidebar UI for the NHL Age Curves app.
 
 Renders the full sidebar, switching between player mode and team mode based on
@@ -455,4 +456,5 @@ def _render_team_sidebar() -> dict:
         "top_selected":  "",
         "team_abbr":     _team_sel if _team_sel != _SENT else "",
         "roster_player": "",
-    }```
+    }
+
