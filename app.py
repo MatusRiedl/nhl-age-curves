@@ -270,9 +270,10 @@ st.query_params.update(encode_state_to_params(st.session_state))
 # Footer
 # =============================================================================
 st.markdown("---")
+# Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.57.2 <br>"
+    "Created by Iksperial. v0.57.6 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

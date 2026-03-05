@@ -409,7 +409,7 @@ def inject_mobile_dropdown_fix() -> None:
         - Top 50 All-Time Skaters/Goalies dropdown
         - Active Rosters team selector
         - Select Player roster dropdown
-        - X-Axis, Select Metric, Season Type, Leagues dropdowns
+        - X axis, Metric, Season Type, Leagues dropdowns
 
     Must be called once per app run, after st.set_page_config().
     """

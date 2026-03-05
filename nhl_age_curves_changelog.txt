@@ -15,3 +15,43 @@ v0.57.2 - readme.txt engine sync
   the current `dialog.py`, `chart.py`, `player_pipeline.py`, and `constants.py`.
 - VALIDATED: Re-read the patched `readme.txt` sections against current source
   files to confirm the handoff doc now matches the active engine behavior.
+
+v0.57.3 - AI readiness safety rails
+---------------------------------------------------------
+- ADDED: Deterministic unittest coverage for URL state encoding, historical
+  goalie rate sanitation, goalie inference, KNN clamp behavior, and goalie GP
+  fallback durability rules.
+- ADDED: GitHub Actions workflow to install requirements and run
+  `python -m unittest discover -s tests -v` on push, pull request, and manual dispatch.
+- ADDED: `AI_CHANGE_CHECKLIST.md` with a concise high-risk change checklist for
+  AI and human contributors touching projections, baselines, data loaders, or docs.
+- CHANGED: Updated `README.md` so the repository advertises the test suite,
+  CI workflow, and contributor safety rails.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 12/12 tests.
+
+v0.57.4 - internalize AI workflow files
+---------------------------------------------------------
+- CHANGED: Removed the public `README.md` references to AI testing, CI, and the
+  internal checklist so the public readme stays product-focused.
+- CHANGED: Added an Internal Workflow section to `CLAUDE.md` requiring post-
+  implementation test runs and test updates when behavior changes.
+- CHANGED: Updated `.gitignore` to keep `AI_CHANGE_CHECKLIST.md`, `.github/`,
+  and `tests/` local-only alongside the existing ignored internal docs.
+
+v0.57.5 - footer version sync rule
+---------------------------------------------------------
+- CHANGED: Added a `CLAUDE.md` rule requiring the visible footer version in
+  `app.py` to be updated in tandem with each new latest changelog entry.
+- CHANGED: Synced the `app.py` footer version string to `v0.57.5` so it now
+  matches the newest changelog version.
+- CHANGED: Added an inline reminder comment above the `app.py` footer so editors
+  see the changelog-to-footer sync rule at the exact version string location.
+
+v0.57.6 - cleaner control labels
+---------------------------------------------------------
+- CHANGED: Simplified the top control labels from `Select Metric` to `Metric`
+  and from `X-Axis` to `X axis` for a cleaner toolbar.
+- CHANGED: Renamed the view toggles from `Forecast`, `Era-Adjust`, and
+  `Show Prime` to `Projection`, `Era adjust`, and `Prime years`.
+- CHANGED: Updated the goalie era-adjust helper caption and related inline docs
+  so the control copy stays consistent.

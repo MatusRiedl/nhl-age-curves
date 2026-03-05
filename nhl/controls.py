@@ -5,7 +5,7 @@ Renders a single "Category & Metric" expander that appears below the page title.
 It contains all controls in two rows:
     Row 1: 5 toggles spread across the full expander width (category radio lives
            in the sidebar)
-    Row 2: X-Axis, Select Metric, Season Type, Leagues dropdowns (compact, left→right)
+    Row 2: X axis, Metric, Season Type, Leagues dropdowns (compact, left→right)
 
 The expander uses expanded=True so it is always open on every rerun, ensuring toggles
 remain visible after player add/remove actions.
@@ -34,7 +34,7 @@ def render_controls() -> tuple:
     A single expander holds two rows:
         Row 1 — 5 toggles spread across the full expander width. The category
                 radio (Skater/Goalie/Team) is rendered in the sidebar instead.
-        Row 2 — X-Axis, Select Metric, Season Type, Leagues dropdowns.
+        Row 2 — X axis, Metric, Season Type, Leagues dropdowns.
 
     Reads:
         st.session_state.stat_category   — drives metric selectbox options
@@ -71,15 +71,15 @@ def render_controls() -> tuple:
 
         with c_t2:
             if team_mode:
-                st.toggle("Forecast", value=False, disabled=True)
+                st.toggle("Projection", value=False, disabled=True)
             else:
-                st.toggle("Forecast", key="do_predict", disabled=games_mode)
+                st.toggle("Projection", key="do_predict", disabled=games_mode)
 
         with c_t3:
             if team_mode:
-                st.toggle("Era-Adjust", value=False, disabled=True)
+                st.toggle("Era adjust", value=False, disabled=True)
             else:
-                st.toggle("Era-Adjust", key="do_era")
+                st.toggle("Era adjust", key="do_era")
 
         with c_t4:
             st.toggle("Cumulative", key="do_cumul_toggle")
@@ -88,10 +88,10 @@ def render_controls() -> tuple:
             st.toggle("Baseline", key="do_base", disabled=games_mode)
 
         with c_t6:
-            st.toggle("Show Prime", key="do_prime", disabled=team_mode)
+            st.toggle("Prime years", key="do_prime", disabled=team_mode)
 
         # ------------------------------------------------------------------
-        # Row 2: X-Axis | Select Metric | Season Type | Leagues dropdowns
+        # Row 2: X axis | Metric | Season Type | Leagues dropdowns
         # ------------------------------------------------------------------
         _x_opts = (
             ["Season Year", "Games Played"]
@@ -106,7 +106,7 @@ def render_controls() -> tuple:
 
         with c_xaxis:
             st.selectbox(
-                "X-Axis",
+                "X axis",
                 _x_opts,
                 key="x_axis_mode",
                 help=(
@@ -119,7 +119,7 @@ def render_controls() -> tuple:
         with c_metric:
             if st.session_state.stat_category == "Skater":
                 metric = st.selectbox(
-                    "Select Metric",
+                    "Metric",
                     ["Points", "Goals", "Assists", "+/-", "GP", "PPG", "SH%", "PIM", "TOI"],
                     key="skater_metric",
                     help=(
@@ -130,7 +130,7 @@ def render_controls() -> tuple:
                 )
             elif st.session_state.stat_category == "Goalie":
                 metric = st.selectbox(
-                    "Select Metric",
+                    "Metric",
                     ["Save %", "GAA", "Shutouts", "Wins", "GP", "Saves"],
                     key="goalie_metric",
                     help=(
@@ -140,7 +140,7 @@ def render_controls() -> tuple:
                 )
             else:
                 metric = st.selectbox(
-                    "Select Metric",
+                    "Metric",
                     TEAM_METRICS,
                     key="team_metric",
                     help=(
@@ -236,7 +236,7 @@ def render_controls() -> tuple:
             and metric not in _ERA_GOALIE_STATS
         ):
             st.caption(
-                f"ℹ️ Era-Adjust for goalies applies to Save %, GAA, and Shutouts. "
+                f"ℹ️ Era adjust for goalies applies to Save %, GAA, and Shutouts. "
                 f"{metric} is not era-adjusted."
             )
 
