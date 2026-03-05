@@ -1,3 +1,4 @@
+"""
 NHL Age Curves — Main Application Entry Point
 
 This file is the thin orchestrator.  All logic lives in the nhl/ package modules.
@@ -23,7 +24,7 @@ import streamlit as st
 from nhl.async_preloader import preload_all_categories
 from nhl.baselines import build_historical_baselines, build_team_baselines
 from nhl.chart import render_chart
-from nhl.constants import ACTIVE_TEAMS
+from nhl.constants import ACTIVE_TEAMS, TEAM_METRICS
 from nhl.controls import render_controls
 from nhl.comparison import render_comparison_area
 from nhl.data_loaders import (
@@ -137,6 +138,14 @@ metric, do_cumul = render_controls()
 # Rendered after controls so toggle keys survive any st.rerun() triggered here.
 # =============================================================================
 sidebar_keys = render_sidebar()
+
+# =============================================================================
+# Ensure Team mode uses a valid metric
+# =============================================================================
+if st.session_state.stat_category == "Team":
+    if metric not in TEAM_METRICS:
+        metric = "Points"
+        st.session_state.team_metric = metric
 
 # =============================================================================
 # Derived flags (read after controls have written to session state)
@@ -272,4 +281,4 @@ st.markdown(
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,
-)```
+)
