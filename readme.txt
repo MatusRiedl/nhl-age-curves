@@ -232,6 +232,8 @@ For every player in active_players (resolved from skater_players or goalie_playe
 
   8. KNN ML PROJECTION (Age mode only, if "Project to 40" toggle and
      metric in ml_supported_metrics): See Section 7 for full detail.
+     Projections are generated for both Skaters and Goalies using position-
+     appropriate historical comparables.
 
   9. FALLBACK PROJECTION (Age mode only, if KNN fails or metric not ML-supported):
      GP: Dedicated durability curve (plateau + soft decay)

@@ -405,8 +405,10 @@ def render_chart(
             f"_{metric}_{st.session_state.do_smooth}_{st.session_state.x_axis_mode}"
         )
     else:
+        # Use processed_dfs for player names instead of session state for better testability
+        player_names = [df['BaseName'].iloc[0] for df in processed_dfs if not df.empty]
         chart_key = (
-            f"chart_{hash(str(st.session_state.players))}"
+            f"chart_{hash(str(player_names))}"
             f"_{metric}_{st.session_state.do_predict}_{st.session_state.do_smooth}"
             f"_{sidebar_keys.get('search_term', '')}"
             f"_{sidebar_keys.get('top_selected', '')}"
