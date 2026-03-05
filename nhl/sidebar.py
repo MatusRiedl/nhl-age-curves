@@ -148,6 +148,15 @@ def _inject_no_keyboard() -> None:
     )
 
 
+def _normalize_category(val: object) -> str:
+    """Ensure stat_category is a clean single string."""
+    if isinstance(val, list):
+        val = val[0] if val else "Skater"
+    if val not in ("Skater", "Goalie", "Team"):
+        val = "Skater"
+    return val
+
+
 def render_sidebar() -> dict:
     """Render the full sidebar UI and return chart cache-busting keys.
 
@@ -164,12 +173,17 @@ def render_sidebar() -> dict:
     with st.sidebar:
         _inject_no_keyboard()   # Prevent mobile keyboard on dropdowns
 
-        # --- Modern segmented control for Category (binds to stat_category) ---
+        # --- Segmented control for Category (binds directly to stat_category) ---
         _label = {
             "Skater": "⛸️ Skater",
             "Goalie": "🥅 Goalie",
             "Team":   "🏒 Team",
         }
+
+        # Kill any old UI key left behind
+        if "stat_category_ui" in st.session_state:
+            del st.session_state["stat_category_ui"]
+
         cat = st.segmented_control(
             "Category",
             options=["Skater", "Goalie", "Team"],
@@ -178,12 +192,15 @@ def render_sidebar() -> dict:
             width="stretch",
             selection_mode="single",
             format_func=lambda x: _label[x],
-            key="stat_category_ui",
+            key="stat_category",
         )
+
+        # Normalize to a clean string value
+        cat = _normalize_category(cat)
         st.session_state.stat_category = cat
 
         st.markdown("---")
-        if st.session_state.stat_category != "Team":
+        if cat != "Team":
             return _render_player_sidebar()
         else:
             return _render_team_sidebar()
@@ -469,4 +486,3 @@ def _render_team_sidebar() -> dict:
         "team_abbr":     _team_sel if _team_sel != _SENT else "",
         "roster_player": "",
     }
-
