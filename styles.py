@@ -1,0 +1,447 @@
+"""
+nhl.styles — CSS injection for the NHL Age Curves Streamlit page.
+
+Contains a single public function, inject_css(), that writes the full style block
+into the Streamlit page.  Isolated here so the CSS blob does not clutter app.py
+and can be updated without touching any other module.
+"""
+
+import streamlit as st
+
+# ---------------------------------------------------------------------------
+# Private CSS block
+# ---------------------------------------------------------------------------
+
+_CSS = """
+    <style>
+        .block-container { padding-top: 2rem !important; padding-bottom: 0rem !important; }
+
+        .animated-title {
+            background: linear-gradient(to right, #c0c0c0, #2b71c7, #ff4b4b, #c0c0c0);
+            background-size: 300% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: sweep 6s linear infinite;
+        }
+
+        @keyframes sweep {
+            to { background-position: 300% center; }
+        }
+
+        .nhl-logo {
+            height: 45px;
+            margin-right: 15px;
+            animation: spin-pulse 4s infinite ease-in-out;
+        }
+
+        @keyframes spin-pulse {
+            0% { transform: rotateY(0deg) scale(1); }
+            50% { transform: rotateY(180deg) scale(1.15); }
+            100% { transform: rotateY(360deg) scale(1); }
+        }
+
+        .stButton button { width: 100%; }
+
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] div.stButton button {
+            width: auto !important;
+            min-width: 0 !important;
+            padding: 0.2rem 0.6rem !important;
+            float: right;
+        }
+
+        /* Remove button styling - transparent background with white X */
+        [data-testid="stSidebar"] button[kind="secondary"][data-testid="stBaseButton-secondary"] {
+            background-color: transparent !important;
+            border: none !important;
+            color: white !important;
+            padding: 0 !important;
+            min-width: 24px !important;
+            width: 24px !important;
+            height: 32px !important;
+            font-size: 18px !important;
+            line-height: 32px !important;
+            margin-left: -8px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        [data-testid="stSidebar"] button[kind="secondary"][data-testid="stBaseButton-secondary"]:hover {
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            color: #ff4b4b !important;
+        }
+
+        /* Stretch columns to equal height, then center content within each */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
+            flex-wrap: nowrap !important;
+            align-items: stretch !important;
+            gap: 0 !important;
+        }
+
+        /* Each column becomes a flex container so its inner block can be centered */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+            display: flex !important;
+            align-items: center !important;
+        }
+
+        /* The inner vertical block — centered, no margin leakage */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"] {
+            width: 100% !important;
+            justify-content: center !important;
+        }
+
+        /* Zero out all margins inside these rows */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] .element-container {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        /* Tighten sidebar vertical spacing */
+        [data-testid="stSidebar"] .stMarkdown hr {
+            margin-top: 6px !important;
+            margin-bottom: 6px !important;
+        }
+        [data-testid="stSidebar"] .element-container {
+            margin-bottom: 4px !important;
+        }
+        [data-testid="stSidebar"] h3 {
+            margin-top: 4px !important;
+            margin-bottom: 4px !important;
+        }
+
+        /* Remove gap above Global Search to match Top 50 spacing */
+        [data-testid="stSidebar"] .element-container:has(> div > div > label[data-testid="stWidgetLabel"]:nth-child(1)) {
+            margin-top: 0 !important;
+        }
+        /* Target the first text input after the category divider to remove top margin */
+        [data-testid="stSidebar"] hr + .element-container .stTextInput label {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+
+        /* Compact controls expander — reduce vertical whitespace */
+        [data-testid="stExpander"] details summary {
+            padding-top: 0.4rem !important;
+            padding-bottom: 0.4rem !important;
+        }
+        [data-testid="stExpander"] details > div {
+            padding-top: 0.25rem !important;
+            padding-bottom: 0.25rem !important;
+        }
+        [data-testid="stExpander"] .element-container {
+            margin-bottom: 0 !important;
+        }
+        [data-testid="stExpander"] [data-testid="stHorizontalBlock"] {
+            gap: 0.5rem !important;
+            row-gap: 0.25rem !important;
+        }
+        [data-testid="stExpander"] .stRadio > label {
+            margin-bottom: 0.1rem !important;
+        }
+        [data-testid="stExpander"] [data-testid="stToggle"] {
+            margin-bottom: 0 !important;
+        }
+        [data-testid="stExpander"] [data-testid="stVerticalBlock"] {
+            gap: 0.25rem !important;
+        }
+
+        /* Allow controls toggle columns to shrink below content width (enables ellipsis) */
+        div:has(> #controls-row1) + div [data-testid="stColumn"] {
+            min-width: 0 !important;
+            overflow: hidden !important;
+        }
+
+        /* Truncate toggle labels on narrow/intermediate screen widths */
+        [data-testid="stExpander"] [data-testid="stToggle"] label {
+            display: flex !important;
+            align-items: center !important;
+            overflow: hidden !important;
+            max-width: 100% !important;
+            flex-wrap: nowrap !important;
+        }
+        [data-testid="stExpander"] [data-testid="stToggle"] label > p,
+        [data-testid="stExpander"] [data-testid="stToggle"] label > span:not([data-testid]) {
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            min-width: 0 !important;
+            flex: 1 1 0 !important;
+        }
+
+        .player-name {
+            font-size: 15px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 32px !important;
+        }
+
+        /* Center the markdown wrapper itself */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stMarkdown"] {
+            display: flex !important;
+            align-items: center !important;
+            margin: 0 !important;
+        }
+
+        /* Center the button wrapper */
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stButton"],
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] .stButton {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: flex-end !important;
+            margin: 0 !important;
+        }
+
+        div.element-container:has(.blue-btn-anchor) + div.element-container button {
+            background-color: #2b71c7 !important;
+            border-color: #2b71c7 !important;
+            color: white !important;
+        }
+        div.element-container:has(.blue-btn-anchor) + div.element-container button:hover {
+            background-color: #1a569d !important;
+            border-color: #1a569d !important;
+        }
+
+        /* Controls dropdowns: stack one per row on mobile */
+        @media (max-width: 768px) {
+            div:has(> #controls-dropdowns) + div [data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap !important;
+            }
+            div:has(> #controls-dropdowns) + div [data-testid="column"] {
+                min-width: 100% !important;
+                flex: 1 1 100% !important;
+            }
+        }
+
+        /* Controls row1 (category + toggles): wrap ~3 per row on mobile */
+        @media (max-width: 768px) {
+            div:has(> #controls-row1) + div [data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap !important;
+            }
+            div:has(> #controls-row1) + div [data-testid="column"] {
+                min-width: 30% !important;
+                flex: 1 1 30% !important;
+            }
+        }
+
+        /* Comparison panel cards */
+        .comparison-card {
+            padding: 0.5rem 0.25rem;
+        }
+        .comparison-card b {
+            font-size: 18px;
+        }
+        .comparison-card small {
+            color: #aaa;
+            font-size: 12px;
+        }
+
+        /* Comparison tab row (native st.tabs) */
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] {
+            margin-top: -2px !important;
+        }
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-list"] {
+            gap: 0.35rem !important;
+            flex-wrap: wrap !important;
+            margin-bottom: 0.3rem !important;
+            min-height: 38px !important;
+            align-items: center !important;
+            border-bottom: 0 !important;
+        }
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-border"] {
+            display: none !important;
+        }
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] button[role="tab"] {
+            margin: 0 !important;
+            border: 1px solid #2a2a2a !important;
+            border-radius: 999px !important;
+            background: rgba(17, 24, 39, 0.7) !important;
+            padding: 4px 10px !important;
+            min-height: 0 !important;
+            height: auto !important;
+        }
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] button[role="tab"] p {
+            margin: 0 !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            color: #d9d9d9 !important;
+        }
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+            border-color: #ff4b4b !important;
+            background: rgba(255, 75, 75, 0.14) !important;
+        }
+        div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-panel"] {
+            padding-top: 0.1rem !important;
+        }
+        @media (max-width: 768px) {
+            div:has(> #comparison-tabs) + div [data-testid="stTabs"] button[role="tab"] {
+                padding: 3px 8px !important;
+            }
+        }
+
+        /* Responsive: stack chart and stats panel vertically on mobile */
+        @media screen and (max-width: 768px) {
+            .main [data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap !important;
+            }
+            .main [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+                min-width: 100% !important;
+                width: 100% !important;
+            }
+        }
+
+        /* Plotly modebar — always visible, fit on one row */
+        .js-plotly-plot .plotly .modebar {
+            opacity: 1 !important;
+        }
+        .js-plotly-plot .plotly .modebar-btn::before,
+        .js-plotly-plot .plotly .modebar-btn::after {
+            display: none !important;
+            content: none !important;
+        }
+        .js-plotly-plot .plotly .modebar-group {
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+        }
+        .js-plotly-plot .plotly .modebar-btn {
+            padding: 8px 10px !important;
+        }
+        .js-plotly-plot .plotly .modebar-btn svg {
+            width: 22px !important;
+            height: 22px !important;
+        }
+        @media (max-width: 768px) {
+            .js-plotly-plot .plotly .modebar-btn {
+                padding: 3px 5px !important;
+            }
+            .js-plotly-plot .plotly .modebar-btn svg {
+                width: 14px !important;
+                height: 14px !important;
+            }
+        }
+
+        /* ── Sidebar toggle: always visible ────────────────────────────── */
+        [data-testid="stSidebarCollapseButton"] button,
+        [data-testid="collapsedControl"] {
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+        [data-testid="stSidebarCollapseButton"] button,
+        [data-testid="collapsedControl"] button {
+            min-width: 36px;
+            min-height: 36px;
+        }
+
+        /* ── Custom animated progress bar for cache spinners ───────────── */
+        /* Hide the default "Running function_name()" text */
+        [data-testid="stSpinner"] .stMarkdown p {
+            display: none !important;
+        }
+        /* Replace with animated progress bar */
+        [data-testid="stSpinner"] {
+            position: relative !important;
+            width: 100% !important;
+            max-width: 400px !important;
+            margin: 1rem auto !important;
+        }
+        [data-testid="stSpinner"]::before {
+            content: '';
+            display: block;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg,
+                #2b71c7 0%,
+                #ff4b4b 50%,
+                #2b71c7 100%);
+            background-size: 200% 100%;
+            border-radius: 2px;
+            animation: progress-sweep 2s ease-in-out infinite;
+        }
+        [data-testid="stSpinner"]::after {
+            content: 'Loading data...';
+            display: block;
+            text-align: center;
+            font-size: 14px;
+            color: #888;
+            margin-top: 8px;
+        }
+        @keyframes progress-sweep {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        /* Keep the spinner icon itself hidden since we have our own animation */
+        [data-testid="stSpinner"] > div:first-child {
+            display: none !important;
+        }
+    </style>
+"""
+"""Full CSS block injected into the Streamlit page head."""
+
+
+# ---------------------------------------------------------------------------
+# Public function
+# ---------------------------------------------------------------------------
+
+def inject_css() -> None:
+    """Inject the NHL Age Curves custom CSS into the Streamlit page.
+
+    Covers: animated gradient title, spinning NHL logo, sidebar compact layout,
+    blue Add-Legend button override, toggle label ellipsis truncation for intermediate
+    screen widths (foldable/tablet), mobile responsive controls row wrapping
+    (~3 columns per row via #controls-row1 marker),
+    responsive stacking of the chart/stats panel split on narrow screens, and
+    Plotly modebar sizing for desktop and mobile.
+
+    Must be called once per app run, after st.set_page_config().
+    """
+    st.markdown(_CSS, unsafe_allow_html=True)
+
+
+def inject_mobile_dropdown_fix() -> None:
+    """Inject CSS to prevent mobile keyboard from opening on dropdown taps.
+
+    Streamlit's selectbox/multiselect use React Select which has a searchable
+    input field. On mobile touch devices, focusing this input triggers the
+    on-screen keyboard. This CSS disables pointer events on the input field
+    for touch devices only, preventing keyboard popup while preserving full
+    dropdown functionality.
+
+    The fix targets:
+        - Top 50 All-Time Skaters/Goalies dropdown
+        - Active Rosters team selector
+        - Select Player roster dropdown
+        - X-Axis, Select Metric, Season Type, Leagues dropdowns
+
+    Must be called once per app run, after st.set_page_config().
+    """
+    mobile_css = """
+    <style>
+        /* Disable search input in dropdowns on touch devices (mobile/tablet)
+           to prevent on-screen keyboard from opening when tapping dropdowns */
+        @media (pointer: coarse) {
+            /* Target the input inside Streamlit selectbox/multiselect dropdowns */
+            div[data-baseweb="select"] input,
+            div[data-baseweb="popover"] input,
+            div[data-baseweb="select"] [role="combobox"] input {
+                pointer-events: none !important;
+                caret-color: transparent !important;
+                -webkit-user-select: none !important;
+                user-select: none !important;
+            }
+
+            /* Ensure the dropdown container remains fully clickable */
+            div[data-baseweb="select"] {
+                cursor: pointer !important;
+            }
+        }
+
+        /* Additional targeting for iOS Safari and older mobile browsers */
+        @media (hover: none) and (pointer: coarse) {
+            [role="combobox"] input,
+            [role="listbox"] input {
+                pointer-events: none !important;
+                caret-color: transparent !important;
+            }
+        }
+    </style>
+    """
+    st.markdown(mobile_css, unsafe_allow_html=True)
