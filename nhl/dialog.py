@@ -26,6 +26,12 @@ import streamlit as st
 from nhl.data_loaders import get_all_time_rank
 
 
+BASELINE_LABEL_TO_KEY = {
+    'Skater 75th Percentile Baseline': 'Skater',
+    'Goalie 75th Percentile Baseline': 'Goalie',
+}
+
+
 @st.dialog("Season Snapshot")
 def show_season_details(
     player_name: str,
@@ -54,12 +60,14 @@ def show_season_details(
         is_cumul:            Whether the cumulative toggle is active.
         full_df:             Concatenated processed DataFrame (all players, real+proj).
         s_type:              Season type ('Regular', 'Playoffs', or 'Both').
-        ml_clones_dict:      {base_name: [clone_detail_dicts]} from player pipeline.
-        historical_baselines: {'Skater': DataFrame, 'Goalie': DataFrame} from baselines.
+        ml_clones_dict:      {base_name: list[clone_dict]} from player pipeline.
+        historical_baselines: Baseline dict from baselines.
         stat_category:       'Skater' or 'Goalie' (passed in, not read from session state).
     """
+    age = int(age)
     clean_name    = player_name.replace(" (Proj)", "")
-    is_baseline   = (clean_name == "NHL 75th Percentile Baseline")
+    baseline_key  = BASELINE_LABEL_TO_KEY.get(clean_name)
+    is_baseline   = baseline_key is not None
     is_projection = "(Proj)" in player_name
     is_real       = not is_baseline and not is_projection
 
@@ -67,7 +75,7 @@ def show_season_details(
 
     # ── CASE 3: BASELINE LINE CLICK ────────────────────────────────────
     if is_baseline:
-        base_df = historical_baselines.get(stat_category)
+        base_df = historical_baselines.get(baseline_key)
         if base_df is not None and not base_df.empty and age in base_df.index:
             if stat_category == "Skater":
                 b_gp  = int(round(base_df.loc[age, 'GP']))    if 'GP'      in base_df.columns else 0
@@ -194,10 +202,10 @@ def show_season_details(
                 )
 
         # ML Projection Clones — single column with team + career stats
-        if clean_name in ml_clones_dict and ml_clones_dict[clean_name]:
+        clones = ml_clones_dict.get(clean_name, []) or []
+        if clones:
             st.markdown("---")
-            st.markdown("**ML Projection Clones (Position-Matched):**")
-            clones        = ml_clones_dict[clean_name]
+            st.markdown("**Nearest Historical Matches:**")
             is_skater_mode = stat_category == "Skater"
 
             if is_skater_mode:

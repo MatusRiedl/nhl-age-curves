@@ -58,7 +58,7 @@ def render_chart(
         do_base:              Whether to overlay the 75th-percentile baseline.
         do_smooth:            Whether spline line shape is active (cosmetic only here).
         stat_category:        'Skater' or 'Goalie' (passed to dialog).
-        historical_baselines: {'Skater': DataFrame, 'Goalie': DataFrame}.
+        historical_baselines: Baseline dict keyed by Skater and Goalie.
         team_baselines:       {season_year: {metric: value}}.
         raw_dfs_cache:        Raw DataFrames for the click dialog.
         ml_clones_dict:       KNN clone dicts for the click dialog.
@@ -100,112 +100,37 @@ def render_chart(
             if base_data:
                 final_df = pd.concat([final_df, pd.DataFrame(base_data)], ignore_index=True)
         else:
-            # Player baseline: 75th pct by age from parquet
-            base_key = "Goalie" if stat_category == "Goalie" else "Skater"
+            base_rows = []
+            base_key = 'Goalie' if stat_category == 'Goalie' else 'Skater'
             base_df = historical_baselines.get(base_key)
-
-            if base_df is not None and not base_df.empty:
-                base_data  = []
-                cumul_val  = 0
-                is_goalie_save = (stat_category == "Goalie" and metric == "Save %")
-                is_skater = (stat_category == "Skater")
-
-                def _last_two_vals_from_base_data(_base_data, _metric):
-                    vals = []
-                    for row in reversed(_base_data):
-                        v = row.get(_metric)
-                        if v is None or pd.isna(v):
-                            continue
-                        vals.append(float(v))
-                        if len(vals) == 2:
-                            break
-                    return (vals[0], vals[1]) if len(vals) == 2 else (None, None)
-
-                for age in range(18, 41):
-                    val = None
-                    has_metric = metric in base_df.columns
-
-                    if age in base_df.index and has_metric:
-                        v = base_df.loc[age, metric]
-                        if not pd.isna(v):
-                            val = float(v)
-
-                    if val is None:
-                        if is_goalie_save:
-                            if age < 19:
-                                val = float('nan')
-                            elif age == 19:
-                                val = 88.0
-                            else:
-                                prev_age = None
-                                prev_val = None
-                                if has_metric:
-                                    prev_known = [
-                                        int(a) for a in base_df.index
-                                        if a < age and not pd.isna(base_df.loc[a, metric])
-                                    ]
-                                    if prev_known:
-                                        prev_age = max(prev_known)
-                                        prev_val = float(base_df.loc[prev_age, metric])
-                                if prev_age is None and age > 19:
-                                    prev_age = 19
-                                    prev_val = 88.0
-
-                                next_age = None
-                                next_val = None
-                                if has_metric:
-                                    next_known = [
-                                        int(a) for a in base_df.index
-                                        if a > age and not pd.isna(base_df.loc[a, metric])
-                                    ]
-                                    if next_known:
-                                        next_age = min(next_known)
-                                        next_val = float(base_df.loc[next_age, metric])
-
-                                if prev_age is not None and next_age is not None and next_age != prev_age:
-                                    step = (next_val - prev_val) / (next_age - prev_age)
-                                    val = prev_val + step * (age - prev_age)
-                                elif prev_val is not None:
-                                    val = prev_val
-                                elif next_val is not None:
-                                    val = next_val
-                                else:
-                                    val = 88.0
-                        else:
-                            # Default for non-goalie-save when data is missing
-                            val = 0
-
-                            # Skater-only late-age safety net (prevents sparse-data cliff)
-                            if is_skater and age >= 38 and has_metric:
-                                p1 = p2 = None
-
-                                if (age - 1) in base_df.index and (age - 2) in base_df.index:
-                                    v1 = base_df.loc[age - 1, metric]
-                                    v2 = base_df.loc[age - 2, metric]
-                                    if not pd.isna(v1) and not pd.isna(v2):
-                                        p1, p2 = float(v1), float(v2)
-
-                                if p1 is None or p2 is None:
-                                    p1, p2 = _last_two_vals_from_base_data(base_data, metric)
-
-                                if p2 is not None and p1 is not None and p2 > 0 and p1 > 0:
-                                    slope = max(min(p1 / p2, 1.0), 0.75)
-                                    val = p1 * slope
-
-                    if do_cumul and metric in [
-                        'Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves', '+/-'
-                    ]:
-                        cumul_val += val
-                        val = cumul_val
-
-                    base_data.append({
-                        "Age":      age,
-                        metric:     val,
-                        "Player":   "NHL 75th Percentile Baseline",
-                        "BaseName": "Baseline",
+            base_label = (
+                'Goalie 75th Percentile Baseline'
+                if stat_category == 'Goalie'
+                else 'Skater 75th Percentile Baseline'
+            )
+            counting_metrics = {
+                'Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves', '+/-'
+            }
+            if base_df is not None and not base_df.empty and metric in base_df.columns:
+                values = base_df[metric].sort_index().reindex(range(18, 41)).astype(float)
+                values = values.interpolate(method='linear')
+                cumulative_value = 0.0
+                for age, val in values.items():
+                    if pd.isna(val):
+                        continue
+                    plot_val = float(val)
+                    if do_cumul and metric in counting_metrics:
+                        cumulative_value += plot_val
+                        plot_val = cumulative_value
+                    base_rows.append({
+                        'Age': int(age),
+                        metric: plot_val,
+                        'Player': base_label,
+                        'BaseName': 'Baseline',
                     })
 
-                final_df = pd.concat([final_df, pd.DataFrame(base_data)], ignore_index=True)
+            if base_rows:
+                final_df = pd.concat([final_df, pd.DataFrame(base_rows)], ignore_index=True)
 
     # Guard: baseline attempt may still leave final_df empty (e.g. switching to Goalie
     # mode with no goalies loaded and a metric that has no baseline data).
@@ -293,8 +218,7 @@ def render_chart(
     )
 
     # Apply visual conventions per trace
-    baseline_x = None
-    baseline_y = None
+    baseline_traces = []
     player_colors = {}  # Map player name -> color
     proj_traces = []  # Store (name, x, y, color) for projection glow traces
     
@@ -324,30 +248,27 @@ def render_chart(
             trace.line.color         = 'rgba(255, 255, 255, 0.55)'
             trace.line.width         = 2
             trace.marker.size        = 1
-            # Capture x/y for glow traces
-            baseline_x = trace.x
-            baseline_y = trace.y
+            baseline_traces.append({'x': trace.x, 'y': trace.y})
 
     # Add stacked glow traces for baseline (after loop to avoid modifying fig.data during iteration)
-    if baseline_x is not None and baseline_y is not None and do_base and not games_mode:
-        # Outer glow
-        fig.add_trace(go.Scatter(
-            x=baseline_x, y=baseline_y,
-            mode='lines',
-            line=dict(color='rgba(255,255,255,0.06)', width=12, dash='dash'),
-            showlegend=False,
-            hoverinfo='skip',
-            name='_glow_outer',
-        ))
-        # Inner glow
-        fig.add_trace(go.Scatter(
-            x=baseline_x, y=baseline_y,
-            mode='lines',
-            line=dict(color='rgba(255,255,255,0.12)', width=5, dash='dash'),
-            showlegend=False,
-            hoverinfo='skip',
-            name='_glow_inner',
-        ))
+    if baseline_traces and do_base and not games_mode:
+        for baseline_trace in baseline_traces:
+            fig.add_trace(go.Scatter(
+                x=baseline_trace['x'], y=baseline_trace['y'],
+                mode='lines',
+                line=dict(color='rgba(255,255,255,0.06)', width=12, dash='dash'),
+                showlegend=False,
+                hoverinfo='skip',
+                name='_glow_outer',
+            ))
+            fig.add_trace(go.Scatter(
+                x=baseline_trace['x'], y=baseline_trace['y'],
+                mode='lines',
+                line=dict(color='rgba(255,255,255,0.12)', width=5, dash='dash'),
+                showlegend=False,
+                hoverinfo='skip',
+                name='_glow_inner',
+            ))
 
     # Add glow traces for projection lines (use player's color for each projection)
     for proj in proj_traces:

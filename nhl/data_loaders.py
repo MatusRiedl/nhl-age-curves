@@ -31,6 +31,37 @@ from nhl.constants import (
 )
 
 
+def _normalize_historical_goalie_rates(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize goalie SavePct values loaded from the historical parquet.
+
+    Older parquet files may contain percent-scale SavePct values from legacy
+    scraper output or malformed traded-season rows. This keeps the app usable
+    while transitioning to a rebuilt historical file.
+
+    Args:
+        df: Historical seasons DataFrame loaded from parquet.
+
+    Returns:
+        Copy of df with goalie SavePct coerced to 0-1 scale and clipped to a
+        sane range.
+    """
+    if df.empty or 'SavePct' not in df.columns or 'Position' not in df.columns:
+        return df
+
+    d = df.copy()
+    goalie_mask = d['Position'].astype(str).str.upper().eq('G')
+    if not goalie_mask.any():
+        return d
+
+    save_pct = pd.to_numeric(d.loc[goalie_mask, 'SavePct'], errors='coerce')
+    over_one = save_pct > 1.5
+    if over_one.any():
+        save_pct.loc[over_one] = save_pct.loc[over_one] / 100.0
+
+    d.loc[goalie_mask, 'SavePct'] = save_pct.clip(lower=0.0, upper=1.0).fillna(0.0)
+    return d
+
+
 # ---------------------------------------------------------------------------
 # Parquet / historical data
 # ---------------------------------------------------------------------------
@@ -40,7 +71,8 @@ def load_historical_data() -> pd.DataFrame:
     """Load the local NHL historical seasons parquet file.
 
     Adds PPG (Points/GP) and Save% (alias of SavePct) columns so downstream
-    functions don't have to recompute them.
+    functions don't have to recompute them. Also sanitizes legacy goalie
+    SavePct values so old parquet files do not produce impossible save rates.
 
     Returns:
         DataFrame with one row per player-season, or an empty DataFrame if
@@ -63,6 +95,8 @@ def load_historical_data() -> pd.DataFrame:
                         goalie_mask = goalie_mask | df[col].fillna(0).gt(0)
                 if goalie_mask.any():
                     df.loc[goalie_mask, "Position"] = "G"
+
+            df = _normalize_historical_goalie_rates(df)
 
             df['PPG'] = df['Points'] / df['GP']
             df['Save %'] = df['SavePct'] * 100

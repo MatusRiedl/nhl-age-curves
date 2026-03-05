@@ -86,7 +86,7 @@ def process_players(
         Tuple of (processed_dfs, raw_dfs_cache, ml_clones_dict, peak_info):
             processed_dfs:   List of DataFrames ready for Plotly chart rendering.
             raw_dfs_cache:   List of raw DataFrames (pre-pipeline) for click dialog.
-            ml_clones_dict:  {base_name: [clone_detail_dicts]} for dialog popup.
+            ml_clones_dict:  {base_name: list[clone_dict]} for dialog popup.
             peak_info:       {base_name: {x, y, raw_peak_val, age, season_year, pid}}
     """
     processed_dfs  = []
@@ -339,6 +339,7 @@ def process_players(
                     max_age    = int(max_age),
                     stat_category = stat_category,
                 )
+                ml_clones_dict[base_name] = []
 
             if proj_rows:
                 df = pd.concat([df, pd.DataFrame(proj_rows)], ignore_index=True)
@@ -356,8 +357,11 @@ def process_players(
         if not games_mode and do_predict and df['Age'].max() > max_age:
             real_part = df[df['Age'] <= max_age].copy()
             proj_part = df[df['Age'] >= max_age].copy()
-            proj_part['Player'] = f"{base_name} (Proj)"
-            final_player_df = pd.concat([real_part, proj_part])
+            if not proj_part.empty:
+                proj_part['Player'] = f"{base_name} (Proj)"
+                final_player_df = pd.concat([real_part, proj_part], ignore_index=True)
+            else:
+                final_player_df = real_part.copy()
         else:
             final_player_df = df.copy()
 

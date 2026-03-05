@@ -1,5 +1,5 @@
 # NHL Player Age Curves & Career Projections 🏒
-An interactive analytics dashboard built in Python that visualizes aging curves and career trajectories for NHL players using live data and machine learning projections.
+An interactive analytics dashboard built in Python that visualizes aging curves and career trajectories for NHL players using live data and hybrid nearest-match projections.
 
 ## Available online here
 https://nhl-age-curves.streamlit.app/
@@ -8,11 +8,11 @@ https://nhl-age-curves.streamlit.app/
 
 * **Live API Integration:** Pulls real-time data directly from the NHL's undocumented public API: player stats, team rosters, and all-time records leaderboards.
 
-* **KNN Machine Learning Projections:** Projects player performance to age 40 using a K-Nearest Neighbors algorithm. Matches against a database of ~8,500 NHL careers using full-career shape (not just recent seasons). An elite-tier pre-filter ensures top players are compared against historically similar talent levels (McDavid clones from Gretzky/Lemieux/Crosby, not role players).
+* **Hybrid KNN Projections:** Projects player performance to age 40 from the 10 nearest historical matches using L1 distance, equal-weight top-10 clone influence, a fixed 70/30 blend, and late-age stabilization when clone data gets thin.
 
 * **Era-Adjusted Scoring:** Normalizes Points, Goals, and Assists independently across 8 NHL eras (the high-scoring 80s, the Dead Puck era, the modern game, etc.) using historical goals-per-game data so comparisons across generations are apples-to-apples.
 
-* **75th Percentile Baseline:** Toggle a "Top 6 Forward / Starting Goalie" reference curve built from historical parquet data, with survivorship bias correction applied after age 31 (flat-or-rising baselines are overridden with a monotonic decay).
+* **75th Percentile Historical Baselines:** Toggle aggregate Skater and Goalie reference curves built from historical parquet data, with classic survivorship shaping and the preserved late-tail fixes.
 
 * **Multi-League NHLe Support:** Include non-NHL seasons (KHL, SHL, AHL, NCAA, OHL, WHL, and more) with automatic NHLe conversion factors applied to Points, Goals, and Assists before entering the pipeline.
 
@@ -22,7 +22,7 @@ https://nhl-age-curves.streamlit.app/
 
 * **Cumulative Tracking:** Toggle a race chart view to see cumulative career stats rather than single-season values.
 
-* **Season Snapshot:** Click any data point to see that player's exact season stats at that age and their projected all-time career rank.
+* **Season Snapshot:** Click any data point to see that player's exact season stats at that age, projected all-time career rank, and nearest historical matches.
 
 * **Shareable URLs:** All chart state (players on board, metric, toggles, category, season type) is encoded into the browser URL automatically. Copy the URL to share an exact comparison with anyone.
 
@@ -34,7 +34,7 @@ https://nhl-age-curves.streamlit.app/
 
 ## Tech Stack
 * **Frontend/Framework:** Streamlit
-* **Data & ML:** Pandas, PyArrow, custom KNN implementation
+* **Data & ML:** Pandas, PyArrow, custom hybrid KNN implementation
 * **Visualization:** Plotly
 * **Networking:** Requests (REST API)
 * **Local Database:** Parquet (`nhl_historical_seasons.parquet`)
@@ -51,14 +51,14 @@ nhl/
     styles.py            CSS injection
     era.py               era-adjustment math (no Streamlit dependency)
     data_loaders.py      cached API fetch and parquet load functions
-    baselines.py         75th-percentile baseline builders
-    knn_engine.py        KNN projection engine (no Streamlit, testable)
-    player_pipeline.py   full per-player data pipeline
+    baselines.py         aggregate historical baseline builders
+    knn_engine.py        hybrid KNN projection engine
+    player_pipeline.py   full per-player data pipeline and clone wiring
     team_pipeline.py     team comparison pipeline
     controls.py          Category/Metric and View Options expanders
     sidebar.py           player and team sidebar UI
     dialog.py            season-detail popup dialog
-    chart.py             Plotly chart rendering and JS pan-clamp
+    chart.py             Plotly chart rendering, baseline overlay, and JS pan-clamp
     comparison.py        player stat comparison panel
     url_params.py        URL query param encode/decode for shareable links
     schedule.py          live/recent game detection for chart auto-population

@@ -1,24 +1,21 @@
-"""
-nhl.knn_engine — KNN ML projection engine for NHL player age curves.
+"""nhl.knn_engine — KNN ML projection engine for NHL player age curves.
 
 Projects a player's future stat trajectory by finding the 10 most similar
-historical players (clones) using L1 distance across shared career ages, then
-blending their future trajectories via a 70/30 dampening scheme.
+historical players using L1 distance across shared career ages, then mapping
+clone movement forward with equal-weight averages and a fixed prior blend.
 
 Key design decisions:
-    - L1 distance (Manhattan), not L2 — less sensitive to outlier single seasons.
-    - Partial career matching: requires >= max(2, len(ages)//3) shared ages so young
-      players with short careers still get reasonable matches.
+    - L1 distance (Manhattan), not L2.
+    - Partial career matching: requires >= max(2, len(ages)//3) shared ages.
     - Tier pre-filter: clones must have a career peak >= 50% of the live player's
       peak to prevent elite players matching against journeymen.
-    - 70/30 blend: raw_avg * 0.70 + last_avg * 0.30 — dampens late-career noise
-      from small historical pools.
-    - pct_change clamp: [-0.12, +0.25] — tighter than the old ±0.50 to prevent
-      cliff drops for elite players who age more gracefully than average.
-    - GP excluded from KNN — survivorship bias makes it unreliable.  GP uses the
-      4-phase durability curve in player_pipeline.py instead.
+    - Top-10 clone influence is equal-weighted.
+    - Clone/prior blending uses a fixed 70/30 split.
+    - pct_change clamp: [-0.12, +0.25].
+    - GP excluded from KNN. GP uses the 4-phase durability curve in
+      player_pipeline.py instead.
 
-No Streamlit import — this module is pure pandas/numpy math and is independently
+No Streamlit import — this module is pure pandas math and is independently
 testable without mocking any Streamlit state.
 
 Imports from project:
@@ -104,6 +101,77 @@ def _build_clone_names(
     return clone_names
 
 
+def _estimate_sparse_future_target(
+    last_avg: float,
+    metric: str,
+    age: int,
+    stat_category: str,
+) -> float:
+    """Estimate a non-zero fallback target when clone data is exhausted.
+
+    Args:
+        last_avg: Previous season's clone average proxy.
+        metric: Stat column being projected.
+        age: Future age currently being projected.
+        stat_category: 'Skater' or 'Goalie'.
+
+    Returns:
+        A gentle late-career continuation target in the same scale as the metric.
+    """
+    if metric == 'Save %':
+        return last_avg - (0.15 if age <= 37 else 0.20 if age <= 39 else 0.25)
+    if metric == 'GAA':
+        return last_avg * (1.03 if stat_category == 'Goalie' else 1.01)
+    if metric == '+/-':
+        return last_avg - 2
+    if metric in RATE_STATS:
+        return last_avg * (0.97 if age <= 37 else 0.95)
+    return last_avg * (0.96 if age <= 37 else 0.94 if age <= 39 else 0.92)
+
+
+def _stabilize_late_target(
+    next_avg: float,
+    last_avg: float,
+    metric: str,
+    age: int,
+    stat_category: str,
+    clone_count: int,
+) -> float:
+    """Dampen sparse or upward late-career targets before applying deltas.
+
+    Args:
+        next_avg: Candidate clone average for the future age.
+        last_avg: Previous season's clone average proxy.
+        metric: Stat column being projected.
+        age: Future age currently being projected.
+        stat_category: 'Skater' or 'Goalie'.
+        clone_count: Number of clone rows contributing at this future age.
+
+    Returns:
+        Stabilized target that avoids artificial age-36+ rebounds and flat floors.
+    """
+    if age < 36 or pd.isna(last_avg):
+        return next_avg
+
+    sparse_fallback = _estimate_sparse_future_target(last_avg, metric, age, stat_category)
+
+    if metric == 'Save %':
+        if clone_count < 3 or next_avg > last_avg:
+            return min(next_avg, sparse_fallback)
+        return next_avg
+
+    if metric in ['GAA', '+/-']:
+        return next_avg
+
+    if next_avg > last_avg:
+        return sparse_fallback
+
+    if clone_count < 3:
+        return next_avg * 0.35 + sparse_fallback * 0.65
+
+    return next_avg
+
+
 # ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
@@ -123,8 +191,8 @@ def run_knn_projection(
     """Run KNN age-curve projection for a single player.
 
     Finds 10 historical clones using L1 distance on shared career ages, then
-    projects future seasons by blending clone trajectories with 70/30 dampening
-    and a pct_change clamp of [-0.12, +0.25].
+    projects future seasons with equal-weight clone averages, a fixed 70/30
+    blend against the prior target, and a pct_change clamp of [-0.12, +0.25].
 
     Args:
         career_df:         Pre-processed player career DataFrame (Age, metric columns).
@@ -140,10 +208,8 @@ def run_knn_projection(
 
     Returns:
         Tuple of (proj_rows, clone_names):
-            proj_rows:   List of dicts with Age, metric, Player, BaseName keys.
-                         Empty list if ML cannot be applied.
+            proj_rows: List of dicts with Age, metric, Player, BaseName keys.
             clone_names: List of clone detail dicts for the dialog popup.
-                         Empty list if ML cannot be applied.
     """
     max_age       = career_df['Age'].max()
     base_name     = career_df['BaseName'].iloc[0] if 'BaseName' in career_df.columns else ''
@@ -213,8 +279,8 @@ def run_knn_projection(
     n_shared = valid_hist[valid_ages].notna().sum(axis=1).clip(lower=1)
     dist     = dist / n_shared
 
-    top_ids     = dist.nsmallest(10).index
-    clone_names = _build_clone_names(top_ids, clone_details_map, id_to_name_map, stat_category)
+    top_ids        = dist.nsmallest(10).index
+    clone_names    = _build_clone_names(top_ids, clone_details_map, id_to_name_map, stat_category)
 
     last_avg = (
         valid_hist.loc[top_ids, valid_ages[-1]].dropna().mean()
@@ -233,11 +299,12 @@ def run_knn_projection(
     proj_rows = []
 
     for age in range(int(max_age) + 1, 41):
+        clone_count = 0
         if age in pivot.columns:
             clone_vals = pivot.loc[top_ids, age].dropna()
-            if len(clone_vals) > 0:
-                # 70/30 blend: raw clone mean + previous year's average
-                raw_avg  = clone_vals.mean()
+            clone_count = len(clone_vals)
+            if clone_count > 0:
+                raw_avg = float(clone_vals.astype(float).mean())
                 next_avg = raw_avg * 0.70 + last_avg * 0.30
                 recent_clone_avgs.append(next_avg)
                 if len(recent_clone_avgs) > 3:
@@ -271,12 +338,21 @@ def run_knn_projection(
                 )
                 recent_clone_avgs.append(next_avg)
             else:
-                next_avg = 0
+                next_avg = _estimate_sparse_future_target(last_avg, metric, age, stat_category)
         else:
-            next_avg = 0
+            next_avg = _estimate_sparse_future_target(last_avg, metric, age, stat_category)
 
         if pd.isna(next_avg):
-            next_avg = 0
+            next_avg = _estimate_sparse_future_target(last_avg, metric, age, stat_category)
+
+        next_avg = _stabilize_late_target(
+            next_avg=next_avg,
+            last_avg=last_avg,
+            metric=metric,
+            age=age,
+            stat_category=stat_category,
+            clone_count=clone_count,
+        )
 
         # Update current_val via delta or pct_change
         if metric == 'Save %':
@@ -298,17 +374,6 @@ def run_knn_projection(
             current_val = max(0, current_val)
 
         current_val = _apply_stat_cap(current_val, metric, stat_category)
-
-        if metric == 'Save %' and stat_category == 'Goalie':
-            late_floor = {
-                36: 90.0,
-                37: 89.7,
-                38: 89.4,
-                39: 89.2,
-                40: 89.0,
-            }
-            if age in late_floor:
-                current_val = max(current_val, late_floor[age])
 
         proj_rows.append({
             "Age":      age,

@@ -32,9 +32,11 @@ app.py                     — Thin orchestrator. Initializes session state,
                              ~200 lines. No business logic here.
 
 scraper.py                 — Standalone script. Run manually to refresh parquet.
-                             Hits NHL API, maps positions, calculates ages, exports
-                             fully raw (unadjusted) Points, Goals, and Assists to
-                             parquet. Era adjustment is NOT applied at export time.
+                             Hits NHL API, maps positions, calculates ages, retries
+                             transient/rate-limited responses, normalizes goalie
+                             save percentage, and recomputes traded-season goalie
+                             rates before exporting raw historical seasons to parquet.
+                             Era adjustment is NOT applied at export time.
                              player_pipeline.py applies era adjustment once to hist_df
                              before the per-player KNN loop (via apply_era_to_hist()),
                              then passes the adjusted df into knn_engine.py with
@@ -52,14 +54,17 @@ nhl/ package (all logic lives here — see Section 12 for full detail):
   styles.py                — CSS injection only. No project imports.
   era.py                   — Era adjustment math. No Streamlit dependency.
   data_loaders.py          — All 14 @st.cache_data fetch/parquet functions.
-  baselines.py             — Historical + team 75th-pct baseline builders.
-  knn_engine.py            — KNN ML projection. No Streamlit. Independently testable.
-  player_pipeline.py       — process_players() full per-player pipeline.
+  baselines.py             — Aggregate historical + team 75th-pct baseline builders.
+  knn_engine.py            — Hybrid KNN projection engine.
+                             No Streamlit. Independently testable.
+  player_pipeline.py       — process_players() full per-player pipeline +
+                             clone wiring for dialog display.
   team_pipeline.py         — process_teams() team pipeline.
   controls.py              — Category/Metric + View Options expanders.
   sidebar.py               — Player/team sidebar UI.
   dialog.py                — @st.dialog season-detail popup.
-  chart.py                 — Plotly chart rendering + JS pan-clamp injection.
+  chart.py                 — Plotly chart rendering + aggregate baseline
+                             overlays + JS pan-clamp injection.
   comparison.py            — render_comparison_panel() side-by-side player stat cards.
   url_params.py            — encode_state_to_params() / apply_params_to_state().
                              Serializes full session state to URL query params and
@@ -230,14 +235,20 @@ For every player in active_players (resolved from skater_players or goalie_playe
      multiply counting stats by (82 / actual_GP) to project full-season pace.
      Prevents the ML engine from treating an 18-game sample as a full season.
 
-  8. KNN ML PROJECTION (Age mode only, if "Project to 40" toggle and
-     metric in ml_supported_metrics): See Section 7 for full detail.
-     Projections are generated for both Skaters and Goalies using position-
-     appropriate historical comparables.
+  8. PROJECTION GATE + KNN ENTRY (Age mode only):
+     Projection only runs if all of the following are true:
+       - "Project to 40" toggle is on
+       - max_age < 40
+       - metric not in NO_PROJECTION_METRICS = {'GP', 'SH%', 'TOI'}
+       - career passes the thin-data guard (minimum seasons and total GP)
+     If projection is allowed and metric is in ml_supported_metrics, use the
+     KNN engine described in Section 7 with position-appropriate comparables.
 
-  9. FALLBACK PROJECTION (Age mode only, if KNN fails or metric not ML-supported):
-     GP: Dedicated durability curve (plateau + soft decay)
-     Other: Hardcoded per-metric decay rates
+  9. FALLBACK PROJECTION (Age mode only, only after projection is allowed):
+     If metric is not ML-supported, or KNN cannot produce usable rows,
+     player_pipeline.py switches to run_linear_fallback().
+     GP, SH%, and TOI do not reach this branch in normal app flow because
+     their forecast lines are suppressed entirely by NO_PROJECTION_METRICS.
 
   10. CUMULATIVE (Age mode only): If do_cumul, cumsum() the metric column.
       do_cumul is already False for rate stats and in Games Played mode.
@@ -246,9 +257,11 @@ For every player in active_players (resolved from skater_players or goalie_playe
       Available in both Age and Games Played modes.
 
   12. SPLIT (Age mode only): real_part (Age <= max_age) and proj_part (Age >= max_age).
-      proj_part renamed to "Player Name (Proj)" for Plotly trace separation.
+      The final real point is duplicated into the projection trace for visual
+      continuity, then proj_part is renamed to "Player Name (Proj)" for Plotly
+      trace separation.
 
-SECTION 7 — KNN ML ENGINE DEEP DIVE
+SECTION 7 — HYBRID KNN PROJECTION ENGINE DEEP DIVE
 --------------------------------------
 This is the core intellectual property of the app.
 Only runs in Age mode. Skipped entirely in Games Played mode.
@@ -256,6 +269,8 @@ Only runs in Age mode. Skipped entirely in Games Played mode.
 ml_supported_metrics = ['Points', 'Goals', 'Assists', '+/-', 'PPG', 'PIM',
                          'Wins', 'Shutouts', 'Saves', 'Save %', 'GAA']
 NOTE: GP is intentionally excluded. See Section 7a.
+Projection is also suppressed entirely for NO_PROJECTION_METRICS =
+{'GP', 'SH%', 'TOI'}, so those metrics do not get a Forecast line in normal app flow.
 
 STEP 1 — POSITION FILTERING:
   h_df = hist_df[hist_df['Position'] == pos_code]
@@ -272,7 +287,8 @@ STEP 2 — PIVOT:
 STEP 3 — VALID AGE GUARD:
   valid_ages = [a for a in match_ages if a in pivot.columns]
   Prevents KeyError crash for players with career ages not in historical data.
-  If no valid ages exist, falls back to fallback projection.
+  If no valid ages exist, falls back to fallback projection if projection is
+  otherwise allowed by the pipeline gate.
 
 STEP 4 — DISTANCE (VECTORIZED):
   dist = valid_hist[valid_ages].sub(valid_match_vals).abs().sum(axis=1)
@@ -282,19 +298,34 @@ STEP 4 — DISTANCE (VECTORIZED):
 STEP 5 — TOP 10 CLONES:
   top_ids = dist.nsmallest(10).index
   These 10 players drive the projection.
+  Their influence is equal-weighted, not distance-weighted.
 
 STEP 6 — HYBRID-DELTA MAPPING:
   For each future age (max_age+1 to 40):
-    next_avg = pivot.loc[top_ids, age].fillna(0).mean()  # for counting stats
-    OR
-    next_avg = pivot.loc[top_ids, age].mean()             # for rate stats (NaN ignored)
+    If clone rows exist at that age:
+      raw_avg  = mean(clone values at that age)
+      next_avg = raw_avg * 0.70 + last_avg * 0.30
+
+    If clone rows are thin, exhausted, or NaN:
+      use a non-zero sparse fallback target instead of 0.
+      Counting stats decay gently by age band.
+      Rate stats use metric-aware continuation rules.
+
+    At age 36+:
+      sparse late-age targets are stabilized before projection math.
+      Upward skater rebounds are capped, and sparse goalie Save % spikes are
+      damped against a gentler fallback target instead of trusting tiny clone pools.
+
+    If KNN cannot produce usable rows at all, player_pipeline.py switches to
+    run_linear_fallback() and stores an empty clone list for the dialog popup.
 
     For +/-, GAA, Save % (additive delta):
       current_val += (next_avg - last_avg)
+      Save % yearly delta is clamped to [-1.2, +0.6].
 
     For all other metrics (multiplicative % change):
       pct_change = (next_avg - last_avg) / last_avg
-      pct_change = clamped to [-0.5, +0.5] to prevent extreme single-year swings
+      pct_change = clamped to [-0.12, +0.25] to prevent extreme single-year swings
       current_val += current_val * pct_change
 
   This maps the SLOPE of historical clones onto the MAGNITUDE of the current player.
@@ -307,33 +338,57 @@ STEP 7 — STAT CAPS AND FLOORS (applied every projected year):
   GAA=1.8 is a FLOOR (not a ceiling) — no goalie should project below 1.8 GAA.
   Floors: +/-= -60 (stat_floors dict, applied in BOTH KNN and fallback paths).
 
-Section 7a — WHY GP IS EXCLUDED FROM KNN:
+Section 7a - WHY GP IS EXCLUDED FROM KNN AND FORECAST:
   KNN fills ages beyond a clone's career with 0 (the player retired).
   A clone pool of 10 players where 7 retired by age 35 would show average
   GP of ~24 at age 36 (7×0 + 3×65 / 10 = 19.5). This is not decline —
-  it is survivorship bias in reverse. GP uses a 4-phase durability curve instead:
+  it is survivorship bias in reverse.
+  run_linear_fallback() still contains a 4-phase GP durability curve:
     Age ≤ 28:  +0.8 GP/year (soft growth toward prime)
     Age 29-33: ×0.990/year (~1% annual loss — prime plateau)
     Age 34-37: ×0.965/year (~3.5% annual loss — gradual decline)
     Age 38-40: ×0.930/year (~7% annual loss — late career)
+  But player_pipeline.py suppresses GP forecasts entirely via
+  NO_PROJECTION_METRICS, so this rule exists as fallback logic rather than
+  normal UI behavior.
 
 SECTION 8 — BASELINE ENGINE
 ------------------------------
 Source: nhl_historical_seasons.parquet (same file as KNN)
-Filter: GP >= 40 per season (removes AHL callups and short stints)
-Target: 75th percentile per age — represents Top 6 Forward / Starting Goalie level
+Filter:
+  Skaters: GP >= 40 per season
+  Goalies: GP >= 20 per season
+Target: aggregate 75th percentile per age for strong historical skater and goalie careers
 
-Two-step survivorship bias fix:
-  1. 3-period rolling average smooth (center=True) across ages
-  2. Strict monotonic decay after age 31: if base[age] > base[age-1], override:
-       base[age] = base[age-1] * 0.92
-     Prevents the curve from spiking upward at age 35+ due to selection bias
-     (only elite players play that long, which otherwise makes the baseline look
-     like performance improves with age — it doesn't).
+Historical goalie reliability guardrails:
+  - scraper.py normalizes goalie SavePct to 0-1 scale and recomputes traded-season
+    SavePct and GAA from season totals instead of summing rate fields.
+  - load_historical_data() sanitizes legacy goalie SavePct values from older parquet
+    builds before deriving displayed Save %.
 
-Separate baselines for 'Skater' (Position != 'G') and 'Goalie' (Position == 'G').
-Baseline disabled in Games Played mode (it is Age-indexed, no Games equivalent).
-Baseline displayed as dashed white semi-transparent line when "Show Baseline" is on.
+Baseline families built by build_historical_baselines(df):
+  - Skater
+  - Goalie
+
+Construction + shaping:
+  1. 75th percentile by age within the skater or goalie pool
+  2. 3-period rolling average smooth (center=True) across ages
+  3. After age 31, skater and counting-stat baselines use the classic
+     `prev * 0.92` survivorship cap to stop false late-age rises.
+  4. Skater late ages 36-41 are reshaped by blending sparse data with the trusted
+     decline profile from the recent pre-tail ages.
+  5. Goalie rate stats (`Save %`, `GAA`) skip the multiplicative skater rule.
+  6. Goalie `Save %` keeps the smoothing pass, optional 29-31 hump bridging, and a
+     curved blended late-career tail from ages 35-41 with bounded year-over-year
+     decline and an age-aware minimum drop.
+
+Chart selection and rendering:
+  - Skater mode uses the Skater baseline.
+  - Goalie mode uses the Goalie baseline.
+  - chart.py builds baseline rows inline by reindexing ages 18-40 and linearly
+    interpolating available ages before plotting.
+  - Baseline disabled in Games Played mode (it is Age-indexed, no Games equivalent).
+  - Baseline displayed as dashed white semi-transparent line when "Show Baseline" is on.
 
 SECTION 9 — PLOTLY RENDERING GUARDRAILS
 -----------------------------------------
@@ -352,7 +407,7 @@ GAMES PLAYED MODE CHART DIFFERENCES:
 SECTION 10 — CACHING STRATEGY
 --------------------------------
 @st.cache_data (permanent, until Streamlit restarts):
-  load_historical_data()        — parquet file, never changes during session
+  load_historical_data()        — parquet file, plus legacy goalie rate sanitization
   build_historical_baselines()  — derived from parquet, same lifetime
   get_top_50()                  — rarely changes, no TTL needed
   get_team_roster()             — no TTL (intentional for now)
@@ -400,9 +455,9 @@ each module's responsibility, its public interface, and its import dependencies.
 IMPORT DEPENDENCY GRAPH (no cycles):
   constants, era, styles,
   url_params                      no project imports (leaf modules)
-  baselines, data_loaders,
-  controls, team_pipeline,
+  data_loaders, controls, team_pipeline,
   comparison                      import from constants only
+  baselines                       imports from constants, era
   knn_engine                      imports from constants, era
   player_pipeline                 imports from constants, era, data_loaders, knn_engine
   sidebar                         imports from constants, data_loaders
@@ -418,7 +473,8 @@ MODULE: nhl/constants.py
     RATE_STATS          set: stats requiring mean aggregation
     TEAM_RATE_STATS     set: team-mode rate stats
     TEAM_METRICS        list: ordered selectable team metrics
-    ML_SUPPORTED_METRICS list: metrics KNN can project (excludes GP)
+    ML_SUPPORTED_METRICS list: metrics KNN can project
+    NO_PROJECTION_METRICS set: metrics with Forecast suppressed entirely
     NHLE_MULTIPLIERS    dict: league -> scoring translation factor
     CURRENT_SEASON_YEAR int: computed at import time from datetime.now()
     STAT_CAPS           dict: per-metric projection ceilings (GAA is a floor)
@@ -438,6 +494,8 @@ MODULE: nhl/styles.py
 
 MODULE: nhl/data_loaders.py
   All network I/O and parquet load. Every function uses @st.cache_data.
+  load_historical_data() also sanitizes legacy goalie SavePct values before
+  deriving displayed Save % so stale parquet files cannot poison goalie charts.
   Exports:
     load_historical_data() -> pd.DataFrame           (permanent cache)
     load_all_team_seasons() -> pd.DataFrame          (permanent cache)
@@ -455,14 +513,19 @@ MODULE: nhl/data_loaders.py
     get_all_time_rank(category, s_type, metric, value) -> int|None
 
 MODULE: nhl/baselines.py
-  75th-percentile baseline builders. Both functions use @st.cache_data permanently.
+  Historical and team 75th-percentile baseline builders. Uses @st.cache_data permanently.
+  Historical baselines are aggregate Skater and Goalie curves built from the
+  historical parquet plus the preserved late-tail shaping fixes.
   Exports:
-    build_historical_baselines(df) -> dict  {'Skater': DataFrame, 'Goalie': DataFrame}
+    build_historical_baselines(df) -> dict
+      {'Skater': DataFrame, 'Goalie': DataFrame}
     build_team_baselines(all_team_df) -> dict  {season_year: {metric: float}}
 
 MODULE: nhl/knn_engine.py
-  KNN ML projection. No Streamlit import. Independently testable.
+  Hybrid KNN projection engine. No Streamlit import. Independently testable.
   All session state values are function parameters, not st.session_state reads.
+  Uses L1 distance, equal-weight top-10 clone influence, fixed 70/30 blending,
+  and sparse-age stabilization.
   Exports:
     run_knn_projection(career_df, metric, hist_df, is_goalie, pos_code,
                        do_era, season_type, stat_category,
@@ -472,6 +535,9 @@ MODULE: nhl/knn_engine.py
 
 MODULE: nhl/player_pipeline.py
   Full per-player data pipeline. No Streamlit import.
+  Stores clone detail lists in ml_clones_dict and keeps projection overlap with
+  proj_part starting at Age >= max_age so the final real point is duplicated into
+  the projection trace for continuity.
   Exports:
     process_players(players, metric, hist_df, id_to_name_map, clone_details_map,
                     season_type, stat_category, do_era, do_predict, do_smooth,
@@ -499,15 +565,18 @@ MODULE: nhl/sidebar.py
 
 MODULE: nhl/dialog.py
   @st.dialog popup for chart click events.
-  The @st.dialog decorator is registered at import time — keep at module level.
+  The @st.dialog decorator is registered at import time - keep at module level.
   stat_category is a function parameter (not read from session state).
+  Uses a simple label map for Skater and Goalie baseline clicks, and renders
+  nearest historical matches from the clone lists stored in ml_clones_dict.
   Exports:
     show_season_details(player_name, age, raw_dfs_list, metric, val, is_cumul,
                         full_df, s_type, ml_clones_dict,
                         historical_baselines, stat_category) -> None
 
 MODULE: nhl/chart.py
-  Plotly chart assembly, baseline overlay, JS pan-clamp, click dispatch.
+  Plotly chart assembly, aggregate baseline overlay, JS pan-clamp, and click dispatch.
+  Builds Skater or Goalie baseline rows inline from the cached baseline DataFrames.
   Exports:
     render_chart(processed_dfs, metric, team_mode, games_mode, do_cumul,
                  do_base, do_smooth, stat_category, historical_baselines,
