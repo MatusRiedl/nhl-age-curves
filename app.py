@@ -72,6 +72,7 @@ if 'do_predict'        not in st.session_state: st.session_state.do_predict     
 if 'do_era'            not in st.session_state: st.session_state.do_era            = False
 if 'do_cumul_toggle'   not in st.session_state: st.session_state.do_cumul_toggle   = False
 if 'do_base'           not in st.session_state: st.session_state.do_base           = True
+if 'do_prime'         not in st.session_state: st.session_state.do_prime         = True
 if 'x_axis_mode'       not in st.session_state: st.session_state.x_axis_mode       = "Age"
 if 'league_filter'     not in st.session_state: st.session_state.league_filter     = ['NHL']
 if 'team_sel_abbr'     not in st.session_state:
@@ -242,6 +243,8 @@ with col_chart:
         ml_clones_dict       = ml_clones_dict,
         season_type          = st.session_state.season_type,
         sidebar_keys         = sidebar_keys,
+        peak_info            = peak_info,
+        do_prime             = st.session_state.do_prime,
     )
 
 if col_stats is not None:

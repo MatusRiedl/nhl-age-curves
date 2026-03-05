@@ -33,6 +33,7 @@ _BOOL_PARAMS = {
     "era": "do_era",
     "cu":  "do_cumul_toggle",
     "bl":  "do_base",
+    "pf":  "do_prime",
 }
 
 

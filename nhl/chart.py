@@ -41,6 +41,8 @@ def render_chart(
     ml_clones_dict: dict,
     season_type: str,
     sidebar_keys: dict,
+    peak_info: dict = None,
+    do_prime: bool = False,
 ) -> None:
     """Build and render the Plotly age-curve chart.
 
@@ -63,7 +65,11 @@ def render_chart(
         season_type:          'Regular', 'Playoffs', or 'Both'.
         sidebar_keys:         Dict with 'search_term', 'top_selected', 'team_abbr',
                               'roster_player' — used for chart widget key generation.
+        peak_info:            {base_name: {age, x, y, ...}} from player_pipeline.
+        do_prime:            Whether to show peak age highlight bands.
     """
+    if peak_info is None:
+        peak_info = {}
     if not processed_dfs:
         # Allow baseline-only render when Show Baseline is on in player mode
         if not (do_base and not games_mode and not team_mode):
@@ -364,6 +370,21 @@ def render_chart(
                 hoverinfo='skip',
                 name='_proj_glow_inner',
             ))
+
+    # Add peak age highlights (translucent vertical rectangles)
+    if do_prime:
+        for player_name, peak_data in peak_info.items():
+            player_color = player_colors.get(player_name)
+            if player_color and peak_data.get('age'):
+                peak_age = peak_data['age']
+                fig.add_vrect(
+                    x0=peak_age - 1.5,
+                    x1=peak_age + 1.5,
+                    fillcolor=player_color,
+                    opacity=0.10,
+                    layer="below",
+                    line_width=0,
+                )
 
 
     fig.update_layout(

@@ -43,7 +43,7 @@ def render_controls() -> tuple:
         st.session_state.league_filter   — current league multiselect
     Writes (via widget keys):
         x_axis_mode, league_filter, season_type,
-        do_smooth, do_predict, do_era, do_cumul_toggle, do_base
+        do_smooth, do_predict, do_era, do_cumul_toggle, do_base, do_prime
 
     Returns:
         Tuple of (metric, do_cumul):
@@ -62,8 +62,8 @@ def render_controls() -> tuple:
 
         st.markdown("<div id='controls-row1'></div>", unsafe_allow_html=True)
 
-        c_t1, c_t2, c_t3, c_t4, c_t5 = st.columns(
-            [1, 1, 1, 1, 1], vertical_alignment="center"
+        c_t1, c_t2, c_t3, c_t4, c_t5, c_t6 = st.columns(
+            [1, 1, 1, 1, 1, 1], vertical_alignment="center"
         )
 
         with c_t1:
@@ -86,6 +86,9 @@ def render_controls() -> tuple:
 
         with c_t5:
             st.toggle("Baseline", key="do_base", disabled=games_mode)
+
+        with c_t6:
+            st.toggle("Show Prime", key="do_prime")
 
         # ------------------------------------------------------------------
         # Row 2: X-Axis | Select Metric | Season Type | Leagues dropdowns
