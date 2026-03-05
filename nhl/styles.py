@@ -72,37 +72,28 @@ _CSS = """
 
         /* Stretch columns to equal height, then center content within each */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important;
-        align-items: stretch !important;
-        gap: 0 !important;
+            flex-wrap: nowrap !important;
+            align-items: stretch !important;
+            gap: 0 !important;
         }
 
         /* Each column becomes a flex container so its inner block can be centered */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-        display: flex !important;
-        align-items: center !important;
+            display: flex !important;
+            align-items: center !important;
         }
 
         /* The inner vertical block — centered, no margin leakage */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"] {
-        width: 100% !important;
-        justify-content: center !important;
+            width: 100% !important;
+            justify-content: center !important;
         }
 
         /* Zero out all margins inside these rows */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] .element-container {
-        margin: 0 !important;
-        padding: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
-
-[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.player-name) [data-testid="stButton"],
-[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.player-name) .stButton {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: flex-end !important;
-    margin: 0 !important;
-}
-
 
         /* Tighten sidebar vertical spacing */
         [data-testid="stSidebar"] .stMarkdown hr {
@@ -380,7 +371,7 @@ _CSS = """
         /* Keep the spinner icon itself hidden since we have our own animation */
         [data-testid="stSpinner"] > div:first-child {
             display: none !important;
-        }        
+        }
     </style>
 """
 """Full CSS block injected into the Streamlit page head."""
@@ -454,8 +445,3 @@ def inject_mobile_dropdown_fix() -> None:
     </style>
     """
     st.markdown(mobile_css, unsafe_allow_html=True)
-
-
-
-
-

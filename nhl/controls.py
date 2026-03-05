@@ -51,19 +51,8 @@ def render_controls() -> tuple:
             do_cumul — resolved cumulative flag: True only when the toggle is on,
                        the metric is not a rate stat, and games_mode is False.
     """
-
-    # ------------------------------------------------------------------
-    # Normalize stat_category (segmented_control can return list or junk)
-    # ------------------------------------------------------------------
-    cat = st.session_state.get("stat_category", "Skater")
-    if isinstance(cat, list):
-        cat = cat[0] if cat else "Skater"
-    if cat not in ("Skater", "Goalie", "Team"):
-        cat = "Skater"
-    st.session_state.stat_category = cat
-
-    team_mode  = (cat == "Team")
-    games_mode = (st.session_state.x_axis_mode == "Games Played")
+    team_mode   = st.session_state.stat_category == "Team"
+    games_mode  = st.session_state.x_axis_mode == "Games Played"
 
     with st.expander("📊 Category & Metric", expanded=False):
         # ------------------------------------------------------------------
@@ -103,7 +92,7 @@ def render_controls() -> tuple:
         # ------------------------------------------------------------------
         _x_opts = (
             ["Season Year", "Games Played"]
-            if cat == "Team"
+            if st.session_state.stat_category == "Team"
             else ["Age", "Games Played"]
         )
 
@@ -125,7 +114,7 @@ def render_controls() -> tuple:
             )
 
         with c_metric:
-            if cat == "Skater":
+            if st.session_state.stat_category == "Skater":
                 metric = st.selectbox(
                     "Select Metric",
                     ["Points", "Goals", "Assists", "+/-", "GP", "PPG", "SH%", "PIM", "TOI"],
@@ -136,7 +125,7 @@ def render_controls() -> tuple:
                         "PIM: Penalty Minutes | TOI: Time on Ice (Avg Mins)"
                     ),
                 )
-            elif cat == "Goalie":
+            elif st.session_state.stat_category == "Goalie":
                 metric = st.selectbox(
                     "Select Metric",
                     ["Save %", "GAA", "Shutouts", "Wins", "GP", "Saves"],
@@ -240,7 +229,7 @@ def render_controls() -> tuple:
         _ERA_GOALIE_STATS = {'Save %', 'GAA', 'Shutouts'}
         if (
             st.session_state.do_era
-            and cat == 'Goalie'
+            and st.session_state.stat_category == 'Goalie'
             and metric not in _ERA_GOALIE_STATS
         ):
             st.caption(
