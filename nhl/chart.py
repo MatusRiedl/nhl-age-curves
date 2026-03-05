@@ -18,6 +18,7 @@ Imports from project:
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -286,15 +287,84 @@ def render_chart(
     )
 
     # Apply visual conventions per trace
+    baseline_x = None
+    baseline_y = None
+    player_colors = {}  # Map player name -> color
+    proj_traces = []  # Store (name, x, y, color) for projection glow traces
+    
+    # First pass: capture player colors and projection data
+    for trace in fig.data:
+        if "(Proj)" not in trace.name and "Baseline" not in trace.name:
+            # This is a real player line - capture its color
+            player_colors[trace.name] = trace.line.color if trace.line.color else None
+    
     for trace in fig.data:
         if "(Proj)" in trace.name:
+            # Extract player name from projection (e.g., "Sebastian Aho (Proj)" -> "Sebastian Aho")
+            player_name = trace.name.replace(" (Proj)", "")
+            proj_color = player_colors.get(player_name) if player_colors.get(player_name) else 'gray'
+            proj_traces.append({
+                'name': trace.name,
+                'x': trace.x,
+                'y': trace.y,
+                'color': proj_color,
+            })
+            # Style projection to match player color with dotted style
             trace.line.dash          = 'dot'
-            trace.line.color         = 'gray'
+            trace.line.color         = proj_color
             trace.marker.symbol      = 'circle-open'
         elif "Baseline" in trace.name:
             trace.line.dash          = 'dash'
-            trace.line.color         = 'rgba(255, 255, 255, 0.4)'
+            trace.line.color         = 'rgba(255, 255, 255, 0.55)'
+            trace.line.width         = 2
             trace.marker.size        = 1
+            # Capture x/y for glow traces
+            baseline_x = trace.x
+            baseline_y = trace.y
+
+    # Add stacked glow traces for baseline (after loop to avoid modifying fig.data during iteration)
+    if baseline_x is not None and baseline_y is not None and do_base and not games_mode:
+        # Outer glow
+        fig.add_trace(go.Scatter(
+            x=baseline_x, y=baseline_y,
+            mode='lines',
+            line=dict(color='rgba(255,255,255,0.06)', width=12, dash='dash'),
+            showlegend=False,
+            hoverinfo='skip',
+            name='_glow_outer',
+        ))
+        # Inner glow
+        fig.add_trace(go.Scatter(
+            x=baseline_x, y=baseline_y,
+            mode='lines',
+            line=dict(color='rgba(255,255,255,0.12)', width=5, dash='dash'),
+            showlegend=False,
+            hoverinfo='skip',
+            name='_glow_inner',
+        ))
+
+    # Add glow traces for projection lines (use player's color for each projection)
+    for proj in proj_traces:
+        if proj['x'] is not None and proj['y'] is not None:
+            # Outer glow
+            fig.add_trace(go.Scatter(
+                x=proj['x'], y=proj['y'],
+                mode='lines',
+                line=dict(color=proj['color'], width=10, dash='dot'),
+                showlegend=False,
+                hoverinfo='skip',
+                name='_proj_glow_outer',
+            ))
+            # Inner glow
+            fig.add_trace(go.Scatter(
+                x=proj['x'], y=proj['y'],
+                mode='lines',
+                line=dict(color=proj['color'], width=4, dash='dot'),
+                showlegend=False,
+                hoverinfo='skip',
+                name='_proj_glow_inner',
+            ))
+
 
     fig.update_layout(
         uirevision  = 'constant',
