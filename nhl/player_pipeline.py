@@ -43,6 +43,11 @@ from nhl.data_loaders import get_player_raw_stats
 from nhl.era import apply_era_to_hist, get_era_multiplier, get_goalie_era_sv_offset
 from nhl.knn_engine import run_knn_projection, run_linear_fallback
 
+# Projection eligibility thresholds (tweak if you want)
+MIN_SEASONS_FOR_PROJ = 2
+MIN_CAREER_GP_FOR_PROJ_SKATER = 82   # < full season => no projection
+MIN_CAREER_GP_FOR_PROJ_GOALIE = 25
+
 
 def process_players(
     players: dict,
@@ -289,7 +294,22 @@ def process_players(
 
         # --- Step 9: KNN projection or linear fallback ---
         max_age = df['Age'].max()
-        if not games_mode and do_predict and max_age < 40 and metric not in NO_PROJECTION_METRICS:
+        can_project = (
+            not games_mode
+            and do_predict
+            and max_age < 40
+            and metric not in NO_PROJECTION_METRICS
+        )
+
+        # Thin‑data guard: no projection if career is too short
+        if can_project:
+            seasons  = int(df['Age'].nunique()) if 'Age' in df.columns else 0
+            total_gp = float(df['GP'].sum()) if 'GP' in df.columns else 0
+            min_gp   = MIN_CAREER_GP_FOR_PROJ_GOALIE if is_goalie else MIN_CAREER_GP_FOR_PROJ_SKATER
+            if seasons < MIN_SEASONS_FOR_PROJ or total_gp < min_gp:
+                can_project = False
+
+        if can_project:
             career_df = df.copy()
             player_knn_hist = hist_df_goalie if is_goalie else hist_df_skater
             player_pos_code = 'G' if is_goalie else pos_code
