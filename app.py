@@ -1,4 +1,3 @@
-"""
 NHL Age Curves — Main Application Entry Point
 
 This file is the thin orchestrator.  All logic lives in the nhl/ package modules.
@@ -273,4 +272,4 @@ st.markdown(
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,
-)
+)```
