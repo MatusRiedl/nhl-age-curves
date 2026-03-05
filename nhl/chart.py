@@ -96,13 +96,28 @@ def render_chart(
             # Player baseline: 75th pct by age from parquet
             base_key = "Goalie" if stat_category == "Goalie" else "Skater"
             base_df = historical_baselines.get(base_key)
+
             if base_df is not None and not base_df.empty:
                 base_data  = []
                 cumul_val  = 0
                 is_goalie_save = (stat_category == "Goalie" and metric == "Save %")
+                is_skater = (stat_category == "Skater")
+
+                def _last_two_vals_from_base_data(_base_data, _metric):
+                    vals = []
+                    for row in reversed(_base_data):
+                        v = row.get(_metric)
+                        if v is None or pd.isna(v):
+                            continue
+                        vals.append(float(v))
+                        if len(vals) == 2:
+                            break
+                    return (vals[0], vals[1]) if len(vals) == 2 else (None, None)
+
                 for age in range(18, 41):
                     val = None
                     has_metric = metric in base_df.columns
+
                     if age in base_df.index and has_metric:
                         v = base_df.loc[age, metric]
                         if not pd.isna(v):
@@ -150,18 +165,25 @@ def render_chart(
                                 else:
                                     val = 88.0
                         else:
-                            # For late ages absent from data, continue the prior decline
-                            # slope rather than defaulting to 0 (avoids the sparse-data
-                            # cliff at age 40 where no players have 40+ GP).
+                            # Default for non-goalie-save when data is missing
                             val = 0
-                            if age >= 38 and has_metric:
-                                prior = [a for a in (age - 1, age - 2) if a in base_df.index]
-                                if len(prior) == 2:
-                                    p1 = base_df.loc[prior[0], metric]
-                                    p2 = base_df.loc[prior[1], metric]
-                                    if p2 > 0 and p1 > 0 and not pd.isna(p1) and not pd.isna(p2):
-                                        slope = max(min(p1 / p2, 1.0), 0.75)
-                                        val = p1 * slope
+
+                            # Skater-only late-age safety net (prevents sparse-data cliff)
+                            if is_skater and age >= 38 and has_metric:
+                                p1 = p2 = None
+
+                                if (age - 1) in base_df.index and (age - 2) in base_df.index:
+                                    v1 = base_df.loc[age - 1, metric]
+                                    v2 = base_df.loc[age - 2, metric]
+                                    if not pd.isna(v1) and not pd.isna(v2):
+                                        p1, p2 = float(v1), float(v2)
+
+                                if p1 is None or p2 is None:
+                                    p1, p2 = _last_two_vals_from_base_data(base_data, metric)
+
+                                if p2 is not None and p1 is not None and p2 > 0 and p1 > 0:
+                                    slope = max(min(p1 / p2, 1.0), 0.75)
+                                    val = p1 * slope
 
                     if do_cumul and metric in [
                         'Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves', '+/-'
@@ -175,6 +197,7 @@ def render_chart(
                         "Player":   "NHL 75th Percentile Baseline",
                         "BaseName": "Baseline",
                     })
+
                 final_df = pd.concat([final_df, pd.DataFrame(base_data)], ignore_index=True)
 
     # Guard: baseline attempt may still leave final_df empty (e.g. switching to Goalie
@@ -429,7 +452,6 @@ def render_chart(
     var IS_AGE_MODE   = {'true' if _is_age_mode else 'false'};
     var IS_GAMES_MODE = {'true' if _is_games_mode else 'false'};
 
-
     function calcDtick(width, currentRange) {{
         var xRange = currentRange || (X_MAX - X_MIN);
         if (IS_AGE_MODE) {{
@@ -459,7 +481,6 @@ def render_chart(
         return 20;
     }}
 
-
     function getCurrentXRange(plot) {{
         // Get the current visible X-axis range from the plot layout
         if (plot.layout && plot.layout.xaxis) {{
@@ -486,7 +507,6 @@ def render_chart(
         var updates = {{'xaxis.dtick': calcDtick(width, initialRange)}};
         updates['xaxis.tickangle'] = (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45;
         Plotly.relayout(plot, updates);
-
 
         // Clamp pan/zoom to data region and update dtick on zoom
         var _updating = false;
@@ -522,7 +542,6 @@ def render_chart(
             }}
         }});
     }}
-
 
     // Share link button helpers
     function injectShareStyles(parent) {{
@@ -612,7 +631,6 @@ def render_chart(
         positionShareBtn(plot, btn, parent);
     }}
 
-
     function init() {{
         var parent = window.parent;
         var Plotly = parent.Plotly;
@@ -634,7 +652,6 @@ def render_chart(
             }});
         }});
     }}
-
 
     setTimeout(init, 500);
 }})();
