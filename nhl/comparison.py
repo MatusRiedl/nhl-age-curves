@@ -275,12 +275,9 @@ def _render_live_games_tab() -> None:
 
         st.markdown(matchup_html, unsafe_allow_html=True)
         st.markdown(f"<div class='live-games-detail'>{detail_html}</div>", unsafe_allow_html=True)
-        # Keep the action button in a narrow column so the row stays compact.
-        button_col, _ = st.columns([0.62, 1.38], gap="small")
-        with button_col:
-            if st.button("Compare", key=button_key, use_container_width=True):
-                _add_live_game_to_comparison(game)
-                st.rerun()
+        if st.button("Compare", key=button_key):
+            _add_live_game_to_comparison(game)
+            st.rerun()
 
         st.markdown(
             "<hr style='margin:2px 0 6px 0;border:none;border-top:1px solid #2a2a2a;'>",

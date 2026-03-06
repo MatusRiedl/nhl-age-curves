@@ -2,6 +2,17 @@
 NHL AGE CURVES - CHANGELOG
 =========================================================
 
+v0.62.5 - comparison width and live button cleanup
+---------------------------------------------------------
+- CHANGED: Rebalanced the main chart/comparison split so the comparison panel gets a bit more horizontal room instead of feeling pinched.
+- CHANGED: Removed the narrow spacer-column hack from the Live games `Compare` action so the button sizes to its label instead of clipping the text.
+- CHANGED: Nudged the comparison tab strip upward to better align with the chart header row and `Copy link` control.
+
+v0.62.4 - small-screen comparison button fix
+---------------------------------------------------------
+- CHANGED: Let the Live games comparison action row wrap on smaller screens so the `Compare` button can use the full available width instead of getting clipped.
+- CHANGED: Kept the compact desktop layout for the comparison action row while allowing the mobile button label to break cleanly if space gets tight.
+
 v0.62.3 - comparison row alignment polish
 ---------------------------------------------------------
 - CHANGED: Pulled the main chart/comparison row closer to the `Category & Metric` expander so the page stops wasting vertical space above the visuals.

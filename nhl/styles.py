@@ -291,20 +291,22 @@ _CSS = """
             line-height: 1.2;
             margin: 0.1rem 0 0.3rem 0;
         }
-        div.element-container:has(.live-games-detail) + div {
-            gap: 0 !important;
+        div.element-container:has(.live-games-detail) + div.element-container {
             margin-top: 0 !important;
             margin-bottom: 0 !important;
         }
-        div.element-container:has(.live-games-detail) + div [data-testid="stButton"] {
+        div.element-container:has(.live-games-detail) + div.element-container [data-testid="stButton"] {
             margin-top: 0 !important;
             margin-bottom: 0.1rem !important;
         }
-        div.element-container:has(.live-games-detail) + div [data-testid="stButton"] button {
+        div.element-container:has(.live-games-detail) + div.element-container [data-testid="stButton"] button {
             padding: 0.18rem 0.7rem !important;
             font-size: 0.92rem !important;
             min-height: 2.3rem !important;
-            white-space: nowrap !important;
+            width: auto !important;
+            max-width: 100% !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
         }
         div.element-container:has(.live-games-detail) + div + div.element-container {
             margin-top: 0 !important;
@@ -411,7 +413,7 @@ _CSS = """
 
         /* Comparison tab row (native st.tabs) */
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] {
-            margin-top: -1px !important;
+            margin-top: -0.38rem !important;
             padding-top: 0 !important;
         }
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-list"] {
@@ -420,6 +422,7 @@ _CSS = """
             margin-bottom: 0.4rem !important;
             min-height: 40px !important;
             align-items: center !important;
+            padding-top: 0 !important;
         }
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-border"] {
             display: none !important;
