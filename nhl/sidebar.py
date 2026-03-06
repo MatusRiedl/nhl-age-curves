@@ -15,6 +15,8 @@ Imports from project:
                        get_top_50_goalies, get_team_roster, get_player_headshot
 """
 
+from html import escape
+
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -31,6 +33,10 @@ from nhl.dialog import show_app_guide
 
 
 _VALID_STAT_CATEGORIES = ("Skater", "Goalie", "Team")
+_SUPPORT_URL = "https://ko-fi.com/iksperial"
+_SUPPORT_LABEL = "Buy me a coffee"
+_SUPPORT_SUBLABEL = "Support the development"
+_SUPPORT_EMOJI = "☕️"
 
 
 def _sanitize_stat_category(stat_category: str | None, fallback: str = "Skater") -> str:
@@ -110,6 +116,48 @@ def _check_api_health() -> list:
     return results
 
 
+def _build_support_button_markup(
+    url: str = _SUPPORT_URL,
+    label: str = _SUPPORT_LABEL,
+    sublabel: str = _SUPPORT_SUBLABEL,
+) -> str:
+    """Build the sidebar support CTA markup.
+
+    Args:
+        url: Destination support URL.
+        label: Visible CTA label.
+        sublabel: Smaller helper text shown under the CTA label.
+
+    Returns:
+        Safe HTML markup for the sidebar support link.
+    """
+    safe_url = escape(url, quote=True)
+    safe_label = escape(label)
+    safe_sublabel = escape(sublabel)
+    return (
+        "<a class='sidebar-support-link' "
+        f"href='{safe_url}' target='_blank' rel='noopener noreferrer'>"
+        f"<span class='sidebar-support-link__emoji' aria-hidden='true'>{_SUPPORT_EMOJI}</span>"
+        "<span class='sidebar-support-link__text'>"
+        f"<span class='sidebar-support-link__label'>{safe_label}</span>"
+        f"<span class='sidebar-support-link__sublabel'>{safe_sublabel}</span>"
+        "</span>"
+        "</a>"
+    )
+
+
+def _render_support_button() -> None:
+    """Render the sidebar Ko-fi support CTA.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    st.markdown(_build_support_button_markup(), unsafe_allow_html=True)
+
+
 def _render_ram_footer() -> None:
     """Render the sidebar RAM readout plus cached API health indicators."""
     rss_mb = "N/A"
@@ -126,6 +174,8 @@ def _render_ram_footer() -> None:
                         break
         except Exception:
             pass
+
+    _render_support_button()
 
     with st.expander("App status", expanded=False):
         st.caption(f"RAM: {rss_mb}")

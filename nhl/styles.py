@@ -97,6 +97,69 @@ _CSS = """
 
         .stButton button { width: 100%; }
 
+        [data-testid="stSidebar"] .sidebar-support-link {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 0.65rem;
+            width: 100%;
+            margin: 0.72rem 0 0.48rem 0;
+            padding: 0.58rem 0.82rem;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 244, 231, 0.16);
+            background: linear-gradient(135deg, #9d6535 0%, #bf7a3f 100%);
+            color: #ffffff !important;
+            text-decoration: none !important;
+            box-shadow: 0 6px 14px rgba(88, 49, 24, 0.16);
+            transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+        }
+
+        [data-testid="stSidebar"] .sidebar-support-link:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.02);
+            box-shadow: 0 8px 18px rgba(88, 49, 24, 0.2);
+        }
+
+        [data-testid="stSidebar"] .sidebar-support-link:focus,
+        [data-testid="stSidebar"] .sidebar-support-link:focus-visible {
+            outline: 2px solid rgba(255, 255, 255, 0.8);
+            outline-offset: 2px;
+        }
+
+        [data-testid="stSidebar"] .sidebar-support-link__emoji {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 1.65rem;
+            height: 1.65rem;
+            border-radius: 999px;
+            background: rgba(255, 248, 240, 0.18);
+            font-size: 0.95rem;
+            line-height: 1;
+            font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+        }
+
+        [data-testid="stSidebar"] .sidebar-support-link__text {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            min-width: 0;
+        }
+
+        [data-testid="stSidebar"] .sidebar-support-link__label {
+            font-weight: 700;
+            font-size: 0.9rem;
+            line-height: 1.08;
+        }
+
+        [data-testid="stSidebar"] .sidebar-support-link__sublabel {
+            margin-top: 0.08rem;
+            font-size: 0.73rem;
+            line-height: 1.12;
+            color: rgba(255, 247, 240, 0.86);
+        }
+
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] div.stButton button {
             width: auto !important;
             min-width: 0 !important;

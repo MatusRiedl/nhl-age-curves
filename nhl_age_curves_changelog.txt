@@ -2,6 +2,18 @@
 NHL AGE CURVES - CHANGELOG
 =========================================================
 
+v0.62.10 - softer support button with helper text
+---------------------------------------------------------
+- CHANGED: Shrunk the sidebar Ko-fi CTA so it feels less loud while keeping the same pill-style layout and coffee emoji.
+- CHANGED: Added a second support line under `Buy me a coffee` that reads `Support the development`.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.62.10`.
+
+v0.62.9 - ko-fi sidebar support button
+---------------------------------------------------------
+- CHANGED: Added a custom Ko-fi-style `Buy me a coffee` support button with a coffee emoji to the sidebar above `App status`.
+- CHANGED: Added targeted sidebar/style tests to lock the Ko-fi CTA markup, placement, and CSS in place.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.62.9`.
+
 v0.62.8 - search API failure fallback
 ---------------------------------------------------------
 - CHANGED: Hardened `search_player()` against malformed NHL search payloads so a string or junk row no longer crashes the sidebar.
