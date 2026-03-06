@@ -293,10 +293,11 @@ elif active_players:
 
 # =============================================================================
 # Chart rendering (shared by both pipelines)
-# Stats panel is always visible in player mode when players are loaded.
+# Keep the comparison panel visible even on an empty board so the Live games
+# tab can seed players and teams without forcing the user through the sidebar.
 # Desktop: 65/35 split (chart left, stats right). Mobile: stacked via CSS.
 # =============================================================================
-_show_panel = bool(processed_dfs)
+_show_panel = True
 
 if _show_panel:
     col_chart, col_stats = st.columns([65, 35], gap="medium")
@@ -345,7 +346,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.61.6 <br>"
+    "Created by Iksperial. v0.61.15 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

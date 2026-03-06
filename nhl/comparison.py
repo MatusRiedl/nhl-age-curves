@@ -1,19 +1,20 @@
-"""
-nhl.comparison -- Tabbed right-column comparison panel for the NHL Age Curves app.
+"""Tabbed right-column comparison panel for the NHL Age Curves app.
 
-Renders a native Streamlit st.tabs row above the comparison cards:
+Renders native Streamlit tabs above the comparison cards:
     - Overview: existing player/team stat cards
     - Trophies: awards/cup summary cards
+    - Live games: upcoming-game picker that can seed the comparison board
 
-Imported and called from app.py when chart data exists.
+Imported and called from app.py.
 """
 
 from dataclasses import dataclass
+from html import escape
 from typing import Callable
 
 import streamlit as st
 
-from nhl.constants import TEAM_FOUNDED
+from nhl.constants import ACTIVE_TEAMS, TEAM_FOUNDED
 from nhl.data_loaders import (
     get_player_awards,
     get_player_career_rank,
@@ -23,8 +24,43 @@ from nhl.data_loaders import (
     get_team_all_time_stats,
     get_team_trophy_summary,
 )
+from nhl.schedule import get_featured_players, get_upcoming_games
 
 _TEAM_LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbr}_light.svg"
+_TEAM_SHORT_NAMES = {
+    "ANA": "Ducks",
+    "BOS": "Bruins",
+    "BUF": "Sabres",
+    "CGY": "Flames",
+    "CAR": "Hurricanes",
+    "CHI": "Blackhawks",
+    "COL": "Avalanche",
+    "CBJ": "Blue Jackets",
+    "DAL": "Stars",
+    "DET": "Red Wings",
+    "EDM": "Oilers",
+    "FLA": "Panthers",
+    "LAK": "Kings",
+    "MIN": "Wild",
+    "MTL": "Canadiens",
+    "NSH": "Predators",
+    "NJD": "Devils",
+    "NYI": "Islanders",
+    "NYR": "Rangers",
+    "OTT": "Senators",
+    "PHI": "Flyers",
+    "PIT": "Penguins",
+    "SJS": "Sharks",
+    "SEA": "Kraken",
+    "STL": "Blues",
+    "TBL": "Lightning",
+    "TOR": "Maple Leafs",
+    "UTA": "Hockey Club",
+    "VAN": "Canucks",
+    "VGK": "Golden Knights",
+    "WSH": "Capitals",
+    "WPG": "Jets",
+}
 _DEFAULT_PANEL_TAB = "overview"
 _CATEGORY_TAB_KEYS = {
     "Skater": "panel_tab_skater",
@@ -60,6 +96,14 @@ def _season_span_label_from_id(season_id: int | None) -> str:
 
 
 def _get_category_tab_key(stat_category: str) -> str:
+    """Return the session-state key that stores the active panel tab.
+
+    Args:
+        stat_category: Active stat category string.
+
+    Returns:
+        Session-state key for the current category's comparison tab.
+    """
     return _CATEGORY_TAB_KEYS.get(stat_category, "panel_tab_skater")
 
 
@@ -69,7 +113,16 @@ def get_panel_tab_ids() -> set[str]:
 
 
 def _iter_visible_players_for_category(processed_dfs: list, players: dict):
-    """Yield selected players that are visible in the current category pipeline."""
+    """Yield selected players that still have visible rows in the active pipeline.
+
+    Args:
+        processed_dfs: Active processed DataFrames for the current chart category.
+        players: Selected comparison players from session state.
+
+    Returns:
+        Iterator yielding ``(player_id, player_name, processed_df)`` tuples for
+        players that still have non-projection rows in the active category.
+    """
     proc_lookup: dict = {}
     for proc_df in processed_dfs:
         if proc_df.empty or "BaseName" not in proc_df.columns or "Player" not in proc_df.columns:
@@ -98,7 +151,24 @@ def render_comparison_area(
     season_type: str,
     team_mode: bool,
 ) -> None:
-    """Render tabs and comparison tab contents."""
+    """Render the comparison tabs and active tab contents.
+
+    Args:
+        processed_dfs: Player or team processed DataFrames for the active chart.
+        players: Selected comparison players from session state.
+        teams: Selected comparison teams from session state.
+        peak_info: Per-player best-season metadata for overview cards.
+        metric: Active metric name.
+        stat_category: Active category string.
+        season_type: Active season scope.
+        team_mode: Whether the app is currently in Team mode.
+
+    Returns:
+        None.
+
+    The panel respects the last tab saved for the active category, but falls
+    back to the Live games tab when the current board has no visible cards.
+    """
     tab_lookup = {tab.id: tab for tab in _PANEL_TABS}
     tab_ids = list(tab_lookup.keys())
     if not tab_ids:
@@ -113,7 +183,14 @@ def render_comparison_area(
         st.session_state[tab_key] = _DEFAULT_PANEL_TAB
 
     default_tab_id = st.session_state.get(tab_key, _DEFAULT_PANEL_TAB)
-    default_tab = tab_lookup.get(default_tab_id, tab_lookup[_DEFAULT_PANEL_TAB])
+    has_visible_comparison = bool(teams) if team_mode else any(
+        True for _ in _iter_visible_players_for_category(processed_dfs, players)
+    )
+    # Empty boards should land on something useful instead of a blank Overview tab.
+    if not has_visible_comparison and "live_games" in tab_lookup:
+        default_tab = tab_lookup["live_games"]
+    else:
+        default_tab = tab_lookup.get(default_tab_id, tab_lookup[_DEFAULT_PANEL_TAB])
     default_label = default_tab.label
 
     st.markdown("<div id='comparison-tabs'></div>", unsafe_allow_html=True)
@@ -139,6 +216,140 @@ def render_comparison_area(
                     stat_category=stat_category,
                     season_type=season_type,
                 )
+
+
+def _add_live_game_to_comparison(game: dict) -> None:
+    """Add both teams plus featured players for one upcoming game.
+
+    Args:
+        game: Normalized game dict returned by ``nhl.schedule.get_upcoming_games()``.
+
+    Returns:
+        None.
+    """
+    st.session_state.teams[game["away_abbr"]] = game["away_name"]
+    st.session_state.teams[game["home_abbr"]] = game["home_name"]
+
+    featured = get_featured_players(game["home_abbr"], game["away_abbr"])
+    st.session_state.teams.update(featured.get("teams", {}))
+    st.session_state.players.update(featured.get("players", {}))
+
+
+def _build_live_game_matchup_html(game: dict) -> str:
+    """Build the matchup label HTML with both team logos.
+
+    Args:
+        game: Normalized game dict returned by ``get_upcoming_games()``.
+
+    Returns:
+        HTML string showing away and home logos beside short team names.
+    """
+    away_logo = _TEAM_LOGO_URL.format(abbr=game["away_abbr"])
+    home_logo = _TEAM_LOGO_URL.format(abbr=game["home_abbr"])
+    away_short_name = _get_team_short_name(game["away_abbr"], game["away_name"])
+    home_short_name = _get_team_short_name(game["home_abbr"], game["home_name"])
+    return (
+        "<div class='live-games-matchup' style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;'>"
+        f"<img src='{away_logo}' height='26' style='vertical-align:middle;'>"
+        f"<strong>{away_short_name}</strong>"
+        "<span style='color:#aaa;font-size:13px;'>at</span>"
+        f"<img src='{home_logo}' height='26' style='vertical-align:middle;'>"
+        f"<strong>{home_short_name}</strong>"
+        "</div>"
+    )
+
+
+def _get_team_short_name(team_abbr: str, fallback_name: str) -> str:
+    """Return the short display name for a team.
+
+    Args:
+        team_abbr: Three-letter NHL team abbreviation.
+        fallback_name: Full team name to use if no short mapping exists.
+
+    Returns:
+        Team nickname without the city or market prefix.
+    """
+    return _TEAM_SHORT_NAMES.get(team_abbr, ACTIVE_TEAMS.get(team_abbr, fallback_name))
+
+
+def _render_live_games_tab() -> None:
+    """Render the shared Live games tab UI.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+
+    Shows the next four upcoming NHL games and lets the user seed the
+    comparison board with both teams plus each club's featured skater and goalie.
+    """
+    st.caption("Adds both teams, each club's points leader, and the best Save% goalie.")
+    upcoming_games = get_upcoming_games(limit=4)
+    if not upcoming_games:
+        st.info("No upcoming NHL games found right now.")
+        return
+
+    for game in upcoming_games:
+        detail_bits = [game["start_label_cest"]]
+        if game.get("venue"):
+            detail_bits.append(game["venue"])
+        matchup_html = _build_live_game_matchup_html(game)
+        detail_html = escape(" • ".join(detail_bits))
+        button_key = f"add_live_game_{game['game_id']}_{game['away_abbr']}_{game['home_abbr']}"
+
+        st.markdown(matchup_html, unsafe_allow_html=True)
+        st.markdown(f"<div class='live-games-detail'>{detail_html}</div>", unsafe_allow_html=True)
+        # Keep the action button in a narrow column so the row stays compact.
+        button_col, _ = st.columns([0.62, 1.38], gap="small")
+        with button_col:
+            if st.button("Compare", key=button_key, use_container_width=True):
+                _add_live_game_to_comparison(game)
+                st.rerun()
+
+        st.markdown(
+            "<hr style='margin:2px 0 6px 0;border:none;border-top:1px solid #2a2a2a;'>",
+            unsafe_allow_html=True,
+        )
+
+
+def _render_live_games_players(
+    processed_dfs: list,
+    players: dict,
+    peak_info: dict,
+    metric: str,
+    stat_category: str,
+    season_type: str,
+) -> None:
+    """Live games tab for skater and goalie modes.
+
+    Args:
+        processed_dfs: Active processed DataFrames.
+        players: Selected comparison players.
+        peak_info: Peak-season metadata.
+        metric: Active metric name.
+        stat_category: Active category string.
+        season_type: Active season scope.
+
+    Returns:
+        None.
+    """
+    del processed_dfs, players, peak_info, metric, stat_category, season_type
+    _render_live_games_tab()
+
+
+def _render_live_games_teams(active_teams: dict, metric: str) -> None:
+    """Live games tab for team mode.
+
+    Args:
+        active_teams: Selected comparison teams.
+        metric: Active metric name.
+
+    Returns:
+        None.
+    """
+    del active_teams, metric
+    _render_live_games_tab()
 
 
 def _render_overview_players(
@@ -505,6 +716,12 @@ _PANEL_TABS = (
         render_player=_render_trophies_players,
         render_team=_render_trophies_teams,
     ),
+    PanelTabSpec(
+        id="live_games",
+        label="Live games",
+        render_player=_render_live_games_players,
+        render_team=_render_live_games_teams,
+    ),
 )
 
 
@@ -516,7 +733,19 @@ def render_comparison_panel(
     stat_category: str,
     season_type: str,
 ) -> None:
-    """Backward-compatible wrapper for Overview player cards."""
+    """Render legacy Overview-only player comparison cards.
+
+    Args:
+        processed_dfs: Active processed player DataFrames.
+        players: Selected comparison players.
+        peak_info: Per-player best-season metadata.
+        metric: Active metric name.
+        stat_category: Active category string.
+        season_type: Active season scope.
+
+    Returns:
+        None.
+    """
     _render_overview_players(
         processed_dfs=processed_dfs,
         players=players,
@@ -528,5 +757,13 @@ def render_comparison_panel(
 
 
 def render_team_comparison_panel(active_teams: dict, metric: str) -> None:
-    """Backward-compatible wrapper for Overview team cards."""
+    """Render legacy Overview-only team comparison cards.
+
+    Args:
+        active_teams: Selected comparison teams.
+        metric: Active metric name.
+
+    Returns:
+        None.
+    """
     _render_overview_teams(active_teams=active_teams, metric=metric)

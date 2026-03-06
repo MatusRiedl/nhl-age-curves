@@ -312,3 +312,87 @@ v0.61.6 - reduced metric chip gap
 - VALIDATED: `python -m unittest tests.test_chart -v` passed locally.
 - VALIDATED: `python -m unittest discover -s tests -v` passed locally with 34/34
   tests.
+
+v0.61.7 - live games comparison tab
+---------------------------------------------------------
+- ADDED: A new `Live games` comparison tab that lists the next 4 upcoming NHL
+  games with matchup, venue, and Central European local puck-drop time.
+- ADDED: One-click `Add game` actions that add both teams plus each club's
+  current-season points leader and best Save% goalie to comparison.
+- CHANGED: The comparison panel now stays visible on an empty board so the Live
+  games tab can seed players and teams without sidebar setup.
+- ADDED: Regression coverage in `tests/test_schedule.py` and
+  `tests/test_comparison.py` for upcoming-game parsing, time formatting,
+  featured-player selection, and Live games tab wiring.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.7` and
+  updated `README.md` plus `readme.txt` for the new feature.
+- VALIDATED: `python -m unittest tests.test_schedule tests.test_comparison -v`
+  passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with
+  40/40 tests.
+
+v0.61.8 - live games team logos
+---------------------------------------------------------
+- CHANGED: The `Live games` rows now show both teams' NHL logos beside the away
+  and home team names instead of text-only matchup labels.
+- ADDED: Focused regression coverage in `tests/test_comparison.py` to keep both
+  logo URLs present in the matchup row markup.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.8`.
+- VALIDATED: `python -m unittest tests.test_comparison -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with
+  41/41 tests.
+
+v0.61.9 - live games button copy and logo sizing
+---------------------------------------------------------
+- CHANGED: Renamed the Live games action button from `Add game` to `Add to comparison`.
+- CHANGED: Increased the matchup-row team logo height so both club icons read more clearly.
+- ADDED: Regression checks in `tests/test_comparison.py` for the larger logo markup and updated button copy.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.9`.
+- VALIDATED: `python -m unittest tests.test_comparison -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 41/41 tests.
+
+v0.61.10 - live games stacked button layout
+---------------------------------------------------------
+- CHANGED: Moved each Live games `Add to comparison` button underneath the matchup time and venue details instead of keeping it in a right-side column.
+- ADDED: Regression coverage in `tests/test_comparison.py` to keep the button rendered after the date and venue caption.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.10`.
+- VALIDATED: `python -m unittest tests.test_comparison -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 41/41 tests.
+
+v0.61.11 - live games short team names
+---------------------------------------------------------
+- CHANGED: Live games matchup rows now drop city names and show only team nicknames such as `Oilers`, `Bruins`, and `Red Wings`.
+- ADDED: Regression checks in `tests/test_comparison.py` to keep both single-word and multi-word nicknames rendering correctly.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.11`.
+- VALIDATED: `python -m unittest tests.test_comparison -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 42/42 tests.
+
+v0.61.12 - live games compact button spacing
+---------------------------------------------------------
+- CHANGED: Shrunk the Live games `Add to comparison` button with scoped CSS so it no longer spans the full row width.
+- CHANGED: Tightened the space between each Live games button and the next matchup divider.
+- ADDED: Regression checks in `tests/test_comparison.py` and `tests/test_styles.py` to keep the compact button layout scoped to Live games only.
+- VALIDATED: `python -m unittest tests.test_comparison tests.test_styles -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 43/43 tests.
+
+v0.61.13 - live games button spacing correction
+---------------------------------------------------------
+- FIXED: Replaced the failed Live games spacer-anchor CSS with a narrow button column so `Add to comparison` is actually smaller.
+- FIXED: Tightened the caption-to-button and button-to-divider spacing using the real Live games content blocks instead of empty anchors.
+- CHANGED: Kept the compact layout regression checks, but now assert the corrected column-based render path and scoped CSS selectors.
+- VALIDATED: `python -m unittest tests.test_comparison tests.test_styles -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 43/43 tests.
+
+v0.61.14 - live games compare label
+---------------------------------------------------------
+- CHANGED: Renamed the Live games action button from `Add to comparison` to `Compare` for a shorter, cleaner row layout.
+- ADDED: Updated `tests/test_comparison.py` assertions to lock the new Live games button label in place.
+- VALIDATED: `python -m unittest tests.test_comparison -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 43/43 tests.
+
+v0.61.15 - live games docs cleanup
+---------------------------------------------------------
+- CHANGED: Clarified `nhl/comparison.py` docstrings and inline comments around Live games tab selection and compact button layout.
+- CHANGED: Confirmed the Live games tab is already documented in `README.md` and `readme.txt`, so no duplicate docs edits were needed.
+- VALIDATED: `python -m unittest tests.test_comparison -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 43/43 tests.

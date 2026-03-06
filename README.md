@@ -24,6 +24,8 @@ https://nhl-age-curves.streamlit.app/
 
 * **Season Snapshot:** Click any data point to see that player's exact season stats at that age, projected all-time career rank, and nearest historical matches.
 
+* **Live Games Quick-Add:** A dedicated comparison tab lists the next 4 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and can add both teams plus each club's current points leader and best Save% goalie in one click.
+
 * **Shareable URLs:** Click the chart's **Copy link** control to copy a compact exact-state URL only when you want to share it. Player and team names are omitted from the query string, default values are skipped, and the browser URL stays clean while you explore.
 
 * **Dynamic Search:** Type a player's first or last name to get live results. Selecting a match immediately adds them to the chart, no separate button required.
@@ -59,9 +61,9 @@ nhl/
     sidebar.py           player and team sidebar UI
     dialog.py            season-detail popup dialog
     chart.py             Plotly chart rendering, baseline overlay, and JS pan-clamp
-    comparison.py        player stat comparison panel
+    comparison.py        tabbed comparison panel with Overview, Trophies, and Live games
     url_params.py        URL query param encode/decode for shareable links
-    schedule.py          live/recent game detection for chart auto-population
+    schedule.py          live defaults, upcoming games, and featured-player helpers
     async_preloader.py   background cache warming for Goalie/Team categories
 scraper.py               standalone script to refresh the parquet file
 nhl_historical_seasons.parquet   ML backbone (generate with scraper.py)

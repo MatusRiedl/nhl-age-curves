@@ -281,6 +281,39 @@ _CSS = """
             border-color: #1a569d !important;
         }
 
+        div.element-container:has(.live-games-matchup),
+        div.element-container:has(.live-games-detail) {
+            margin-bottom: 0 !important;
+        }
+        .live-games-detail {
+            color: #8c8c8c;
+            font-size: 0.95rem;
+            line-height: 1.2;
+            margin: 0.1rem 0 0.3rem 0;
+        }
+        div.element-container:has(.live-games-detail) + div {
+            gap: 0 !important;
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+        }
+        div.element-container:has(.live-games-detail) + div [data-testid="stButton"] {
+            margin-top: 0 !important;
+            margin-bottom: 0.1rem !important;
+        }
+        div.element-container:has(.live-games-detail) + div [data-testid="stButton"] button {
+            padding: 0.18rem 0.7rem !important;
+            font-size: 0.92rem !important;
+            min-height: 2.3rem !important;
+            white-space: nowrap !important;
+        }
+        div.element-container:has(.live-games-detail) + div + div.element-container {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+        }
+        div.element-container:has(.live-games-detail) + div + div.element-container hr {
+            margin: 0 !important;
+        }
+
         /* Controls dropdowns: stack one per row on mobile */
         @media (max-width: 768px) {
             div:has(> #controls-dropdowns) + div [data-testid="stHorizontalBlock"] {

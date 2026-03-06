@@ -67,15 +67,16 @@ nhl/ package (all logic lives here — see Section 12 for full detail):
   dialog.py                — @st.dialog season-detail popup.
   chart.py                 — Plotly chart rendering + aggregate baseline
                              overlays + JS pan-clamp injection.
-  comparison.py            — render_comparison_panel() side-by-side player stat cards.
+  comparison.py            - render_comparison_area() tabbed comparison panel with
+                             Overview, Trophies, and Live games quick-add actions.
   url_params.py            — encode_state_to_params() / apply_params_to_state().
                              Builds compact share-link query params, omits default
                              values, and restores them on first page load. No
                              Streamlit import.
-  schedule.py              — get_live_or_recent_game() / get_featured_players().
-                             Fetches live or recent NHL game via score API and
-                             identifies best skater + starting goalie per team for
-                             chart auto-population on first open.
+  schedule.py              - get_live_or_recent_game() / get_upcoming_games() /
+                             get_featured_players(). Handles first-load live defaults,
+                             upcoming-game lookup, Central European local time labels,
+                             and featured skater/goalie selection from club stats.
   async_preloader.py       — preload_all_categories(). Background cache warming
                              for Goalie and Team data using threading. Loads
                              non-active categories while user views current category.
@@ -95,6 +96,21 @@ Stats:     https://api-web.nhle.com/v1/player/{player_id}/landing
 Roster:    https://api-web.nhle.com/v1/roster/{team_abbr}/current
            Returns: forwards[], defensemen[], goalies[] with id, firstName, lastName,
            positionCode
+
+Scoreboard: https://api-web.nhle.com/v1/scoreboard/now
+            Returns: recent multi-day scoreboard payload used to find a live or
+            most recently completed NHL game for first-load auto-population.
+
+Scores:    https://api-web.nhle.com/v1/score/{date}
+           Returns: games[] for a specific YYYY-MM-DD date.
+           Fields used by schedule.py include id, gameState, gameType,
+           startTimeUTC, venue.default, awayTeam, and homeTeam.
+
+Club stats: https://api-web.nhle.com/v1/club-stats/{team_abbr}/now
+            Returns: skaters[] and goalies[] with playerId, firstName, lastName,
+            points, gamesPlayed, wins, and savePercentage.
+            Used to pick each team's current-season points leader and best Save%
+            goalie for chart and comparison seeding.
 
 Records:   https://records.nhl.com/site/api/skater-career-scoring-regular-season
            https://records.nhl.com/site/api/skater-career-scoring-playoff
@@ -415,18 +431,26 @@ GAMES PLAYED MODE CHART DIFFERENCES:
 SECTION 10 — CACHING STRATEGY
 --------------------------------
 @st.cache_data (permanent, until Streamlit restarts):
-  load_historical_data()        — parquet file, plus legacy goalie rate sanitization
-  build_historical_baselines()  — derived from parquet, same lifetime
-  get_top_50()                  — rarely changes, no TTL needed
-  get_team_roster()             — no TTL (intentional for now)
-  get_player_raw_stats()        — player historical data, no TTL needed
+  load_historical_data()        - parquet file, plus legacy goalie rate sanitization
+  build_historical_baselines()  - derived from parquet, same lifetime
+  load_all_team_seasons()       - cached team history parquet load
+  build_team_baselines()        - derived team baseline cache
+  get_top_50()                  - rarely changes, no TTL needed
+  get_top_50_goalies()          - goalie all-time leaderboard cache
+  get_team_roster()             - no TTL (intentional for now)
+  get_player_raw_stats()        - player historical data, no TTL needed
 
-@st.cache_data(ttl=3600) — refreshes hourly:
-  fetch_all_time_records()      — records change slowly
-  get_id_to_name_map()          — derived from records
-  search_player()               — team labels change with trades
-  get_clone_details_map()       — clone name/stat lookup from records API;
-                                   used to populate the ML projection clone panel
+@st.cache_data(ttl=3600) - refreshes hourly:
+  fetch_all_time_records()      - records change slowly
+  get_id_to_name_map()          - derived from records
+  search_player()               - team labels change with trades
+  get_clone_details_map()       - clone name/stat lookup from records API;
+                                  used to populate the ML projection clone panel
+  get_featured_players()        - current-season featured skater/goalie selection
+
+@st.cache_data(ttl=300) - refreshes every 5 minutes:
+  get_live_or_recent_game()     - first-load default matchup lookup
+  get_upcoming_games()          - next 4 future games for the Live games tab
 
 SECTION 11 — GAMES PLAYED MODE
 ---------------------------------
@@ -464,13 +488,14 @@ IMPORT DEPENDENCY GRAPH (no cycles):
   constants, era, styles,
   url_params                      no project imports (leaf modules)
   data_loaders, controls, team_pipeline,
-  comparison                      import from constants only
+  schedule                        import from constants only
   baselines                       imports from constants, era
   knn_engine                      imports from constants, era
   player_pipeline                 imports from constants, era, data_loaders, knn_engine
   sidebar                         imports from constants, data_loaders
   dialog                          imports from data_loaders
   chart                           imports from constants, dialog
+  comparison                      imports from constants, data_loaders, schedule
   app.py                          imports all modules
 
 MODULE: nhl/constants.py
@@ -593,11 +618,14 @@ MODULE: nhl/chart.py
                  season_type, sidebar_keys, peak_info, do_prime, share_params) -> None
 
 MODULE: nhl/comparison.py
-  Right-column player stat comparison cards rendered alongside the chart.
-  Reads all needed values via function parameters (no direct session_state reads).
+  Right-column tabbed comparison panel rendered alongside the chart.
+  Overview and Trophies render player or team summary cards.
+  Live games lists the next 4 upcoming games and can seed st.session_state.teams
+  plus st.session_state.players in one click.
   Exports:
-    render_comparison_panel(processed_dfs, players, peak_info, metric,
-                            stat_category, season_type) -> None
+    render_comparison_area(processed_dfs, players, teams, peak_info, metric,
+                           stat_category, season_type, team_mode) -> None
+    get_panel_tab_ids() -> set[str]
 
 MODULE: nhl/url_params.py
   URL query param serialization and deserialization. No Streamlit import. No project imports.
@@ -626,25 +654,29 @@ MODULE: nhl/url_params.py
       Accepts both compact ID-only links and legacy "id|name" / "abbr|name" links.
 
 MODULE: nhl/schedule.py
-  Live game detection and featured player selection for chart auto-population.
+  Schedule helpers for chart auto-population and the Live games comparison tab.
   Called once per browser session via the _default_loaded guard in app.py.
   Skipped entirely when URL params have already populated players/teams.
-  Imports: nhl.constants (ACTIVE_TEAMS, ROSTER_URL), nhl.data_loaders (load_historical_data)
-  Score API endpoints (both undocumented, no auth):
-    https://api-web.nhle.com/v1/score/now        — today's games with live game states
-    https://api-web.nhle.com/v1/score/{date}     — scores for a specific YYYY-MM-DD date
+  Imports: nhl.constants (ACTIVE_TEAMS)
+  Score and team endpoints (all undocumented, no auth):
+    https://api-web.nhle.com/v1/scoreboard/now
+    https://api-web.nhle.com/v1/score/{date}
+    https://api-web.nhle.com/v1/club-stats/{team_abbr}/now
   Game states recognized: LIVE, CRIT (live); FINAL, OVER, OFF (finished).
   Valid game types: 2 (regular season), 3 (playoffs). Preseason and all-star ignored.
   Exports:
     get_live_or_recent_game() -> tuple[str, str] | None   [ttl=300]
-      Checks score/now for a live or finished game. If none found today, walks back
-      up to 7 calendar days. Returns (home_abbr, away_abbr) or None.
+      Checks scoreboard/now first. If nothing qualifies, walks back up to 7
+      calendar days through score/{date}. Returns (home_abbr, away_abbr) or None.
+    get_upcoming_games(limit=4, days_ahead=14) -> list[dict]   [ttl=300]
+      Scans forward from today, keeps future regular-season and playoff games,
+      formats Central European local time labels, and returns matchup plus venue
+      metadata for the Live games tab.
     get_featured_players(home_abbr, away_abbr) -> dict    [ttl=3600]
-      For each team: fetches ROSTER_URL directly (raw firstName/lastName fields),
-      cross-references skater IDs with historical parquet (PlayerID + Points) to
-      pick the highest career-points skater, picks the first-listed goalie.
+      For each team: fetches club-stats/{abbr}/now, picks the current-season
+      points leader, then picks the best Save% goalie with games-played and wins
+      tie-breaks.
       Returns {'players': {id: name, ...}, 'teams': {abbr: name, ...}}.
-      Falls back to first roster forward if no parquet match (rookie roster).
   Session state integration:
     _default_loaded guard in app.py (fires once per session after URL params load).
     Auto-population is skipped when st.session_state.players or .teams are non-empty
