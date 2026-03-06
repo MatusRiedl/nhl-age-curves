@@ -2,6 +2,7 @@
 
 import streamlit as st
 
+from nhl.constants import NHLE_DEFAULT_MULTIPLIER, NHLE_MULTIPLIERS
 from nhl.data_loaders import get_all_time_rank
 from nhl.era import get_era_multiplier
 
@@ -126,18 +127,6 @@ def _render_era_adjust_skaters_guide_tab() -> None:
         "- **Era-adjusted stats:** those same NHL totals after the app applies the era multiplier."
     )
 
-    example_80s_col, example_dead_puck_col = st.columns(2)
-    with example_80s_col:
-        st.markdown(
-            "**Example: 1985 skater**\n\n"
-            "The 80s were offense-heavy, so the app deflates raw scoring from that environment."
-        )
-    with example_dead_puck_col:
-        st.markdown(
-            "**Example: 2001 skater**\n\n"
-            "Dead-puck seasons were tougher for offense, so the app boosts scoring from that environment."
-        )
-
     st.markdown("#### Multipliers used")
     st.markdown(
         "\n".join(
@@ -146,11 +135,22 @@ def _render_era_adjust_skaters_guide_tab() -> None:
         )
     )
 
-    st.markdown("#### Why it changed")
+    st.markdown("#### Leagues")
     st.markdown(
-        "- High-scoring eras get **deflated** because offense was easier to rack up.\n"
-        "- Low-scoring eras get **boosted** because offense was harder to produce.\n"
-        "- That gives you a fairer apples-to-apples curve when players come from different generations."
+        "The app does not pretend every league scores like the NHL. Non-NHL seasons get a "
+        "**league multiplier** first so outside-league production is translated into a rough NHL-equivalent level."
+    )
+    st.markdown(
+        "The multiplier is looked up from the season's league code: "
+        f"**NHL = {NHLE_MULTIPLIERS['NHL']:.2f}**, **KHL = {NHLE_MULTIPLIERS['KHL']:.2f}**, "
+        f"**SHL = {NHLE_MULTIPLIERS['SHL']:.2f}**, **AHL = {NHLE_MULTIPLIERS['AHL']:.2f}**, and unknown "
+        f"or rare leagues fall back to **{NHLE_DEFAULT_MULTIPLIER:.2f}**."
+    )
+    st.markdown(
+        "It only scales **Points**, **Goals**, and **Assists**. GP and the other non-scoring stats stay raw. "
+        "A point is not equally hard in every league, so this keeps junior, college, European, and minor-league "
+        "production from being treated like raw NHL scoring. After that, skater **era adjust** only runs on **NHL rows**, "
+        "so the app does not double-count the adjustment."
     )
 
 
