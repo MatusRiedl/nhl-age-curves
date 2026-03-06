@@ -404,3 +404,29 @@ v0.61.16 - faq copy cleanup
 - CHANGED: Synced the visible footer version in `app.py` to `v0.61.16`.
 - VALIDATED: `python -m unittest tests.test_styles -v` passed locally.
 - VALIDATED: `python -m unittest discover -s tests -v` passed locally with 43/43 tests.
+
+v0.61.17 - shared player landing cache
+---------------------------------------------------------
+- CHANGED: Added `get_player_landing()` as the shared cached NHL landing fetch so player metadata helpers reuse one payload instead of refetching the same endpoint.
+- CHANGED: Refactored `get_player_headshot()`, `get_player_current_team()`, `get_player_roster_info()`, `get_player_hero_image()`, `get_player_awards()`, `get_player_league_abbrevs()`, and `get_player_raw_stats()` to derive from the shared landing payload while keeping silent fallbacks intact.
+- CHANGED: Updated `readme.txt` and `CLAUDE.md` so `app.py` is documented as a ~350-line orchestrator and the caching docs match the new landing-helper flow.
+- ADDED: Focused unittest coverage in `tests/test_data_loaders.py` for shared landing reuse, helper fallbacks, hero-image fallback behavior, inactive roster handling, and malformed awards payloads.
+- VALIDATED: `python -m unittest tests.test_data_loaders -v` passed locally with 7/7 tests.
+
+v0.61.18 - lazy comparison panel selector
+---------------------------------------------------------
+- CHANGED: Replaced eager `st.tabs()` comparison rendering with a selector-based `st.radio()` control so only the active Overview, Trophies, or Live games panel runs on each rerun.
+- CHANGED: Preserved the existing per-category `panel_tab_*` state and URL param wiring, while making empty boards fall back to `Live games` only when `Overview` would be blank.
+- CHANGED: Updated `readme.txt`, `README.md`, and the `app.py` module description so the docs now describe the selector-based comparison panel accurately.
+- ADDED: Regression coverage in `tests/test_comparison.py` to verify that only the selected panel renders and that empty boards default to `Live games` without reviving hidden panel work.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.18`.
+- VALIDATED: `python -m unittest tests.test_comparison -v` passed locally with 6/6 tests.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 50/50 tests.
+
+v0.61.19 - comparison tabs restoration
+---------------------------------------------------------
+- CHANGED: Reverted the comparison panel from selector-based `st.radio()` rendering back to native `st.tabs()` so Overview, Trophies, and Live games look and behave like the original UI again.
+- CHANGED: Restored the native tab styling plus the tab-focused docs and comparison regression expectations.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.19`.
+- VALIDATED: `python -m unittest tests.test_comparison -v` passed locally with 4/4 tests.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 48/48 tests.

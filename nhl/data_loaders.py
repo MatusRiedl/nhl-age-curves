@@ -1,12 +1,13 @@
 """
 nhl.data_loaders — Cached data-fetch functions for the NHL Age Curves app.
 
-All external API calls and the parquet load live here.  Every function is decorated
-with @st.cache_data (permanent or ttl=3600) so the app never hammers the APIs on
-each Streamlit rerun.
+All external API calls and the parquet load live here. Network-heavy loaders use
+@st.cache_data so the app does not hammer the APIs on each Streamlit rerun.
+Lightweight player metadata helpers delegate to a shared cached landing payload
+instead of refetching the same JSON through multiple wrappers.
 
-Try/except fallbacks are intentional — the NHL APIs are undocumented and occasionally
-return unexpected payloads.  Never remove the fallback returns.
+Try/except fallbacks are intentional. The NHL APIs are undocumented and
+occasionally return unexpected payloads. Never remove the fallback returns.
 
 Imports from project:
     nhl.constants  — URL strings and NHLE_MULTIPLIERS / TEAM_METRICS
@@ -461,28 +462,42 @@ def get_team_roster(team_abbr: str) -> dict:
         return {}
 
 
-@st.cache_data
-def get_player_headshot(player_id: int) -> str:
-    """Return the headshot URL for a player from the NHL stats API.
+@st.cache_data(ttl=3600)
+def get_player_landing(player_id: int) -> dict:
+    """Return the NHL player landing payload for a single player.
+
+    This is the shared source for player metadata helpers so the app fetches the
+    landing endpoint once per player instead of once per wrapper.
 
     Args:
         player_id: Numeric NHL player ID.
 
     Returns:
-        URL string, or '' if the API call fails or no headshot is available.
+        Parsed landing payload dict, or {} if the request fails.
     """
     try:
         res = requests.get(STATS_URL.format(player_id), timeout=5).json()
-        return res.get('headshot', '')
+        return res if isinstance(res, dict) else {}
     except Exception:
-        return ''
+        return {}
 
 
-@st.cache_data
+def get_player_headshot(player_id: int) -> str:
+    """Return the headshot URL from the cached player landing payload.
+
+    Args:
+        player_id: Numeric NHL player ID.
+
+    Returns:
+        URL string, or '' if no headshot is available.
+    """
+    res = get_player_landing(player_id)
+    return str(res.get('headshot', '') or '')
+
+
 def get_player_current_team(player_id: int) -> str:
-    """Return the current team abbreviation for an active NHL player.
+    """Return the current team abbreviation from the cached landing payload.
 
-    Fetches the player landing page and returns the currentTeamAbbrev field.
     Active players return a tricode (e.g. 'EDM'). Retired players and free
     agents return an empty string, which callers should treat as "no logo".
 
@@ -492,21 +507,16 @@ def get_player_current_team(player_id: int) -> str:
     Returns:
         Three-letter team abbreviation string, or '' if inactive/unavailable.
     """
-    try:
-        res = requests.get(STATS_URL.format(player_id), timeout=5).json()
-        return res.get('currentTeamAbbrev', '') or ''
-    except Exception:
-        return ''
+    res = get_player_landing(player_id)
+    return str(res.get('currentTeamAbbrev', '') or '')
 
 
-@st.cache_data
 def get_player_roster_info(player_id: int) -> dict:
     """Return position code and jersey number for an active NHL player.
 
-    Fetches the player landing page. Active players have a non-empty
-    currentTeamAbbrev and valid position / sweaterNumber fields. Retired
-    players and free agents return an empty dict so callers can skip the
-    position/number display.
+    Active players have a non-empty currentTeamAbbrev and valid position /
+    sweaterNumber fields. Retired players and free agents return an empty dict
+    so callers can skip the position/number display.
 
     Args:
         player_id: Numeric NHL player ID.
@@ -514,11 +524,11 @@ def get_player_roster_info(player_id: int) -> dict:
     Returns:
         Dict with keys 'position' (str, e.g. 'C', 'LW', 'RW', 'D', 'G')
         and 'sweater_number' (int), or {} if the player is inactive or
-        the request fails.
+        the payload is incomplete.
     """
     _POS_MAP = {'C': 'C', 'L': 'LW', 'R': 'RW', 'D': 'D', 'G': 'G'}
     try:
-        res = requests.get(STATS_URL.format(player_id), timeout=5).json()
+        res = get_player_landing(player_id)
         if not res.get('currentTeamAbbrev'):
             return {}
         raw_pos = res.get('position', '')
@@ -533,9 +543,8 @@ def get_player_roster_info(player_id: int) -> dict:
         return {}
 
 
-@st.cache_data
 def get_player_hero_image(player_id: int) -> str:
-    """Return the full-body hero image URL for a player from the NHL stats API.
+    """Return the hero image URL from the cached player landing payload.
 
     The heroImage field is a full-body action render with transparent background,
     available for current and recent players. Falls back to the headshot URL if
@@ -547,33 +556,25 @@ def get_player_hero_image(player_id: int) -> str:
     Returns:
         URL string for heroImage or headshot fallback, or '' on failure.
     """
-    try:
-        res = requests.get(STATS_URL.format(player_id), timeout=5).json()
-        return res.get('heroImage', res.get('headshot', ''))
-    except Exception:
-        return ''
+    res = get_player_landing(player_id)
+    return str(res.get('heroImage', res.get('headshot', '')) or '')
 
 
 # ---------------------------------------------------------------------------
 # Awards / trophies
 # ---------------------------------------------------------------------------
 
-@st.cache_data(ttl=3600)
 def get_player_awards(player_id: int) -> list:
-    """Return the player's awards list from the NHL landing endpoint.
+    """Return the player's awards list from the cached landing payload.
 
     Args:
         player_id: Numeric NHL player ID.
 
     Returns:
-        List of award dicts (possibly empty). Returns [] on API failure.
+        List of award dicts (possibly empty). Returns [] on failure.
     """
-    try:
-        res = requests.get(STATS_URL.format(player_id), timeout=5).json()
-        awards = res.get('awards', [])
-        return awards if isinstance(awards, list) else []
-    except Exception:
-        return []
+    awards = get_player_landing(player_id).get('awards', [])
+    return awards if isinstance(awards, list) else []
 
 
 @st.cache_data(ttl=3600)
@@ -680,19 +681,22 @@ def discover_all_leagues(sample_player_ids: list[str]) -> dict[str, int]:
     return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
-@st.cache_data(ttl=3600)
 def get_player_league_abbrevs(player_id: int) -> list[str]:
-    """Return unique leagueAbbrev values from a player's seasonTotals rows."""
-    try:
-        res = requests.get(STATS_URL.format(player_id), timeout=10).json()
-        leagues = {
-            str(s.get('leagueAbbrev', '')).strip()
-            for s in (res.get('seasonTotals', []) or [])
-            if str(s.get('leagueAbbrev', '')).strip()
-        }
-        return sorted(leagues)
-    except Exception:
-        return []
+    """Return unique leagueAbbrev values from cached seasonTotals rows.
+
+    Args:
+        player_id: Numeric NHL player ID.
+
+    Returns:
+        Sorted list of unique non-empty league abbreviations.
+    """
+    season_totals = get_player_landing(player_id).get('seasonTotals', []) or []
+    leagues = {
+        str(season.get('leagueAbbrev', '')).strip()
+        for season in season_totals
+        if isinstance(season, dict) and str(season.get('leagueAbbrev', '')).strip()
+    }
+    return sorted(leagues)
 
 
 @st.cache_data
@@ -702,8 +706,9 @@ def get_player_raw_stats(
 ) -> tuple:
     """Fetch raw season-by-season stats for a player from the NHL API.
 
-    Covers regular season (gameTypeId=2) and playoffs (gameTypeId=3) across all
-    leagues returned by the API (unknown leagues are kept, not dropped).
+    Uses the shared cached landing payload, then covers regular season
+    (gameTypeId=2) and playoffs (gameTypeId=3) across all leagues returned by
+    the API (unknown leagues are kept, not dropped).
     Each row carries NHLeMultiplier resolved from normalized league key with a
     safe fallback (NHLE_DEFAULT_MULTIPLIER). Multipliers are applied downstream
     in player_pipeline.py so raw parquet-level values are preserved.
@@ -724,7 +729,7 @@ def get_player_raw_stats(
         Returns (empty DataFrame, base_name, 'S') on failure.
     """
     try:
-        res = requests.get(STATS_URL.format(player_id)).json()
+        res = get_player_landing(player_id)
         birth_date = str(res.get('birthDate', '2000'))
         birth_year = int(birth_date[:4]) if len(birth_date) >= 4 else 2000
         position   = res.get('position', 'S')

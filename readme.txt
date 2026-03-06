@@ -20,7 +20,7 @@ The parquet file is the backbone of the ML engine and baseline. Without it,
 the app still works but KNN projections and the 75th percentile baseline
 are disabled.
 
-app.py is a ~200-line orchestrator. It initializes session state, hydrates
+app.py is a ~350-line orchestrator. It initializes session state, hydrates
 shared URL params once, resolves compact ID-only share links back to display
 names, calls render_sidebar() and render_controls() for UI, dispatches to
 process_players() or process_teams() for data, then calls render_chart(). All
@@ -31,7 +31,7 @@ SECTION 2 — FILE STRUCTURE
 -----------------------------
 app.py                     — Thin orchestrator. Initializes session state,
                              calls UI/pipeline/chart functions from nhl/ package.
-                             ~200 lines. No business logic here.
+                             ~350 lines. No business logic here.
 
 scraper.py                 — Standalone script. Run manually to refresh parquet.
                              Hits NHL API, maps positions, calculates ages, retries
@@ -55,7 +55,7 @@ nhl/ package (all logic lives here — see Section 12 for full detail):
   constants.py             — All shared constants. No project imports.
   styles.py                — CSS injection only. No project imports.
   era.py                   — Era adjustment math. No Streamlit dependency.
-  data_loaders.py          — All 14 @st.cache_data fetch/parquet functions.
+  data_loaders.py          — Cached fetch/parquet loaders + shared player landing payload.
   baselines.py             — Aggregate historical + team 75th-pct baseline builders.
   knn_engine.py            — Hybrid KNN projection engine.
                              No Streamlit. Independently testable.
@@ -441,12 +441,18 @@ SECTION 10 — CACHING STRATEGY
   get_player_raw_stats()        - player historical data, no TTL needed
 
 @st.cache_data(ttl=3600) - refreshes hourly:
+  get_player_landing()         - shared player landing payload for metadata helpers
   fetch_all_time_records()      - records change slowly
   get_id_to_name_map()          - derived from records
   search_player()               - team labels change with trades
   get_clone_details_map()       - clone name/stat lookup from records API;
                                   used to populate the ML projection clone panel
   get_featured_players()        - current-season featured skater/goalie selection
+
+No cache by design, but these reuse get_player_landing() so they do not trigger
+extra player landing requests:
+  get_player_headshot(), get_player_current_team(), get_player_roster_info(),
+  get_player_hero_image(), get_player_awards(), get_player_league_abbrevs()
 
 @st.cache_data(ttl=300) - refreshes every 5 minutes:
   get_live_or_recent_game()     - first-load default matchup lookup
@@ -481,7 +487,7 @@ show_season_details() so season detail panel shows correctly regardless of mode.
 SECTION 12 — MODULAR PACKAGE STRUCTURE (v0.37.0+)
 ----------------------------------------------------
 As of v0.37.0, all logic has been extracted from a single app.py into the nhl/
-package. app.py is now a thin orchestrator (~200 lines). This section describes
+package. app.py is now a thin orchestrator (~350 lines). This section describes
 each module's responsibility, its public interface, and its import dependencies.
 
 IMPORT DEPENDENCY GRAPH (no cycles):
@@ -526,7 +532,8 @@ MODULE: nhl/styles.py
     inject_css() -> None
 
 MODULE: nhl/data_loaders.py
-  All network I/O and parquet load. Every function uses @st.cache_data.
+  All network I/O and parquet load. Network-heavy loaders use @st.cache_data,
+  and lightweight player metadata helpers reuse get_player_landing().
   load_historical_data() also sanitizes legacy goalie SavePct values before
   deriving displayed Save % so stale parquet files cannot poison goalie charts.
   Exports:
@@ -539,7 +546,13 @@ MODULE: nhl/data_loaders.py
     search_player(query) -> list                     (ttl=3600)
     search_local_players(query, category) -> dict    (no cache — calls cached siblings)
     get_team_roster(team_abbr) -> dict               (permanent cache)
-    get_player_headshot(player_id) -> str            (permanent cache)
+    get_player_landing(player_id) -> dict            (ttl=3600)
+    get_player_headshot(player_id) -> str            (no cache, uses get_player_landing)
+    get_player_current_team(player_id) -> str        (no cache, uses get_player_landing)
+    get_player_roster_info(player_id) -> dict        (no cache, uses get_player_landing)
+    get_player_hero_image(player_id) -> str          (no cache, uses get_player_landing)
+    get_player_awards(player_id) -> list             (no cache, uses get_player_landing)
+    get_player_league_abbrevs(player_id) -> list[str] (no cache, uses get_player_landing)
     get_player_raw_stats(player_id, base_name) -> tuple[df, str, str] (permanent cache)
     get_id_to_name_map(category) -> dict             (ttl=3600)
     get_clone_details_map(category) -> dict          (ttl=3600)

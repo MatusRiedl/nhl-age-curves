@@ -358,7 +358,6 @@ _CSS = """
             margin-bottom: 0.3rem !important;
             min-height: 38px !important;
             align-items: center !important;
-            border-bottom: 0 !important;
         }
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-border"] {
             display: none !important;
