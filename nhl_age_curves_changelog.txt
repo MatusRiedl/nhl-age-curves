@@ -94,3 +94,34 @@ v0.63.0 - lean AI docs and docstring cleanup
 - CHANGED: Trimmed verbose module and function docstrings across the core app, data, pipeline, UI, and schedule modules without removing the important behavior notes.
 - CHANGED: Synced the visible footer version in `app.py` to `v0.62.1` and corrected the stale footer reference inside the `v0.62.0` changelog note.
 - CHANGED: Forced dark theme and quality of life improvements.
+
+v0.63.1 - grouped player and projection legend toggle
+---------------------------------------------------------
+- CHANGED: Linked each projected player trace to the same Plotly legend group as the real player line so one click now hides or shows both together.
+- CHANGED: Removed the separate `(Proj)` legend item while keeping the dotted projected line and its glow styling on the chart.
+- CHANGED: Added a targeted chart test that locks the grouped legend behavior in place.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.63.1`.
+
+v0.63.2 - shorter baseline legend label
+---------------------------------------------------------
+- CHANGED: Renamed the player historical baseline legend item from the long skater/goalie percentile wording to `Reference baseline`.
+- CHANGED: Added a targeted chart test so the shorter baseline label does not quietly drift back.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.63.2`.
+
+v0.63.3 - dim baseline styling restored
+---------------------------------------------------------
+- CHANGED: Restored the player baseline line to the older dimmer styling so it reads as a greyed dashed reference line instead of a bright white overlay.
+- CHANGED: Removed the extra baseline glow traces that were making the reference line look too hot on the dark chart.
+- CHANGED: Updated the targeted chart source test and synced the visible footer version in `app.py` to `v0.63.3`.
+
+v0.63.4 - baseline styling fix for renamed label
+---------------------------------------------------------
+- FIXED: Made baseline trace detection case-insensitive so the renamed `Reference baseline` legend item still renders as the muted dashed baseline instead of inheriting a normal player color.
+- CHANGED: Added targeted chart tests that verify both baseline detection and the rendered baseline styling.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.63.4`.
+
+v0.63.5 - baseline legend restyle
+---------------------------------------------------------
+- CHANGED: Restyled `Reference baseline` to a chunkier muted-grey dashed line with visible round markers so it matches the requested reference look.
+- CHANGED: Moved the baseline style values into local chart constants and updated the targeted chart test to lock the new look in place.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.63.5`.

@@ -227,12 +227,13 @@ SECTION 9 - PLOTLY RENDERING GUARDRAILS
 ---------------------------------------
 Visual rules:
 - real data = solid colored line with filled markers
-- projection = dotted gray line with open markers
+- projection = dotted player-colored line with open markers
 - baseline = dashed white semi-transparent line with tiny markers
 
 Chart duties handled in `chart.py`:
 - concatenate processed frames
 - add baseline overlays when enabled
+- link each player's projected trace to the same legend toggle so one click hides or shows both
 - render compact chart header text
 - inject JS pan / zoom clamping
 - dispatch click data into `show_season_details()`

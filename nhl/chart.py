@@ -8,8 +8,8 @@ fires the season-detail dialog on point click.
 
 Visual conventions (from CLAUDE.md):
     Real data:   solid colored line, filled markers
-    Projection:  dotted gray line, open circle markers
-    Baseline:    dashed white semi-transparent, marker size=1
+    Projection:  dotted player-colored line, open circle markers
+    Baseline:    muted grey dashed line, visible round markers
 
 Imports from project:
     nhl.constants — RATE_STATS, TEAM_RATE_STATS
@@ -33,6 +33,9 @@ X_AXIS_TICK_COLOR = "rgba(255, 255, 255, 0.80)"
 Y_AXIS_TICK_COLOR = "rgba(255, 255, 255, 0.80)"
 X_AXIS_CUE_COLOR = "rgba(255, 255, 255, 0.25)"
 Y_AXIS_CUE_COLOR = "rgba(255, 255, 255, 0.25)"
+BASELINE_LINE_DASH = "14px,10px"
+BASELINE_LINE_COLOR = "rgba(190, 190, 190, 0.72)"
+BASELINE_MARKER_COLOR = "rgba(220, 220, 220, 0.92)"
 
 
 def _get_chart_context_label(team_mode: bool, games_mode: bool) -> str:
@@ -162,6 +165,48 @@ def _slugify_chart_export_name(title: str) -> str:
     return slug.strip("_") or "nhl_age_chart"
 
 
+def _is_baseline_trace(trace_name: str) -> bool:
+    """Return whether a Plotly trace name represents a baseline series.
+
+    Args:
+        trace_name: Visible Plotly trace label.
+
+    Returns:
+        bool: True when the trace is a baseline line.
+    """
+    return "baseline" in trace_name.casefold()
+
+
+def _apply_special_trace_styling(fig: go.Figure, player_colors: dict[str, str | None]) -> None:
+    """Reapply baseline and projection styling after shared trace updates.
+
+    Args:
+        fig: Plotly figure to mutate in place.
+        player_colors: Mapping of real-player names to their Plotly colors.
+
+    Returns:
+        None.
+    """
+    for trace in fig.data:
+        if "(Proj)" in trace.name:
+            player_name = trace.name.replace(" (Proj)", "")
+            proj_color = player_colors.get(player_name) or "gray"
+            trace.legendgroup = player_name
+            trace.showlegend = False
+            trace.line.dash = 'dot'
+            trace.line.color = proj_color
+            trace.marker.symbol = 'circle-open'
+        elif _is_baseline_trace(trace.name):
+            trace.legendgroup = trace.name
+            trace.line.dash = BASELINE_LINE_DASH
+            trace.line.color = BASELINE_LINE_COLOR
+            trace.line.width = 4
+            trace.marker.size = 8
+            trace.marker.color = BASELINE_MARKER_COLOR
+            trace.marker.line.width = 0
+            trace.marker.symbol = 'circle'
+
+
 def render_chart(
     processed_dfs: list,
     metric: str,
@@ -217,11 +262,7 @@ def render_chart(
             base_rows = []
             base_key = 'Goalie' if stat_category == 'Goalie' else 'Skater'
             base_df = historical_baselines.get(base_key)
-            base_label = (
-                'Goalie 75th Percentile Baseline'
-                if stat_category == 'Goalie'
-                else 'Skater 75th Percentile Baseline'
-            )
+            base_label = 'Reference baseline'
             counting_metrics = {
                 'Points', 'Goals', 'Assists', 'Wins', 'Shutouts', 'GP', 'PIM', 'Saves', '+/-'
             }
@@ -344,15 +385,17 @@ def render_chart(
     )
 
     # Apply visual conventions per trace
-    baseline_traces = []
     player_colors = {}  # Map player name -> color
-    proj_traces = []  # Store (name, x, y, color) for projection glow traces
+    proj_traces = []  # Store (x, y, color, legendgroup) for projection glow traces
     
     # First pass: capture player colors and projection data
     for trace in fig.data:
-        if "(Proj)" not in trace.name and "Baseline" not in trace.name:
+        if "(Proj)" not in trace.name and not _is_baseline_trace(trace.name):
             # This is a real player line - capture its color
             player_colors[trace.name] = trace.line.color if trace.line.color else None
+            trace.legendgroup = trace.name
+        elif _is_baseline_trace(trace.name):
+            trace.legendgroup = trace.name
     
     for trace in fig.data:
         if "(Proj)" in trace.name:
@@ -360,41 +403,13 @@ def render_chart(
             player_name = trace.name.replace(" (Proj)", "")
             proj_color = player_colors.get(player_name) if player_colors.get(player_name) else 'gray'
             proj_traces.append({
-                'name': trace.name,
                 'x': trace.x,
                 'y': trace.y,
                 'color': proj_color,
+                'legendgroup': player_name,
             })
-            # Style projection to match player color with dotted style
-            trace.line.dash          = 'dot'
-            trace.line.color         = proj_color
-            trace.marker.symbol      = 'circle-open'
-        elif "Baseline" in trace.name:
-            trace.line.dash          = 'dash'
-            trace.line.color         = 'rgba(255, 255, 255, 0.55)'
-            trace.line.width         = 2
-            trace.marker.size        = 1
-            baseline_traces.append({'x': trace.x, 'y': trace.y})
 
-    # Add stacked glow traces for baseline (after loop to avoid modifying fig.data during iteration)
-    if baseline_traces and do_base and not games_mode:
-        for baseline_trace in baseline_traces:
-            fig.add_trace(go.Scatter(
-                x=baseline_trace['x'], y=baseline_trace['y'],
-                mode='lines',
-                line=dict(color='rgba(255,255,255,0.06)', width=12, dash='dash'),
-                showlegend=False,
-                hoverinfo='skip',
-                name='_glow_outer',
-            ))
-            fig.add_trace(go.Scatter(
-                x=baseline_trace['x'], y=baseline_trace['y'],
-                mode='lines',
-                line=dict(color='rgba(255,255,255,0.12)', width=5, dash='dash'),
-                showlegend=False,
-                hoverinfo='skip',
-                name='_glow_inner',
-            ))
+    _apply_special_trace_styling(fig, player_colors)
 
     # Add glow traces for projection lines (use player's color for each projection)
     for proj in proj_traces:
@@ -405,6 +420,7 @@ def render_chart(
                 mode='lines',
                 line=dict(color=proj['color'], width=10, dash='dot'),
                 showlegend=False,
+                legendgroup=proj['legendgroup'],
                 hoverinfo='skip',
                 name='_proj_glow_outer',
             ))
@@ -414,6 +430,7 @@ def render_chart(
                 mode='lines',
                 line=dict(color=proj['color'], width=4, dash='dot'),
                 showlegend=False,
+                legendgroup=proj['legendgroup'],
                 hoverinfo='skip',
                 name='_proj_glow_inner',
             ))
@@ -446,6 +463,7 @@ def render_chart(
             title=None, orientation="h",
             yanchor="top", y=-0.20,
             xanchor="center", x=0.5,
+            groupclick="togglegroup",
         ),
         clickmode   = 'event+select',
     )
@@ -533,6 +551,8 @@ def render_chart(
                     f"<b>%{{customdata[1]}}</b><br>{x_label} %{{x}}<br>%{{y:.1f}}%<extra></extra>"
                 )
             )
+
+    _apply_special_trace_styling(fig, player_colors)
 
     # ------------------------------------------------------------------
     # Chart widget key (cache-busting)
