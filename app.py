@@ -179,7 +179,7 @@ elif not _tm and st.session_state.x_axis_mode == "Season Year":
 
 # =============================================================================
 # Controls — Category/Metric and View Options expanders.
-# MUST render before render_sidebar() so toggle widget keys are registered in
+# MUST render before render_sidebar() so control widget keys are registered in
 # Streamlit's widget registry before any st.rerun() call from the sidebar can
 # interrupt execution. Without this order, Streamlit orphan-cleans the key=
 # widget entries on player removal and the init block resets them to False.
@@ -327,7 +327,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.62.10 <br>"
+    "Created by Iksperial. v0.62.11 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

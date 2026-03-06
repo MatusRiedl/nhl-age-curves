@@ -2,6 +2,12 @@
 NHL AGE CURVES - CHANGELOG
 =========================================================
 
+v0.62.11 - controls toolbar cleanup
+---------------------------------------------------------
+- CHANGED: Replaced the cramped 6-toggle control row with a compact pill-style `View options` toolbar using short labels.
+- CHANGED: Preserved the existing session-state booleans so projection, smoothing, baseline, cumulative, era, and prime behavior still flows through the app unchanged.
+- CHANGED: Removed the old toggle truncation CSS hacks, added muted unavailable option pills, and synced the visible footer version in `app.py` to `v0.62.11`.
+
 v0.62.10 - softer support button with helper text
 ---------------------------------------------------------
 - CHANGED: Shrunk the sidebar Ko-fi CTA so it feels less loud while keeping the same pill-style layout and coffee emoji.

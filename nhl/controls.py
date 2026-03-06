@@ -1,9 +1,110 @@
 """Top control surface for category, metric, view mode, and chart toggles."""
 
+from html import escape
+
 import streamlit as st
 
 from nhl.constants import RATE_STATS, TEAM_METRICS, TEAM_RATE_STATS, normalize_league_abbrev
 from nhl.data_loaders import get_player_league_abbrevs
+
+
+_CONTROL_PILL_SPECS: tuple[dict[str, str], ...] = (
+    {"label": "Smooth", "state_key": "do_smooth"},
+    {"label": "Proj", "state_key": "do_predict"},
+    {"label": "Era", "state_key": "do_era"},
+    {"label": "Cumul", "state_key": "do_cumul_toggle"},
+    {"label": "Base", "state_key": "do_base"},
+    {"label": "Prime", "state_key": "do_prime"},
+)
+
+
+def _get_control_pill_groups(team_mode: bool, games_mode: bool) -> tuple[list[dict[str, str]], list[str]]:
+    """Split toolbar pills into active and unavailable groups.
+
+    Args:
+        team_mode: Whether Team mode is active.
+        games_mode: Whether Games Played mode is active.
+
+    Returns:
+        tuple[list[dict[str, str]], list[str]]: Active pill specs and muted labels.
+    """
+    unavailable = set()
+    if team_mode:
+        unavailable.update({"Proj", "Era", "Base", "Prime"})
+    elif games_mode:
+        unavailable.update({"Proj", "Base"})
+
+    available_specs = [spec for spec in _CONTROL_PILL_SPECS if spec["label"] not in unavailable]
+    unavailable_labels = [spec["label"] for spec in _CONTROL_PILL_SPECS if spec["label"] in unavailable]
+    return available_specs, unavailable_labels
+
+
+def _selected_control_pills_from_state(available_specs: list[dict[str, str]]) -> list[str]:
+    """Read the currently enabled toolbar pills from session state.
+
+    Args:
+        available_specs: Active pill specs for the current mode.
+
+    Returns:
+        list[str]: Labels that should render as selected.
+    """
+    return [
+        spec["label"]
+        for spec in available_specs
+        if bool(st.session_state.get(spec["state_key"], False))
+    ]
+
+
+def _prepare_control_pills_widget_state(available_specs: list[dict[str, str]]) -> None:
+    """Keep the pills widget state aligned with the active mode.
+
+    Args:
+        available_specs: Active pill specs for the current mode.
+
+    Returns:
+        None.
+    """
+    available_labels = [spec["label"] for spec in available_specs]
+    next_selected = _selected_control_pills_from_state(available_specs)
+    next_scope = tuple(available_labels)
+    current_scope = st.session_state.get("_controls_option_pills_scope")
+    current_value = st.session_state.get("_controls_option_pills")
+
+    if current_scope != next_scope:
+        st.session_state["_controls_option_pills"] = next_selected
+        st.session_state["_controls_option_pills_scope"] = next_scope
+        return
+
+    if not isinstance(current_value, list):
+        st.session_state["_controls_option_pills"] = next_selected
+        return
+
+    invalid_labels = [label for label in current_value if label not in available_labels]
+    if invalid_labels:
+        st.session_state["_controls_option_pills"] = [
+            label for label in current_value if label in available_labels
+        ]
+
+
+def _sync_control_bool_state(available_specs: list[dict[str, str]], selected_labels) -> None:
+    """Write selected pills back into the existing boolean session keys.
+
+    Args:
+        available_specs: Active pill specs for the current mode.
+        selected_labels: Pills selected by the widget.
+
+    Returns:
+        None.
+    """
+    if selected_labels is None:
+        selected_lookup = set()
+    elif isinstance(selected_labels, str):
+        selected_lookup = {selected_labels}
+    else:
+        selected_lookup = set(selected_labels)
+
+    for spec in available_specs:
+        st.session_state[spec["state_key"]] = spec["label"] in selected_lookup
 
 
 def render_controls() -> tuple:
@@ -13,42 +114,35 @@ def render_controls() -> tuple:
 
     with st.expander("📊 Category & Metric", expanded=False):
         # ------------------------------------------------------------------
-        # Row 1: Compact toggles row
+        # Row 1: Compact pill toolbar
         # ------------------------------------------------------------------
         _cumul_rate_set = TEAM_RATE_STATS if team_mode else RATE_STATS
+        _available_pills, _unavailable_pills = _get_control_pill_groups(team_mode, games_mode)
 
         st.markdown("<div id='controls-row1'></div>", unsafe_allow_html=True)
-
-        c_t1, c_t2, c_t3, c_t4, c_t5, c_t6 = st.columns(
-            [1, 1, 1, 1, 1, 1], vertical_alignment="center"
+        _prepare_control_pills_widget_state(_available_pills)
+        _selected_pills = st.pills(
+            "View options",
+            options=[spec["label"] for spec in _available_pills],
+            selection_mode="multi",
+            key="_controls_option_pills",
+            label_visibility="collapsed",
+            width="stretch",
         )
+        _sync_control_bool_state(_available_pills, _selected_pills)
 
-        with c_t1:
-            st.toggle("Smoothing", key="do_smooth")
-
-        with c_t2:
-            if team_mode:
-                st.toggle("Projection", value=False, disabled=True)
-            else:
-                st.toggle("Projection", key="do_predict", disabled=games_mode)
-
-        with c_t3:
-            if team_mode:
-                st.toggle("Era adjust", value=False, disabled=True)
-            else:
-                st.toggle("Era adjust", key="do_era")
-
-        with c_t4:
-            st.toggle("Cumulative", key="do_cumul_toggle")
-
-        with c_t5:
-            if team_mode:
-                st.toggle("Baseline", value=False, disabled=True, help="Unavailable in Team mode.")
-            else:
-                st.toggle("Baseline", key="do_base", disabled=games_mode)
-
-        with c_t6:
-            st.toggle("Prime years", key="do_prime", disabled=team_mode)
+        if _unavailable_pills:
+            _muted_pills = "".join(
+                f"<span class='controls-pill controls-pill--disabled'>{escape(label)}</span>"
+                for label in _unavailable_pills
+            )
+            st.markdown(
+                "<div class='controls-toolbar-muted'>"
+                "<span class='controls-toolbar-muted__label'>Unavailable:</span>"
+                f"{_muted_pills}"
+                "</div>",
+                unsafe_allow_html=True,
+            )
 
         # ------------------------------------------------------------------
         # Row 2: X axis | Metric | Season Type | Leagues dropdowns

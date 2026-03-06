@@ -287,27 +287,35 @@ _CSS = """
             gap: 0.25rem !important;
         }
 
-        /* Allow controls toggle columns to shrink below content width (enables ellipsis) */
-        div:has(> #controls-row1) + div [data-testid="stColumn"] {
-            min-width: 0 !important;
-            overflow: hidden !important;
+        /* Controls toolbar: muted unavailable pills */
+        .controls-toolbar-muted {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.35rem;
+            margin: 0.25rem 0 0.1rem 0;
         }
-
-        /* Truncate toggle labels on narrow/intermediate screen widths */
-        [data-testid="stExpander"] [data-testid="stToggle"] label {
-            display: flex !important;
-            align-items: center !important;
-            overflow: hidden !important;
-            max-width: 100% !important;
-            flex-wrap: nowrap !important;
+        .controls-toolbar-muted__label {
+            color: #7f8aa3;
+            font-size: 0.76rem;
+            font-weight: 600;
         }
-        [data-testid="stExpander"] [data-testid="stToggle"] label > p,
-        [data-testid="stExpander"] [data-testid="stToggle"] label > span:not([data-testid]) {
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
-            min-width: 0 !important;
-            flex: 1 1 0 !important;
+        .controls-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 1.8rem;
+            padding: 0.12rem 0.62rem;
+            border-radius: 999px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        .controls-pill--disabled {
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: rgba(30, 41, 59, 0.45);
+            color: #7f8aa3;
         }
 
         .player-name {
@@ -387,17 +395,6 @@ _CSS = """
             div:has(> #controls-dropdowns) + div [data-testid="column"] {
                 min-width: 100% !important;
                 flex: 1 1 100% !important;
-            }
-        }
-
-        /* Controls row1 (category + toggles): wrap ~3 per row on mobile */
-        @media (max-width: 768px) {
-            div:has(> #controls-row1) + div [data-testid="stHorizontalBlock"] {
-                flex-wrap: wrap !important;
-            }
-            div:has(> #controls-row1) + div [data-testid="column"] {
-                min-width: 30% !important;
-                flex: 1 1 30% !important;
             }
         }
 
@@ -668,9 +665,8 @@ def inject_css() -> None:
     """Inject the NHL Age Curves custom CSS into the Streamlit page.
 
     Covers: animated gradient title, spinning NHL logo, sidebar compact layout,
-    blue Add-Legend button override, toggle label ellipsis truncation for intermediate
-    screen widths (foldable/tablet), compact mobile header sizing, mobile responsive controls row wrapping
-    (~3 columns per row via #controls-row1 marker),
+    blue Add-Legend button override, compact controls toolbar styling,
+    compact mobile header sizing,
     a real chart toolbar row with copy-link button, responsive stacking of the
     chart/stats panel split on laptop and mobile widths, and Plotly modebar sizing.
 
