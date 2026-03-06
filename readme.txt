@@ -56,7 +56,8 @@ nhl/ package (all logic lives here — see Section 12 for full detail):
   styles.py                — CSS injection only. No project imports.
   era.py                   — Era adjustment math. No Streamlit dependency.
   data_loaders.py          — Cached fetch/parquet loaders + shared player landing payload.
-  baselines.py             — Aggregate historical + team 75th-pct baseline builders.
+  baselines.py             — Aggregate historical + team 75th-pct baseline builders
+                             plus zero-arg cached wrappers.
   knn_engine.py            — Hybrid KNN projection engine.
                              No Streamlit. Independently testable.
   player_pipeline.py       — process_players() full per-player pipeline +
@@ -390,7 +391,7 @@ Historical goalie reliability guardrails:
   - load_historical_data() sanitizes legacy goalie SavePct values from older parquet
     builds before deriving displayed Save %.
 
-Baseline families built by build_historical_baselines(df):
+Baseline families built by get_historical_baselines():
   - Skater
   - Goalie
 
@@ -432,9 +433,9 @@ SECTION 10 — CACHING STRATEGY
 --------------------------------
 @st.cache_data (permanent, until Streamlit restarts):
   load_historical_data()        - parquet file, plus legacy goalie rate sanitization
-  build_historical_baselines()  - derived from parquet, same lifetime
+  get_historical_baselines()    - derived from parquet via internal loader call
   load_all_team_seasons()       - cached team history parquet load
-  build_team_baselines()        - derived team baseline cache
+  get_team_baselines()          - derived team baseline cache via internal loader call
   get_top_50()                  - rarely changes, no TTL needed
   get_top_50_goalies()          - goalie all-time leaderboard cache
   get_team_roster()             - no TTL (intentional for now)
@@ -495,7 +496,7 @@ IMPORT DEPENDENCY GRAPH (no cycles):
   url_params                      no project imports (leaf modules)
   data_loaders, controls, team_pipeline,
   schedule                        import from constants only
-  baselines                       imports from constants, era
+  baselines                       imports from constants, data_loaders
   knn_engine                      imports from constants, era
   player_pipeline                 imports from constants, era, data_loaders, knn_engine
   sidebar                         imports from constants, data_loaders
@@ -559,13 +560,16 @@ MODULE: nhl/data_loaders.py
     get_all_time_rank(category, s_type, metric, value) -> int|None
 
 MODULE: nhl/baselines.py
-  Historical and team 75th-percentile baseline builders. Uses @st.cache_data permanently.
+  Historical and team 75th-percentile baseline builders plus zero-arg cached wrappers.
   Historical baselines are aggregate Skater and Goalie curves built from the
   historical parquet plus the preserved late-tail shaping fixes.
   Exports:
     build_historical_baselines(df) -> dict
       {'Skater': DataFrame, 'Goalie': DataFrame}
+    get_historical_baselines() -> dict
+      cached wrapper that loads historical parquet internally before building
     build_team_baselines(all_team_df) -> dict  {season_year: {metric: float}}
+    get_team_baselines() -> dict  {season_year: {metric: float}}
 
 MODULE: nhl/knn_engine.py
   Hybrid KNN projection engine. No Streamlit import. Independently testable.

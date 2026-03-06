@@ -9,7 +9,7 @@ Module responsibilities:
     nhl.constants       — ACTIVE_TEAMS and all shared constants
     nhl.data_loaders    — load_historical_data(), load_all_team_seasons(),
                           get_id_to_name_map(), get_clone_details_map()
-    nhl.baselines       — build_historical_baselines(), build_team_baselines()
+    nhl.baselines       — get_historical_baselines(), get_team_baselines()
     nhl.sidebar         — render_sidebar(): player/team board + search UI
     nhl.controls        — render_controls(): Category/Metric + View Options expanders
     nhl.player_pipeline — process_players(): full per-player data pipeline
@@ -22,7 +22,7 @@ import streamlit as st
 
 # --- nhl package imports (each module is documented in nhl/__init__.py) ---
 from nhl.async_preloader import preload_all_categories
-from nhl.baselines import build_historical_baselines, build_team_baselines
+from nhl.baselines import get_historical_baselines, get_team_baselines
 from nhl.chart import render_chart
 from nhl.constants import ACTIVE_TEAMS
 from nhl.controls import render_controls
@@ -232,7 +232,7 @@ active_players = {} if team_mode else st.session_state.players
 # Cached permanently — only recomputed when the parquet file changes.
 # =============================================================================
 hist_df              = load_historical_data()
-historical_baselines = build_historical_baselines(hist_df)
+historical_baselines = get_historical_baselines()
 
 # id_to_name_map and clone_details_map are only needed in player mode (KNN engine)
 if not team_mode:
@@ -254,7 +254,7 @@ team_baselines = {}
 if team_mode:
     # ── Team pipeline ─────────────────────────────────────────────────
     all_team_df    = load_all_team_seasons()
-    team_baselines = build_team_baselines(all_team_df)
+    team_baselines = get_team_baselines()
 
     if all_team_df.empty or "teamAbbrev" not in all_team_df.columns:
         st.warning(
@@ -346,7 +346,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.61.19 <br>"
+    "Created by Iksperial. v0.61.20 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

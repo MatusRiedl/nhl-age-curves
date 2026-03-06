@@ -6,12 +6,14 @@ cached because the parquet source is effectively static during runtime.
 
 Imports from project:
     nhl.constants — TEAM_METRICS
+    nhl.data_loaders — load_historical_data(), load_all_team_seasons()
 """
 
 import pandas as pd
 import streamlit as st
 
 from nhl.constants import TEAM_METRICS
+from nhl.data_loaders import load_all_team_seasons, load_historical_data
 
 
 def _estimate_recent_decline_ratio(base: pd.DataFrame, col: str, anchor_age: int) -> float:
@@ -228,8 +230,7 @@ def _build_role_baseline(
     return _shape_skater_late_tail(base, age_counts)
 
 
-@st.cache_data
-def build_historical_baselines(df: pd.DataFrame) -> dict:
+def _build_historical_baselines_from_df(df: pd.DataFrame) -> dict:
     """Build aggregate skater and goalie 75th-percentile age curves.
 
     Args:
@@ -250,8 +251,32 @@ def build_historical_baselines(df: pd.DataFrame) -> dict:
     }
 
 
+def build_historical_baselines(df: pd.DataFrame) -> dict:
+    """Build baselines from an already-loaded historical DataFrame.
+
+    Args:
+        df: Historical seasons DataFrame from ``load_historical_data()``.
+
+    Returns:
+        Dict containing baseline DataFrames keyed by ``Skater`` and ``Goalie``.
+    """
+    return _build_historical_baselines_from_df(df)
+
+
 @st.cache_data
-def build_team_baselines(all_team_df: pd.DataFrame) -> dict:
+def get_historical_baselines() -> dict:
+    """Return cached historical baselines without hashing a DataFrame argument.
+
+    Args:
+        None.
+
+    Returns:
+        Dict containing baseline DataFrames keyed by ``Skater`` and ``Goalie``.
+    """
+    return _build_historical_baselines_from_df(load_historical_data())
+
+
+def _build_team_baselines_from_df(all_team_df: pd.DataFrame) -> dict:
     """Compute 75th-percentile team baseline per SeasonYear for all TEAM_METRICS.
 
     Uses regular-season rows only (gameTypeId == 2).  Falls back to all rows if
@@ -284,3 +309,28 @@ def build_team_baselines(all_team_df: pd.DataFrame) -> dict:
                 entry[m] = float(vals.quantile(0.75)) if not vals.empty else None
         result[int(sy)] = entry
     return result
+
+
+def build_team_baselines(all_team_df: pd.DataFrame) -> dict:
+    """Build team baselines from an already-loaded team-season DataFrame.
+
+    Args:
+        all_team_df: Team-season DataFrame from ``load_all_team_seasons()``.
+
+    Returns:
+        Dict mapping int season_year to a nested dict of {metric: float_value}.
+    """
+    return _build_team_baselines_from_df(all_team_df)
+
+
+@st.cache_data
+def get_team_baselines() -> dict:
+    """Return cached team baselines without hashing a DataFrame argument.
+
+    Args:
+        None.
+
+    Returns:
+        Dict mapping int season_year to a nested dict of {metric: float_value}.
+    """
+    return _build_team_baselines_from_df(load_all_team_seasons())

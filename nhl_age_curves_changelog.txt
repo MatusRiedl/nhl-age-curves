@@ -430,3 +430,11 @@ v0.61.19 - comparison tabs restoration
 - CHANGED: Synced the visible footer version in `app.py` to `v0.61.19`.
 - VALIDATED: `python -m unittest tests.test_comparison -v` passed locally with 4/4 tests.
 - VALIDATED: `python -m unittest discover -s tests -v` passed locally with 48/48 tests.
+
+v0.61.20 - baseline cache boundary cleanup
+---------------------------------------------------------
+- CHANGED: Moved the cached historical and team baseline entry points to zero-arg wrappers so Streamlit no longer hashes large DataFrame arguments just to check cache hits.
+- CHANGED: Kept `build_historical_baselines(df)` and `build_team_baselines(all_team_df)` as pure DataFrame builders, while `app.py` now calls `get_historical_baselines()` and `get_team_baselines()` for the cached path.
+- CHANGED: Updated `readme.txt` and synced the visible footer version in `app.py` to `v0.61.20` so the cache strategy docs match runtime behavior.
+- VALIDATED: `python -m unittest discover -s tests -p "test_baselines.py" -v` passed locally with 2/2 tests.
+- VALIDATED: `python -m unittest discover -s tests -p "test_tail_shaping.py" -v` and `python -m unittest discover -s tests -v` passed locally with 4/4 and 50/50 tests.
