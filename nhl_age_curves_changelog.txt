@@ -2,6 +2,12 @@
 NHL AGE CURVES - CHANGELOG
 =========================================================
 
+v0.63.10 - quieter era status header
+---------------------------------------------------------
+- CHANGED: Removed the `No era adjustment` suffix from player chart headers so the title stays clean when Era is off or when the selected metric is unaffected.
+- CHANGED: Kept the `Era adjusted` suffix only for player metrics that are actually showing era-adjusted values.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.63.10`.
+
 v0.63.9 - explicit era status in chart header
 ---------------------------------------------------------
 - CHANGED: Added the actual era-adjustment status to player chart headers so users can immediately see whether the visible metric is era-adjusted or not.

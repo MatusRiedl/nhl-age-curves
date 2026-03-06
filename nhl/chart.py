@@ -124,7 +124,7 @@ def _get_chart_era_label(metric: str, stat_category: str, do_era: bool, team_mod
     """
     if team_mode:
         return ""
-    return "Era adjusted" if _metric_is_era_adjusted(metric, stat_category, do_era, team_mode) else "No era adjustment"
+    return "Era adjusted" if _metric_is_era_adjusted(metric, stat_category, do_era, team_mode) else ""
 
 
 def _build_chart_header(
