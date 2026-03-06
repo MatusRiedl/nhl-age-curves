@@ -85,7 +85,56 @@ def _get_chart_season_label(season_type: str) -> str:
     return season_labels.get(season_type, season_type)
 
 
-def _build_chart_header(metric: str, team_mode: bool, games_mode: bool, season_type: str) -> str:
+def _metric_is_era_adjusted(metric: str, stat_category: str, do_era: bool, team_mode: bool) -> bool:
+    """Return whether the visible chart metric is actually era-adjusted.
+
+    Args:
+        metric: Selected y-axis metric.
+        stat_category: Current category (`Skater`, `Goalie`, or `Team`).
+        do_era: Whether the era toggle is enabled.
+        team_mode: True when the chart is rendering team comparisons.
+
+    Returns:
+        bool: True only when the rendered metric reflects era-adjusted values.
+    """
+    if team_mode or not do_era:
+        return False
+
+    skater_era_metrics = {"Points", "Goals", "Assists", "PPG", "SH%"}
+    goalie_era_metrics = {"Save %", "GAA", "Shutouts"}
+
+    if stat_category == "Skater":
+        return metric in skater_era_metrics
+    if stat_category == "Goalie":
+        return metric in goalie_era_metrics
+    return False
+
+
+def _get_chart_era_label(metric: str, stat_category: str, do_era: bool, team_mode: bool) -> str:
+    """Return a concise era-status label for the visible chart.
+
+    Args:
+        metric: Selected y-axis metric.
+        stat_category: Current category (`Skater`, `Goalie`, or `Team`).
+        do_era: Whether the era toggle is enabled.
+        team_mode: True when the chart is rendering team comparisons.
+
+    Returns:
+        str: Era status text for player charts, or an empty string for team charts.
+    """
+    if team_mode:
+        return ""
+    return "Era adjusted" if _metric_is_era_adjusted(metric, stat_category, do_era, team_mode) else "No era adjustment"
+
+
+def _build_chart_header(
+    metric: str,
+    team_mode: bool,
+    games_mode: bool,
+    season_type: str,
+    stat_category: str,
+    do_era: bool,
+) -> str:
     """Build the chart toolbar title shown above the plot area.
 
     Args:
@@ -93,13 +142,19 @@ def _build_chart_header(metric: str, team_mode: bool, games_mode: bool, season_t
         team_mode: True when the chart is rendering team comparisons.
         games_mode: True when the x-axis uses games played instead of age.
         season_type: Selected season scope string from the UI.
+        stat_category: Current category (`Skater`, `Goalie`, or `Team`).
+        do_era: Whether the era toggle is enabled.
 
     Returns:
-        str: Title text such as ``Points by Age · Regular season``.
+        str: Title text such as ``Points by Age · Regular season · Era adjusted``.
     """
     x_label = _get_chart_context_label(team_mode=team_mode, games_mode=games_mode)
     season_label = _get_chart_season_label(season_type)
-    return f"{metric} by {x_label} · {season_label}"
+    era_label = _get_chart_era_label(metric, stat_category, do_era, team_mode)
+    header_parts = [f"{metric} by {x_label}", season_label]
+    if era_label:
+        header_parts.append(era_label)
+    return " · ".join(header_parts)
 
 
 def _build_chart_toolbar_markup(title: str, share_button_id: str, toolbar_id: str) -> str:
@@ -238,6 +293,7 @@ def render_chart(
     sidebar_keys: dict,
     peak_info: dict = None,
     do_prime: bool = False,
+    do_era: bool = False,
     share_params: dict | None = None,
 ) -> None:
     """Build the Plotly chart, optional baseline overlays, and click handling."""
@@ -378,6 +434,8 @@ def render_chart(
         team_mode=team_mode,
         games_mode=games_mode,
         season_type=season_type,
+        stat_category=stat_category,
+        do_era=do_era,
     )
     chart_axis_cues = _build_chart_axis_cue_annotations(
         metric=metric,

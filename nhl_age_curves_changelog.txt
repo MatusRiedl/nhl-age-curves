@@ -2,6 +2,12 @@
 NHL AGE CURVES - CHANGELOG
 =========================================================
 
+v0.63.9 - explicit era status in chart header
+---------------------------------------------------------
+- CHANGED: Added the actual era-adjustment status to player chart headers so users can immediately see whether the visible metric is era-adjusted or not.
+- CHANGED: Made the header tell the truth for partial-era metrics too, so goalie `Wins` and skater `PIM` still show `No era adjustment` even if the Era toggle is on.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.63.9`.
+
 v0.63.8 - player color-matched comparison ranks
 ---------------------------------------------------------
 - CHANGED: Matched each player Overview card's all-time rank text color to that player's actual chart line color so the right panel maps cleanly back to the graph.

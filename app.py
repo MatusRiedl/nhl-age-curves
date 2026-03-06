@@ -304,6 +304,7 @@ with col_chart:
         sidebar_keys         = sidebar_keys,
         peak_info            = peak_info,
         do_prime             = st.session_state.do_prime,
+        do_era               = st.session_state.do_era,
         share_params         = share_params,
     )
 
@@ -327,7 +328,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.63.8 -- 6213 lines of Python<br>"
+    "Created by Iksperial. v0.63.9 -- 6213 lines of Python<br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,
