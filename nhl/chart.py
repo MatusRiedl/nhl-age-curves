@@ -89,19 +89,20 @@ def _build_chart_header(metric: str, team_mode: bool, games_mode: bool, season_t
     return f"{metric} by {x_label} · {season_label}"
 
 
-def _build_chart_toolbar_markup(title: str, share_button_id: str) -> str:
+def _build_chart_toolbar_markup(title: str, share_button_id: str, toolbar_id: str) -> str:
     """Build the HTML toolbar shown above the chart.
 
     Args:
         title: Visible chart title.
         share_button_id: DOM id for the copy-link button.
+        toolbar_id: DOM id for the toolbar wrapper.
 
     Returns:
         str: Safe toolbar HTML.
     """
     safe_title = escape(title)
     return (
-        "<div class='nhl-chart-toolbar'>"
+        f"<div id='{toolbar_id}' class='nhl-chart-toolbar'>"
         f"<div class='nhl-chart-toolbar__title'>{safe_title}</div>"
         f"<button id='{share_button_id}' type='button' class='nhl-chart-share-btn' aria-label='Copy share link'>"
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
@@ -576,8 +577,9 @@ def render_chart(
         )
 
     share_button_id = f"nhl-share-btn-{abs(hash(chart_key))}"
+    toolbar_id = f"nhl-chart-toolbar-{abs(hash(chart_key))}"
     st.markdown(
-        _build_chart_toolbar_markup(chart_header, share_button_id),
+        _build_chart_toolbar_markup(chart_header, share_button_id, toolbar_id),
         unsafe_allow_html=True,
     )
 
@@ -613,6 +615,7 @@ def render_chart(
     _x_zoom_max = _team_initial_range[1] if _team_initial_range else _x_max
     _share_params_json = json.dumps(share_params or {})
     _share_button_id_json = json.dumps(share_button_id)
+    _toolbar_id_json = json.dumps(toolbar_id)
 
     components.html(f"""<script>
 (function() {{
@@ -626,6 +629,7 @@ def render_chart(
     var IS_GAMES_MODE = {'true' if _is_games_mode else 'false'};
     var SHARE_PARAMS = {_share_params_json};
     var SHARE_BUTTON_ID = {_share_button_id_json};
+    var TOOLBAR_ID = {_toolbar_id_json};
 
     function calcDtick(width, currentRange) {{
         var xRange = currentRange || (X_MAX - X_MIN);
@@ -656,6 +660,31 @@ def render_chart(
         return 20;
     }}
 
+    function calcResponsiveAxisTickFontSize(width) {{
+        if (width <= 480) return 12;
+        if (width <= 768) return 14;
+        return 16;
+    }}
+
+    function syncToolbarTitleOffset(plot, parent) {{
+        var toolbar = parent.document.getElementById(TOOLBAR_ID);
+        if (!toolbar) return;
+        var title = toolbar.querySelector('.nhl-chart-toolbar__title');
+        if (!title) return;
+
+        var width = plot.offsetWidth || parent.innerWidth;
+        if (width > 768) {{
+            title.style.paddingLeft = '0px';
+            return;
+        }}
+
+        var gutter = 0;
+        if (plot._fullLayout && plot._fullLayout._size) {{
+            gutter = plot._fullLayout._size.l || 0;
+        }}
+        title.style.paddingLeft = Math.max(0, Math.round(gutter)) + 'px';
+    }}
+
     function getCurrentXRange(plot) {{
         // Get the current visible X-axis range from the plot layout
         if (plot.layout && plot.layout.xaxis) {{
@@ -679,9 +708,16 @@ def render_chart(
         // Otherwise use full data range (X_MAX - X_MIN) so all years display properly
         var initialRange = (!IS_AGE_MODE && !IS_GAMES_MODE && X_ZOOM_MAX > X_ZOOM_MIN)
             ? (X_ZOOM_MAX - X_ZOOM_MIN) : (X_MAX - X_MIN);
-        var updates = {{'xaxis.dtick': calcDtick(width, initialRange)}};
+        var axisTickFontSize = calcResponsiveAxisTickFontSize(width);
+        var updates = {{
+            'xaxis.dtick': calcDtick(width, initialRange),
+            'xaxis.tickfont.size': axisTickFontSize,
+            'yaxis.tickfont.size': axisTickFontSize,
+        }};
         updates['xaxis.tickangle'] = (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45;
-        Plotly.relayout(plot, updates);
+        Plotly.relayout(plot, updates).then(function() {{
+            syncToolbarTitleOffset(plot, window.parent);
+        }});
 
         // Clamp pan/zoom to data region and update dtick on zoom
         var _updating = false;
@@ -789,7 +825,15 @@ def render_chart(
         parent.addEventListener('resize', function() {{
             parent.document.querySelectorAll('.js-plotly-plot').forEach(function(p) {{
                 var range = getCurrentXRange(p);
-                Plotly.relayout(p, {{'xaxis.dtick': calcDtick(p.offsetWidth || parent.innerWidth, range), 'xaxis.tickangle': (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45}});
+                var width = p.offsetWidth || parent.innerWidth;
+                Plotly.relayout(p, {{
+                    'xaxis.dtick': calcDtick(width, range),
+                    'xaxis.tickangle': (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45,
+                    'xaxis.tickfont.size': calcResponsiveAxisTickFontSize(width),
+                    'yaxis.tickfont.size': calcResponsiveAxisTickFontSize(width),
+                }}).then(function() {{
+                    syncToolbarTitleOffset(p, parent);
+                }});
             }});
         }});
     }}

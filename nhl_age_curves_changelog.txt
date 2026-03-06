@@ -125,3 +125,15 @@ v0.63.5 - baseline legend restyle
 - CHANGED: Restyled `Reference baseline` to a chunkier muted-grey dashed line with visible round markers so it matches the requested reference look.
 - CHANGED: Moved the baseline style values into local chart constants and updated the targeted chart test to lock the new look in place.
 - CHANGED: Synced the visible footer version in `app.py` to `v0.63.5`.
+
+v0.63.6 - tighter mobile chart spacing
+---------------------------------------------------------
+- CHANGED: Reduced mobile page side padding so the main chart gets more of the screen instead of wasting space on the left gutter.
+- CHANGED: Tightened the mobile chart toolbar and Plotly modebar spacing, and added responsive y-axis tick sizing so narrow screens stop feeling bloated.
+- CHANGED: Updated the targeted chart/style tests and synced the visible footer version in `app.py` to `v0.63.6`.
+
+v0.63.7 - mobile axis label alignment
+---------------------------------------------------------
+- CHANGED: Matched the mobile x-axis tick sizing to the responsive y-axis sizing so both axes stop fighting each other visually.
+- CHANGED: Aligned the mobile chart title to Plotly's real left gutter so the header stops sitting left of the chart body.
+- CHANGED: Updated the targeted chart tests and synced the visible footer version in `app.py` to `v0.63.7`.

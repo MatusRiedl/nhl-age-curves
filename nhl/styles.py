@@ -69,6 +69,8 @@ _CSS = """
         @media (max-width: 768px) {
             .block-container {
                 padding-top: 0.75rem !important;
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
             }
             .page-header {
                 margin-top: 0 !important;
@@ -404,7 +406,7 @@ _CSS = """
             align-items: center;
             justify-content: space-between;
             gap: 0.75rem;
-            min-height: 40px;
+            min-height: 40px !important;
             margin: 0 0 0.4rem 0;
         }
         .nhl-chart-toolbar__title {
@@ -456,6 +458,26 @@ _CSS = """
             .nhl-chart-share-btn {
                 padding: 0.32rem 0.62rem;
                 font-size: 0.76rem;
+            }
+        }
+        @media (max-width: 768px) {
+            .nhl-chart-toolbar {
+                gap: 0.4rem;
+                min-height: 32px !important;
+                margin: 0 0 0.2rem 0;
+            }
+            .nhl-chart-toolbar__title {
+                font-size: 0.84rem;
+                line-height: 1.15;
+            }
+            .nhl-chart-share-btn {
+                gap: 0.28rem;
+                padding: 0.24rem 0.52rem;
+                font-size: 0.7rem;
+            }
+            .nhl-chart-share-btn svg {
+                width: 13px;
+                height: 13px;
             }
         }
 
@@ -578,6 +600,10 @@ _CSS = """
             height: 18px !important;
         }
         @media (max-width: 768px) {
+            .js-plotly-plot .plotly .modebar {
+                top: 4px !important;
+                right: 4px !important;
+            }
             .js-plotly-plot .plotly .modebar-btn {
                 padding: 3px 5px !important;
             }
