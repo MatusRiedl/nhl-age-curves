@@ -46,10 +46,6 @@ def show_app_guide() -> None:
         "This app turns NHL careers into age curves so you can compare real results, "
         "historical baselines, and a forward-looking projection in one place."
     )
-    st.caption(
-        "This guide is intentionally high level: enough to explain the approach, "
-        "not enough to hand over the sauce."
-    )
 
     st.markdown("#### Basics")
     st.markdown(

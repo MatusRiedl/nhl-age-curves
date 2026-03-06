@@ -396,3 +396,11 @@ v0.61.15 - live games docs cleanup
 - CHANGED: Confirmed the Live games tab is already documented in `README.md` and `readme.txt`, so no duplicate docs edits were needed.
 - VALIDATED: `python -m unittest tests.test_comparison -v` passed locally.
 - VALIDATED: `python -m unittest discover -s tests -v` passed locally with 43/43 tests.
+
+v0.61.16 - faq copy cleanup
+---------------------------------------------------------
+- FIXED: Removed the "hand over the sauce" caption from the sidebar FAQ dialog so the guide opens cleanly without that extra line.
+- ADDED: A regression assertion in `tests/test_styles.py` to keep that phrase out of `nhl/dialog.py`.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.16`.
+- VALIDATED: `python -m unittest tests.test_styles -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 43/43 tests.
