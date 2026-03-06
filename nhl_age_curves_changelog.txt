@@ -2,6 +2,35 @@
 NHL AGE CURVES - CHANGELOG
 =========================================================
 
+v0.62.16 - default dark theme
+---------------------------------------------------------
+- CHANGED: Added project-level Streamlit config at `.streamlit/config.toml` so the app now defaults to Streamlit's dark theme.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.62.16`.
+
+v0.62.15 - lighter chart header copy
+---------------------------------------------------------
+- CHANGED: Made the chart description text above the plot regular weight instead of bold.
+- CHANGED: Set that chart header text to white at `90%` opacity.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.62.15`.
+
+v0.62.14 - softer axis tick labels
+---------------------------------------------------------
+- CHANGED: Set both x-axis and y-axis tick-label numbers to white at `80%` opacity instead of full white.
+- CHANGED: Kept the in-chart axis cue labels (`Points`, `Age`, etc.) at `25%` white opacity.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.62.14`.
+
+v0.62.13 - stronger in-chart cue labels
+---------------------------------------------------------
+- CHANGED: Bumped the in-chart axis cue labels (`Points`, `Age`, etc.) from `10%` to `25%` white opacity so they read a bit clearer without bringing back the tint.
+- CHANGED: Kept both chart axes in straight white.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.62.13`.
+
+v0.62.12 - chart label tint removal
+---------------------------------------------------------
+- CHANGED: Removed the red/blue tint from chart axis tick labels so both axes now render in straight white.
+- CHANGED: Switched the in-chart axis cue labels (`Points`, `Age`, etc.) to the same white color at `10%` opacity.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.62.12`.
+
 v0.62.11 - controls toolbar cleanup
 ---------------------------------------------------------
 - CHANGED: Replaced the cramped 6-toggle control row with a compact pill-style `View options` toolbar using short labels.
@@ -59,8 +88,9 @@ v0.62.2 - chart chrome cleanup for laptop screens
 - CHANGED: Shortened the chart height, tightened plot margins, and kept the Plotly modebar inside the chart's top-right corner where it belongs.
 - CHANGED: Widened the chart vs. stats split and added an earlier laptop breakpoint so the right panel stacks below the chart before the layout gets cramped and ugly.
 
-v0.62.1 - lean AI docs and docstring cleanup
+v0.63.0 - lean AI docs and docstring cleanup
 ---------------------------------------------------------
 - CHANGED: Rewrote `CLAUDE.md` and `readme.txt` into shorter AI-facing handoff docs that keep the critical runtime rules without the token sludge.
 - CHANGED: Trimmed verbose module and function docstrings across the core app, data, pipeline, UI, and schedule modules without removing the important behavior notes.
 - CHANGED: Synced the visible footer version in `app.py` to `v0.62.1` and corrected the stale footer reference inside the `v0.62.0` changelog note.
+- CHANGED: Forced dark theme and quality of life improvements.

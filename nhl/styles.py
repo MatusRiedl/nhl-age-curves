@@ -408,9 +408,9 @@ _CSS = """
             margin: 0 0 0.4rem 0;
         }
         .nhl-chart-toolbar__title {
-            color: #f1f5f9;
+            color: rgba(255, 255, 255, 0.90);
             font-size: 1rem;
-            font-weight: 700;
+            font-weight: 400;
             line-height: 1.2;
             white-space: nowrap;
             overflow: hidden;

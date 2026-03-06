@@ -29,10 +29,10 @@ from nhl.constants import RATE_STATS, TEAM_RATE_STATS
 from nhl.dialog import show_season_details
 
 
-X_AXIS_TICK_COLOR = "rgba(255, 213, 213, 0.92)"
-Y_AXIS_TICK_COLOR = "rgba(198, 221, 255, 0.94)"
-X_AXIS_CUE_COLOR = "rgba(255, 213, 213, 0.28)"
-Y_AXIS_CUE_COLOR = "rgba(198, 221, 255, 0.30)"
+X_AXIS_TICK_COLOR = "rgba(255, 255, 255, 0.80)"
+Y_AXIS_TICK_COLOR = "rgba(255, 255, 255, 0.80)"
+X_AXIS_CUE_COLOR = "rgba(255, 255, 255, 0.25)"
+Y_AXIS_CUE_COLOR = "rgba(255, 255, 255, 0.25)"
 
 
 def _get_chart_context_label(team_mode: bool, games_mode: bool) -> str:
