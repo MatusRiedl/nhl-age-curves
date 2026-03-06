@@ -278,8 +278,10 @@ elif active_players:
 # =============================================================================
 _show_panel = True
 
+st.markdown("<div id='main-chart-layout'></div>", unsafe_allow_html=True)
+
 if _show_panel:
-    col_chart, col_stats = st.columns([65, 35], gap="medium")
+    col_chart, col_stats = st.columns([72, 28], gap="medium")
 else:
     col_chart = st.container()
     col_stats = None
@@ -325,7 +327,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.62.1 <br>"
+    "Created by Iksperial. v0.62.3 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

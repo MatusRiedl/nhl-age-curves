@@ -2,9 +2,9 @@
 nhl.chart — Plotly chart rendering and JS pan-clamp injection.
 
 Assembles the final DataFrame from all processed pipelines, optionally adds
-baseline data, builds the Plotly figure, injects a JS snippet for responsive
-dtick and pan/zoom clamping, renders via st.plotly_chart, and fires the
-season-detail dialog on point click.
+baseline data, builds the Plotly figure, renders a real toolbar row above the
+chart, injects a JS snippet for responsive dtick / share-link handling, and
+fires the season-detail dialog on point click.
 
 Visual conventions (from CLAUDE.md):
     Real data:   solid colored line, filled markers
@@ -17,6 +17,7 @@ Imports from project:
 """
 
 import json
+from html import escape
 
 import pandas as pd
 import plotly.express as px
@@ -28,58 +29,48 @@ from nhl.constants import RATE_STATS, TEAM_RATE_STATS
 from nhl.dialog import show_season_details
 
 
-HEADER_Y_COLOR = "rgba(170, 205, 255, 0.98)"
-HEADER_Y_BG = "rgba(120, 170, 255, 0.16)"
-HEADER_X_COLOR = "rgba(255, 205, 205, 0.98)"
-HEADER_X_BG = "rgba(255, 124, 124, 0.16)"
-HEADER_NEUTRAL_COLOR = "rgba(255,255,255,0.74)"
-HEADER_BASE_X = 0.01
-HEADER_BASE_Y = 1.08
-HEADER_CHAR_WIDTH_PX = 6.7
-HEADER_PILL_EXTRA_WIDTH_PX = 10
-HEADER_SEGMENT_GAP_PX = 6
-HEADER_METRIC_GAP_PX = 4
-HEADER_PILL_BORDERPAD = 3
 X_AXIS_TICK_COLOR = "rgba(255, 213, 213, 0.92)"
 Y_AXIS_TICK_COLOR = "rgba(198, 221, 255, 0.94)"
+X_AXIS_CUE_COLOR = "rgba(255, 213, 213, 0.28)"
+Y_AXIS_CUE_COLOR = "rgba(198, 221, 255, 0.30)"
 
 
 def _get_chart_context_label(team_mode: bool, games_mode: bool) -> str:
-    """Return the compact x-context label for the in-figure chart header.
+    """Return the x-context label for the chart toolbar title.
 
     Args:
         team_mode: True when the chart is rendering team comparisons.
         games_mode: True when the x-axis uses games played instead of age.
 
     Returns:
-        str: Short label describing the x context, such as Age, GP, or Season.
+        str: Label describing the x context, such as Age or Games Played.
     """
     if team_mode and not games_mode:
         return "Season"
     if games_mode:
-        return "GP"
+        return "Games Played"
     return "Age"
 
 
 def _get_chart_season_label(season_type: str) -> str:
-    """Return the compact season descriptor for the in-figure chart header.
+    """Return the season descriptor for the chart toolbar title.
 
     Args:
         season_type: Selected season scope string from the UI.
 
     Returns:
-        str: Short label suitable for compact chart copy.
+        str: Human-readable season scope label.
     """
     season_labels = {
-        "Regular": "Regular szn",
-        "Playoffs": "Play-offs",
-        "Both": "Both",
+        "Regular": "Regular season",
+        "Playoffs": "Playoffs",
+        "Both": "Regular + playoffs",
     }
     return season_labels.get(season_type, season_type)
 
 
 def _build_chart_header(metric: str, team_mode: bool, games_mode: bool, season_type: str) -> str:
-    """Build the compact in-figure chart header shown above the plot area.
+    """Build the chart toolbar title shown above the plot area.
 
     Args:
         metric: Selected y-axis metric.
@@ -88,123 +79,87 @@ def _build_chart_header(metric: str, team_mode: bool, games_mode: bool, season_t
         season_type: Selected season scope string from the UI.
 
     Returns:
-        str: Header text such as ``Points by Age in Regular szn``.
+        str: Title text such as ``Points by Age · Regular season``.
     """
     x_label = _get_chart_context_label(team_mode=team_mode, games_mode=games_mode)
     season_label = _get_chart_season_label(season_type)
-    return f"{metric} by {x_label} in {season_label}"
+    return f"{metric} by {x_label} · {season_label}"
 
 
-def _estimate_header_text_width_px(text: str, is_pill: bool) -> int:
-    """Estimate rendered header segment width for annotation spacing.
+def _build_chart_toolbar_markup(title: str, share_button_id: str) -> str:
+    """Build the HTML toolbar shown above the chart.
 
     Args:
-        text: Visible segment text.
-        is_pill: Whether the segment uses a tinted background chip.
+        title: Visible chart title.
+        share_button_id: DOM id for the copy-link button.
 
     Returns:
-        int: Approximate segment width in pixels.
+        str: Safe toolbar HTML.
     """
-    base_width = max(14, int(round(len(text) * HEADER_CHAR_WIDTH_PX)))
-    pill_width = (HEADER_PILL_BORDERPAD * 2) + HEADER_PILL_EXTRA_WIDTH_PX if is_pill else 0
-    return base_width + pill_width
+    safe_title = escape(title)
+    return (
+        "<div class='nhl-chart-toolbar'>"
+        f"<div class='nhl-chart-toolbar__title'>{safe_title}</div>"
+        f"<button id='{share_button_id}' type='button' class='nhl-chart-share-btn' aria-label='Copy share link'>"
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
+        "<path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>"
+        "<span class='nhl-chart-share-btn__label'>Copy link</span>"
+        "</button>"
+        "</div>"
+    )
 
 
-def _build_chart_header_segments(
-    metric: str,
-    team_mode: bool,
-    games_mode: bool,
-    season_type: str,
-) -> list[dict]:
-    """Build semantic chart-header segments for separate color treatment.
+def _build_chart_axis_cue_annotations(metric: str, team_mode: bool, games_mode: bool) -> list[dict]:
+    """Build subtle in-chart axis cue annotations.
 
     Args:
         metric: Selected y-axis metric.
         team_mode: True when the chart is rendering team comparisons.
         games_mode: True when the x-axis uses games played instead of age.
-        season_type: Selected season scope string from the UI.
 
     Returns:
-        list[dict]: Ordered annotation segment definitions for the chart header.
+        list[dict]: Plotly annotation dictionaries for y/x context cues.
     """
     x_label = _get_chart_context_label(team_mode=team_mode, games_mode=games_mode)
-    season_label = _get_chart_season_label(season_type)
     return [
-        {
-            "text": metric,
-            "font_color": HEADER_Y_COLOR,
-            "bgcolor": HEADER_Y_BG,
-            "is_pill": True,
-            "gap_after_px": HEADER_METRIC_GAP_PX,
-        },
-        {
-            "text": "by",
-            "font_color": HEADER_NEUTRAL_COLOR,
-            "bgcolor": "rgba(0,0,0,0)",
-            "is_pill": False,
-        },
-        {
-            "text": x_label,
-            "font_color": HEADER_X_COLOR,
-            "bgcolor": HEADER_X_BG,
-            "is_pill": True,
-        },
-        {
-            "text": f"in {season_label}",
-            "font_color": HEADER_NEUTRAL_COLOR,
-            "bgcolor": "rgba(0,0,0,0)",
-            "is_pill": False,
-        },
+        dict(
+            x=0.006,
+            y=0.998,
+            xref="paper",
+            yref="paper",
+            xanchor="left",
+            yanchor="top",
+            text=escape(metric),
+            showarrow=False,
+            font=dict(size=15, family="Arial Black", color=Y_AXIS_CUE_COLOR),
+        ),
+        dict(
+            x=0.994,
+            y=0.004,
+            xref="paper",
+            yref="paper",
+            xanchor="right",
+            yanchor="bottom",
+            text=escape(x_label),
+            showarrow=False,
+            font=dict(size=15, family="Arial Black", color=X_AXIS_CUE_COLOR),
+        ),
     ]
 
 
-def _build_chart_header_annotations(
-    metric: str,
-    team_mode: bool,
-    games_mode: bool,
-    season_type: str,
-) -> list[dict]:
-    """Build compact in-figure header annotations with x/y semantic cues.
+def _slugify_chart_export_name(title: str) -> str:
+    """Convert the chart title into a stable download filename.
 
     Args:
-        metric: Selected y-axis metric.
-        team_mode: True when the chart is rendering team comparisons.
-        games_mode: True when the x-axis uses games played instead of age.
-        season_type: Selected season scope string from the UI.
+        title: Human-readable chart title.
 
     Returns:
-        list[dict]: Plotly annotation dicts for the screenshot-visible chart header.
+        str: Lowercase filesystem-friendly slug.
     """
-    annotations = []
-    xshift_px = 0
-    for segment in _build_chart_header_segments(
-        metric=metric,
-        team_mode=team_mode,
-        games_mode=games_mode,
-        season_type=season_type,
-    ):
-        annotations.append(
-            dict(
-                xref="paper",
-                yref="paper",
-                x=HEADER_BASE_X,
-                y=HEADER_BASE_Y,
-                xanchor="left",
-                yanchor="middle",
-                xshift=xshift_px,
-                showarrow=False,
-                text=segment["text"],
-                align="left",
-                font=dict(size=15, family="Arial", color=segment["font_color"]),
-                bgcolor=segment["bgcolor"],
-                borderpad=HEADER_PILL_BORDERPAD if segment["is_pill"] else 0,
-            )
-        )
-        xshift_px += _estimate_header_text_width_px(
-            text=segment["text"],
-            is_pill=segment["is_pill"],
-        ) + segment.get("gap_after_px", HEADER_SEGMENT_GAP_PX)
-    return annotations
+    slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in title)
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    return slug.strip("_") or "nhl_age_chart"
 
 
 def render_chart(
@@ -368,11 +323,10 @@ def render_chart(
         games_mode=games_mode,
         season_type=season_type,
     )
-    chart_header_annotations = _build_chart_header_annotations(
+    chart_axis_cues = _build_chart_axis_cue_annotations(
         metric=metric,
         team_mode=team_mode,
         games_mode=games_mode,
-        season_type=season_type,
     )
 
     # ------------------------------------------------------------------
@@ -482,15 +436,15 @@ def render_chart(
 
     fig.update_layout(
         uirevision  = 'constant',
-        margin      = dict(l=0, r=0, t=66, b=12),
-        height      = 500,
-        font        = dict(size=17),
-        hoverlabel  = dict(font_size=17, font_family="Arial", bgcolor="#1E1E1E"),
+        margin      = dict(l=0, r=0, t=18, b=12),
+        height      = 430,
+        font        = dict(size=16),
+        hoverlabel  = dict(font_size=16, font_family="Arial", bgcolor="#1E1E1E"),
+        annotations = chart_axis_cues,
         title       = dict(text=""),
-        annotations = chart_header_annotations,
         legend      = dict(
             title=None, orientation="h",
-            yanchor="top", y=-0.22,
+            yanchor="top", y=-0.20,
             xanchor="center", x=0.5,
         ),
         clickmode   = 'event+select',
@@ -504,8 +458,8 @@ def render_chart(
 
     if team_mode and not games_mode:
         fig.update_layout(
-            margin = dict(l=0, r=0, t=66, b=18),
-            legend = dict(y=-0.35),
+            margin = dict(l=0, r=0, t=18, b=18),
+            legend = dict(y=-0.30),
         )
         fig.update_traces(
             connectgaps    = True,
@@ -521,7 +475,7 @@ def render_chart(
             dtick       = _team_dtick,
             tickangle   = -45,
             automargin  = True,
-            tickfont    = dict(size=18, family='Arial Black', color=X_AXIS_TICK_COLOR),
+            tickfont    = dict(size=16, family='Arial Black', color=X_AXIS_TICK_COLOR),
             range       = _team_initial_range,
         )
     elif games_mode:
@@ -539,7 +493,7 @@ def render_chart(
             title_text  = "",
             tickangle   = 0,
             automargin  = True,
-            tickfont    = dict(size=18, family='Arial Black', color=X_AXIS_TICK_COLOR),
+            tickfont    = dict(size=16, family='Arial Black', color=X_AXIS_TICK_COLOR),
         )
     else:
         fig.update_traces(
@@ -555,12 +509,12 @@ def render_chart(
             title_text  = "",
             tickangle   = 0,
             automargin  = True,
-            tickfont    = dict(size=18, family='Arial Black', color=X_AXIS_TICK_COLOR),
+            tickfont    = dict(size=16, family='Arial Black', color=X_AXIS_TICK_COLOR),
         )
 
     fig.update_yaxes(
         title_text = "",
-        tickfont   = dict(size=18, family='Arial Black', color=Y_AXIS_TICK_COLOR),
+        tickfont   = dict(size=16, family='Arial Black', color=Y_AXIS_TICK_COLOR),
     )
 
     # Percentage suffix for rate metrics shown as percentages
@@ -601,8 +555,19 @@ def render_chart(
             f"_{st.session_state.x_axis_mode}"
         )
 
+    share_button_id = f"nhl-share-btn-{abs(hash(chart_key))}"
+    st.markdown(
+        _build_chart_toolbar_markup(chart_header, share_button_id),
+        unsafe_allow_html=True,
+    )
+
     plotly_config = {
         "displayModeBar": True,
+        "toImageButtonOptions": {
+            "filename": _slugify_chart_export_name(chart_header),
+            "format": "png",
+            "scale": 2,
+        },
         "modeBarButtonsToRemove": [
             "lasso2d", "select2d", "toggleSpikelines",
             "hoverCompareCartesian", "hoverClosestCartesian", "autoScale2d",
@@ -627,7 +592,7 @@ def render_chart(
     _x_zoom_min = _team_initial_range[0] if _team_initial_range else _x_min
     _x_zoom_max = _team_initial_range[1] if _team_initial_range else _x_max
     _share_params_json = json.dumps(share_params or {})
-    _header_anchor_text = json.dumps(chart_header_annotations[-1]["text"] if chart_header_annotations else chart_header)
+    _share_button_id_json = json.dumps(share_button_id)
 
     components.html(f"""<script>
 (function() {{
@@ -640,7 +605,7 @@ def render_chart(
     var IS_AGE_MODE   = {'true' if _is_age_mode else 'false'};
     var IS_GAMES_MODE = {'true' if _is_games_mode else 'false'};
     var SHARE_PARAMS = {_share_params_json};
-    var HEADER_ANCHOR_TEXT = {_header_anchor_text};
+    var SHARE_BUTTON_ID = {_share_button_id_json};
 
     function calcDtick(width, currentRange) {{
         var xRange = currentRange || (X_MAX - X_MIN);
@@ -733,102 +698,11 @@ def render_chart(
         }});
     }}
 
-    // Share link button helpers
-    function injectShareStyles(parent) {{
-        if (parent.document.getElementById('nhl-share-btn-style')) return;
-        var s = parent.document.createElement('style');
-        s.id = 'nhl-share-btn-style';
-        s.textContent = [
-            '.nhl-share-btn {{',
-            '  position:absolute; left:10px; z-index:1001;',
-            '  cursor:pointer; padding:4px;',
-            '  display:flex; align-items:center;',
-            '  gap:6px;',
-            '  opacity:1; transition:opacity 0.2s, color 0.3s;',
-            '  color:#c0c0c0;',
-            '  background:none;',
-            '  font-size:13px; font-weight:600;',
-            '}}',
-            '.nhl-share-btn span {{ white-space:nowrap; }}',
-            '.nhl-share-btn:hover {{ color:#ffffff; }}',
-            '.nhl-share-btn svg {{ width:22px; height:22px; display:block; }}',
-            '@media (max-width:768px) {{',
-            '  .nhl-share-btn {{ padding:3px 5px; gap:4px; font-size:11px; }}',
-            '  .nhl-share-btn svg {{ width:14px; height:14px; }}',
-            '}}',
-        ].join('');
-        parent.document.head.appendChild(s);
-    }}
-
-    function positionShareBtn(plot, btn, parent) {{
-        // Keep the button aligned with the Plotly title and clear of the modebar.
-        var topGutter = 40;
-        if (
-            plot && plot._fullLayout && plot._fullLayout._size &&
-            typeof plot._fullLayout._size.t === 'number'
-        ) {{
-            topGutter = plot._fullLayout._size.t;
-        }} else if (
-            plot && plot.layout && plot.layout.margin &&
-            typeof plot.layout.margin.t === 'number'
-        ) {{
-            topGutter = plot.layout.margin.t;
-        }}
-
-        var fallbackHeight = ((parent.innerWidth || 1024) <= 768) ? 20 : 28;
-        var btnHeight = btn.offsetHeight || fallbackHeight;
-        var btnWidth = btn.offsetWidth || 88;
-        var plotBox = plot.getBoundingClientRect();
-        var titleEl = null;
-        var annotationNodes = plot.querySelectorAll('.annotation-text, .annotation text');
-        Array.prototype.forEach.call(annotationNodes, function(node) {{
-            if (!titleEl && (node.textContent || '').trim() === HEADER_ANCHOR_TEXT) {{
-                titleEl = node;
-            }}
-        }});
-        if (!titleEl) {{
-            titleEl = plot.querySelector('.gtitle');
-        }}
-        var modebar = plot.querySelector('.modebar');
-
-        if (titleEl && plotBox) {{
-            var titleBox = titleEl.getBoundingClientRect();
-            var leftPx = Math.round(titleBox.right - plotBox.left + 10);
-            var topPx = Math.round(titleBox.top - plotBox.top + ((titleBox.height - btnHeight) / 2));
-
-            if (modebar) {{
-                var modebarBox = modebar.getBoundingClientRect();
-                var maxLeft = Math.round(modebarBox.left - plotBox.left - btnWidth - 10);
-                if (leftPx > maxLeft) {{
-                    leftPx = 10;
-                    topPx = Math.round(titleBox.bottom - plotBox.top + 4);
-                }}
-            }}
-
-            btn.style.left = Math.max(10, leftPx) + 'px';
-            btn.style.top = Math.max(4, topPx) + 'px';
-            return;
-        }}
-
-        btn.style.left = '10px';
-        var topPx = Math.max(4, Math.round((topGutter - btnHeight) / 2));
-        btn.style.top = topPx + 'px';
-    }}
-
-    function addShareBtn(plot, parent) {{
-        var existing = plot.querySelector('.nhl-share-btn');
-        if (existing) existing.remove();
-
-        var btn = parent.document.createElement('div');
-        btn.className = 'nhl-share-btn';
-        btn.title = 'Copy share link';
-        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"'
-            + ' fill="none" stroke="currentColor" stroke-width="2"'
-            + ' stroke-linecap="round" stroke-linejoin="round">'
-            + '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>'
-            + '<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'
-            + '</svg>'
-            + '<span>Copy link</span>';
+    function bindShareButton(parent) {{
+        var btn = parent.document.getElementById(SHARE_BUTTON_ID);
+        if (!btn || btn.dataset.bound === '1') return;
+        btn.dataset.bound = '1';
+        var label = btn.querySelector('.nhl-chart-share-btn__label');
 
         function encodeShareValue(value) {{
             return encodeURIComponent(String(value))
@@ -857,8 +731,12 @@ def render_chart(
         btn.addEventListener('click', function() {{
             var url = buildShareUrl(parent);
             var succeed = function() {{
-                btn.style.color = '#4caf50';
-                setTimeout(function() {{ btn.style.color = ''; }}, 1500);
+                btn.classList.add('is-copied');
+                if (label) label.textContent = 'Copied';
+                setTimeout(function() {{
+                    btn.classList.remove('is-copied');
+                    if (label) label.textContent = 'Copy link';
+                }}, 1400);
             }};
             if (parent.history && parent.history.replaceState) {{
                 parent.history.replaceState(null, '', url);
@@ -877,10 +755,6 @@ def render_chart(
                 parent.document.body.removeChild(t); succeed();
             }}
         }});
-
-        plot.style.position = 'relative';
-        plot.appendChild(btn);
-        positionShareBtn(plot, btn, parent);
     }}
 
     function init() {{
@@ -890,17 +764,12 @@ def render_chart(
         var plots = parent.document.querySelectorAll('.js-plotly-plot');
         if (!plots.length) {{ setTimeout(init, 200); return; }}
         plots.forEach(function(p) {{ applySettings(p, Plotly); }});
-
-        // Inject share button
-        injectShareStyles(parent);
-        if (plots.length) plots.forEach(function(p) {{ addShareBtn(p, parent); }});
+        bindShareButton(parent);
 
         parent.addEventListener('resize', function() {{
             parent.document.querySelectorAll('.js-plotly-plot').forEach(function(p) {{
                 var range = getCurrentXRange(p);
                 Plotly.relayout(p, {{'xaxis.dtick': calcDtick(p.offsetWidth || parent.innerWidth, range), 'xaxis.tickangle': (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45}});
-                var btn = p.querySelector('.nhl-share-btn');
-                if (btn) positionShareBtn(p, btn, parent);
             }});
         }});
     }}

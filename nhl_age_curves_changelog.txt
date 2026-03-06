@@ -2,6 +2,18 @@
 NHL AGE CURVES - CHANGELOG
 =========================================================
 
+v0.62.3 - comparison row alignment polish
+---------------------------------------------------------
+- CHANGED: Pulled the main chart/comparison row closer to the `Category & Metric` expander so the page stops wasting vertical space above the visuals.
+- CHANGED: Leveled the comparison tabs with the chart header row by matching the tab strip height and tightening its top spacing.
+- CHANGED: Kept the laptop-first chart/comparison layout intact while trimming the leftover spacing slack around the row wrapper.
+
+v0.62.2 - chart chrome cleanup for laptop screens
+---------------------------------------------------------
+- CHANGED: Replaced the in-plot header/overlay hack with a real toolbar row above the chart so the title and `Copy link` finally share one clean baseline.
+- CHANGED: Shortened the chart height, tightened plot margins, and kept the Plotly modebar inside the chart's top-right corner where it belongs.
+- CHANGED: Widened the chart vs. stats split and added an earlier laptop breakpoint so the right panel stacks below the chart before the layout gets cramped and ugly.
+
 v0.62.1 - lean AI docs and docstring cleanup
 ---------------------------------------------------------
 - CHANGED: Rewrote `CLAUDE.md` and `readme.txt` into shorter AI-facing handoff docs that keep the critical runtime rules without the token sludge.

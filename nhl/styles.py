@@ -336,6 +336,67 @@ _CSS = """
             }
         }
 
+        /* Main chart toolbar */
+        .nhl-chart-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            min-height: 40px;
+            margin: 0 0 0.4rem 0;
+        }
+        .nhl-chart-toolbar__title {
+            color: #f1f5f9;
+            font-size: 1rem;
+            font-weight: 700;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .nhl-chart-share-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.7rem;
+            border: 1px solid rgba(148, 163, 184, 0.24);
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.72);
+            color: #dbe4f0;
+            font-size: 0.8rem;
+            font-weight: 600;
+            line-height: 1;
+            cursor: pointer;
+            transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease;
+        }
+        .nhl-chart-share-btn:hover {
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.28);
+            background: rgba(30, 41, 59, 0.88);
+        }
+        .nhl-chart-share-btn.is-copied {
+            color: #4ade80;
+            border-color: rgba(74, 222, 128, 0.45);
+        }
+        .nhl-chart-share-btn svg {
+            width: 15px;
+            height: 15px;
+            display: block;
+        }
+        @media (max-width: 900px) {
+            .nhl-chart-toolbar {
+                gap: 0.5rem;
+            }
+            .nhl-chart-toolbar__title {
+                font-size: 0.92rem;
+            }
+            .nhl-chart-share-btn {
+                padding: 0.32rem 0.62rem;
+                font-size: 0.76rem;
+            }
+        }
+
         /* Comparison panel cards */
         .comparison-card {
             padding: 0.5rem 0.25rem;
@@ -350,13 +411,14 @@ _CSS = """
 
         /* Comparison tab row (native st.tabs) */
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] {
-            margin-top: -2px !important;
+            margin-top: -1px !important;
+            padding-top: 0 !important;
         }
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-list"] {
             gap: 0.35rem !important;
             flex-wrap: wrap !important;
-            margin-bottom: 0.3rem !important;
-            min-height: 38px !important;
+            margin-bottom: 0.4rem !important;
+            min-height: 40px !important;
             align-items: center !important;
         }
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-border"] {
@@ -390,6 +452,28 @@ _CSS = """
             }
         }
 
+        /* Main chart/stats split — give the chart more room and stack earlier on laptops */
+        div:has(> #main-chart-layout) {
+            margin: 0 !important;
+            line-height: 0 !important;
+        }
+        div:has(> #main-chart-layout) + div {
+            margin-top: -0.45rem !important;
+        }
+        div:has(> #main-chart-layout) + div [data-testid="stHorizontalBlock"] {
+            align-items: flex-start !important;
+        }
+        @media screen and (max-width: 1280px) {
+            div:has(> #main-chart-layout) + div [data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap !important;
+            }
+            div:has(> #main-chart-layout) + div [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+                min-width: 100% !important;
+                width: 100% !important;
+                flex: 1 1 100% !important;
+            }
+        }
+
         /* Responsive: stack chart and stats panel vertically on mobile */
         @media screen and (max-width: 768px) {
             .main [data-testid="stHorizontalBlock"] {
@@ -404,6 +488,14 @@ _CSS = """
         /* Plotly modebar — always visible, fit on one row */
         .js-plotly-plot .plotly .modebar {
             opacity: 1 !important;
+            top: 8px !important;
+            right: 8px !important;
+            left: auto !important;
+            background: transparent !important;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            padding: 0 !important;
         }
         .js-plotly-plot .plotly .modebar-btn::before,
         .js-plotly-plot .plotly .modebar-btn::after {
@@ -413,13 +505,14 @@ _CSS = """
         .js-plotly-plot .plotly .modebar-group {
             flex-wrap: nowrap !important;
             overflow-x: auto !important;
+            padding: 0 !important;
         }
         .js-plotly-plot .plotly .modebar-btn {
-            padding: 8px 10px !important;
+            padding: 6px 8px !important;
         }
         .js-plotly-plot .plotly .modebar-btn svg {
-            width: 22px !important;
-            height: 22px !important;
+            width: 18px !important;
+            height: 18px !important;
         }
         @media (max-width: 768px) {
             .js-plotly-plot .plotly .modebar-btn {
@@ -512,8 +605,8 @@ def inject_css() -> None:
     blue Add-Legend button override, toggle label ellipsis truncation for intermediate
     screen widths (foldable/tablet), compact mobile header sizing, mobile responsive controls row wrapping
     (~3 columns per row via #controls-row1 marker),
-    responsive stacking of the chart/stats panel split on narrow screens, and
-    Plotly modebar sizing for desktop and mobile.
+    a real chart toolbar row with copy-link button, responsive stacking of the
+    chart/stats panel split on laptop and mobile widths, and Plotly modebar sizing.
 
     Must be called once per app run, after st.set_page_config().
     """
