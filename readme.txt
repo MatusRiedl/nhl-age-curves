@@ -171,7 +171,7 @@ KNN rules that matter:
 - distance metric is L1
 - clone pool is top 10
 - clone weights are equal
-- clone/prior blend is fixed at 70/30
+- clone/prior blend is fixed at 80/20
 - percent-change clamp is `[-0.12, +0.25]`
 - GP is intentionally excluded from KNN
 

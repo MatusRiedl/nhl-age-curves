@@ -1,6 +1,6 @@
 """KNN projection helpers for player age curves.
 
-Uses L1 distance, the top 10 equal-weight clones, and a fixed 70/30
+Uses L1 distance, the top 10 equal-weight clones, and a fixed 80/20
 clone-prior blend. GP stays out of the KNN path.
 """
 
@@ -132,6 +132,8 @@ def _stabilize_late_target(
         return next_avg
 
     if next_avg > last_avg:
+        if stat_category == 'Skater' and clone_count >= 4:
+            return next_avg
         return sparse_fallback
 
     if clone_count < 3:
@@ -251,7 +253,7 @@ def run_knn_projection(
             clone_count = len(clone_vals)
             if clone_count > 0:
                 raw_avg = float(clone_vals.astype(float).mean())
-                next_avg = raw_avg * 0.70 + last_avg * 0.30
+                next_avg = raw_avg * 0.80 + last_avg * 0.20
                 recent_clone_avgs.append(next_avg)
                 if len(recent_clone_avgs) > 3:
                     recent_clone_avgs.pop(0)

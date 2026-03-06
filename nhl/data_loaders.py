@@ -329,15 +329,63 @@ def get_top_50_goalies() -> dict:
 # Player search
 # ---------------------------------------------------------------------------
 
+def _normalize_search_results(payload: object) -> list[dict]:
+    """Return only valid player rows from the NHL search payload."""
+    if isinstance(payload, dict):
+        rows = payload.get('data', [])
+    elif isinstance(payload, list):
+        rows = payload
+    else:
+        return []
+
+    clean_rows = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        try:
+            player_id = int(row.get('playerId'))
+        except (TypeError, ValueError):
+            continue
+
+        name = str(row.get('name') or '').strip()
+        if not name:
+            first = str(row.get('firstName', '') or '').strip()
+            last = str(row.get('lastName', '') or '').strip()
+            name = f"{first} {last}".strip()
+        if not name:
+            continue
+
+        clean_rows.append(
+            {
+                'playerId': player_id,
+                'name': name,
+                'teamAbbrev': str(row.get('teamAbbrev', '') or '').strip(),
+            }
+        )
+    return clean_rows
+
+
+def _name_matches_query(full_name: str, query: str) -> bool:
+    """Match one- or multi-token queries against player-name prefixes."""
+    name_parts = [part for part in full_name.lower().split() if part]
+    query_parts = [part for part in query.lower().split() if part]
+    if not name_parts or not query_parts:
+        return False
+    return all(any(name_part.startswith(q) for name_part in name_parts) for q in query_parts)
+
 @st.cache_data(ttl=3600)
 def search_player(query: str) -> list:
     """Search the D3 NHL player endpoint. Returns `[]` on empty query or failure."""
     if not query:
         return []
     try:
-        return requests.get(
-            SEARCH_URL, params={"culture": "en-us", "limit": 40, "q": query}
+        payload = requests.get(
+            SEARCH_URL,
+            params={"culture": "en-us", "limit": 40, "q": query},
+            timeout=5,
         ).json()
+        return _normalize_search_results(payload)
     except Exception:
         return []
 
@@ -354,8 +402,7 @@ def search_local_players(query: str, category: str) -> dict:
         parts = full_name.lower().split()
         if len(parts) < 2:
             continue
-        first, last = parts[0], parts[-1]
-        if first.startswith(q) or last.startswith(q):
+        if _name_matches_query(full_name, q):
             team = (details.get(pid) or {}).get('team', '') or ''
             if not team:
                 # clone_details_map often has no team for active players because

@@ -2,6 +2,22 @@
 NHL AGE CURVES - CHANGELOG
 =========================================================
 
+v0.62.8 - search API failure fallback
+---------------------------------------------------------
+- CHANGED: Hardened `search_player()` against malformed NHL search payloads so a string or junk row no longer crashes the sidebar.
+- CHANGED: Improved local player search to handle multi-token prefix queries like `Connor Mc` when the live search endpoint is down.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.62.8`.
+
+v0.62.7 - more clone-driven ML blend
+---------------------------------------------------------
+- CHANGED: Switched the KNN clone-prior blend from `70/30` to `80/20` so projected targets follow age-specific clone evidence a bit more closely.
+- CHANGED: Added a targeted invariant test that locks the new `80/20` blend math so future tweaks do not quietly drift it again.
+
+v0.62.6 - softer dense late skater ML tail
+---------------------------------------------------------
+- CHANGED: Loosened the age-36+ skater KNN late-career guardrail so a small uptick can survive when at least four clones still provide real coverage.
+- CHANGED: Kept the existing sparse fallback behavior for thinner late-age clone data so late skater rebounds still get shut down when support is weak.
+
 v0.62.5 - comparison width and live button cleanup
 ---------------------------------------------------------
 - CHANGED: Rebalanced the main chart/comparison split so the comparison panel gets a bit more horizontal room instead of feeling pinched.
