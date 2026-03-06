@@ -28,6 +28,22 @@ from nhl.constants import RATE_STATS, TEAM_RATE_STATS
 from nhl.dialog import show_season_details
 
 
+HEADER_Y_COLOR = "rgba(170, 205, 255, 0.98)"
+HEADER_Y_BG = "rgba(120, 170, 255, 0.16)"
+HEADER_X_COLOR = "rgba(255, 205, 205, 0.98)"
+HEADER_X_BG = "rgba(255, 124, 124, 0.16)"
+HEADER_NEUTRAL_COLOR = "rgba(255,255,255,0.74)"
+HEADER_BASE_X = 0.01
+HEADER_BASE_Y = 1.08
+HEADER_CHAR_WIDTH_PX = 6.7
+HEADER_PILL_EXTRA_WIDTH_PX = 10
+HEADER_SEGMENT_GAP_PX = 6
+HEADER_METRIC_GAP_PX = 4
+HEADER_PILL_BORDERPAD = 3
+X_AXIS_TICK_COLOR = "rgba(255, 213, 213, 0.92)"
+Y_AXIS_TICK_COLOR = "rgba(198, 221, 255, 0.94)"
+
+
 def _get_chart_context_label(team_mode: bool, games_mode: bool) -> str:
     """Return the compact x-context label for the in-figure chart header.
 
@@ -77,6 +93,118 @@ def _build_chart_header(metric: str, team_mode: bool, games_mode: bool, season_t
     x_label = _get_chart_context_label(team_mode=team_mode, games_mode=games_mode)
     season_label = _get_chart_season_label(season_type)
     return f"{metric} by {x_label} in {season_label}"
+
+
+def _estimate_header_text_width_px(text: str, is_pill: bool) -> int:
+    """Estimate rendered header segment width for annotation spacing.
+
+    Args:
+        text: Visible segment text.
+        is_pill: Whether the segment uses a tinted background chip.
+
+    Returns:
+        int: Approximate segment width in pixels.
+    """
+    base_width = max(14, int(round(len(text) * HEADER_CHAR_WIDTH_PX)))
+    pill_width = (HEADER_PILL_BORDERPAD * 2) + HEADER_PILL_EXTRA_WIDTH_PX if is_pill else 0
+    return base_width + pill_width
+
+
+def _build_chart_header_segments(
+    metric: str,
+    team_mode: bool,
+    games_mode: bool,
+    season_type: str,
+) -> list[dict]:
+    """Build semantic chart-header segments for separate color treatment.
+
+    Args:
+        metric: Selected y-axis metric.
+        team_mode: True when the chart is rendering team comparisons.
+        games_mode: True when the x-axis uses games played instead of age.
+        season_type: Selected season scope string from the UI.
+
+    Returns:
+        list[dict]: Ordered annotation segment definitions for the chart header.
+    """
+    x_label = _get_chart_context_label(team_mode=team_mode, games_mode=games_mode)
+    season_label = _get_chart_season_label(season_type)
+    return [
+        {
+            "text": metric,
+            "font_color": HEADER_Y_COLOR,
+            "bgcolor": HEADER_Y_BG,
+            "is_pill": True,
+            "gap_after_px": HEADER_METRIC_GAP_PX,
+        },
+        {
+            "text": "by",
+            "font_color": HEADER_NEUTRAL_COLOR,
+            "bgcolor": "rgba(0,0,0,0)",
+            "is_pill": False,
+        },
+        {
+            "text": x_label,
+            "font_color": HEADER_X_COLOR,
+            "bgcolor": HEADER_X_BG,
+            "is_pill": True,
+        },
+        {
+            "text": f"in {season_label}",
+            "font_color": HEADER_NEUTRAL_COLOR,
+            "bgcolor": "rgba(0,0,0,0)",
+            "is_pill": False,
+        },
+    ]
+
+
+def _build_chart_header_annotations(
+    metric: str,
+    team_mode: bool,
+    games_mode: bool,
+    season_type: str,
+) -> list[dict]:
+    """Build compact in-figure header annotations with x/y semantic cues.
+
+    Args:
+        metric: Selected y-axis metric.
+        team_mode: True when the chart is rendering team comparisons.
+        games_mode: True when the x-axis uses games played instead of age.
+        season_type: Selected season scope string from the UI.
+
+    Returns:
+        list[dict]: Plotly annotation dicts for the screenshot-visible chart header.
+    """
+    annotations = []
+    xshift_px = 0
+    for segment in _build_chart_header_segments(
+        metric=metric,
+        team_mode=team_mode,
+        games_mode=games_mode,
+        season_type=season_type,
+    ):
+        annotations.append(
+            dict(
+                xref="paper",
+                yref="paper",
+                x=HEADER_BASE_X,
+                y=HEADER_BASE_Y,
+                xanchor="left",
+                yanchor="middle",
+                xshift=xshift_px,
+                showarrow=False,
+                text=segment["text"],
+                align="left",
+                font=dict(size=15, family="Arial", color=segment["font_color"]),
+                bgcolor=segment["bgcolor"],
+                borderpad=HEADER_PILL_BORDERPAD if segment["is_pill"] else 0,
+            )
+        )
+        xshift_px += _estimate_header_text_width_px(
+            text=segment["text"],
+            is_pill=segment["is_pill"],
+        ) + segment.get("gap_after_px", HEADER_SEGMENT_GAP_PX)
+    return annotations
 
 
 def render_chart(
@@ -264,6 +392,12 @@ def render_chart(
         games_mode=games_mode,
         season_type=season_type,
     )
+    chart_header_annotations = _build_chart_header_annotations(
+        metric=metric,
+        team_mode=team_mode,
+        games_mode=games_mode,
+        season_type=season_type,
+    )
 
     # ------------------------------------------------------------------
     # Build Plotly figure
@@ -372,18 +506,12 @@ def render_chart(
 
     fig.update_layout(
         uirevision  = 'constant',
-        margin      = dict(l=0, r=0, t=58, b=12),
+        margin      = dict(l=0, r=0, t=66, b=12),
         height      = 500,
         font        = dict(size=17),
         hoverlabel  = dict(font_size=17, font_family="Arial", bgcolor="#1E1E1E"),
-        title       = dict(
-            text=chart_header,
-            x=0.01,
-            xanchor="left",
-            y=0.955,
-            yanchor="middle",
-            font=dict(size=15, family="Arial", color="rgba(255,255,255,0.82)"),
-        ),
+        title       = dict(text=""),
+        annotations = chart_header_annotations,
         legend      = dict(
             title=None, orientation="h",
             yanchor="top", y=-0.22,
@@ -400,7 +528,7 @@ def render_chart(
 
     if team_mode and not games_mode:
         fig.update_layout(
-            margin = dict(l=0, r=0, t=58, b=18),
+            margin = dict(l=0, r=0, t=66, b=18),
             legend = dict(y=-0.35),
         )
         fig.update_traces(
@@ -417,7 +545,7 @@ def render_chart(
             dtick       = _team_dtick,
             tickangle   = -45,
             automargin  = True,
-            tickfont    = dict(size=18, family='Arial Black'),
+            tickfont    = dict(size=18, family='Arial Black', color=X_AXIS_TICK_COLOR),
             range       = _team_initial_range,
         )
     elif games_mode:
@@ -435,7 +563,7 @@ def render_chart(
             title_text  = "",
             tickangle   = 0,
             automargin  = True,
-            tickfont    = dict(size=18, family='Arial Black'),
+            tickfont    = dict(size=18, family='Arial Black', color=X_AXIS_TICK_COLOR),
         )
     else:
         fig.update_traces(
@@ -451,12 +579,12 @@ def render_chart(
             title_text  = "",
             tickangle   = 0,
             automargin  = True,
-            tickfont    = dict(size=18, family='Arial Black'),
+            tickfont    = dict(size=18, family='Arial Black', color=X_AXIS_TICK_COLOR),
         )
 
     fig.update_yaxes(
         title_text = "",
-        tickfont   = dict(size=18, family='Arial Black'),
+        tickfont   = dict(size=18, family='Arial Black', color=Y_AXIS_TICK_COLOR),
     )
 
     # Percentage suffix for rate metrics shown as percentages
@@ -523,6 +651,7 @@ def render_chart(
     _x_zoom_min = _team_initial_range[0] if _team_initial_range else _x_min
     _x_zoom_max = _team_initial_range[1] if _team_initial_range else _x_max
     _share_params_json = json.dumps(share_params or {})
+    _header_anchor_text = json.dumps(chart_header_annotations[-1]["text"] if chart_header_annotations else chart_header)
 
     components.html(f"""<script>
 (function() {{
@@ -535,6 +664,7 @@ def render_chart(
     var IS_AGE_MODE   = {'true' if _is_age_mode else 'false'};
     var IS_GAMES_MODE = {'true' if _is_games_mode else 'false'};
     var SHARE_PARAMS = {_share_params_json};
+    var HEADER_ANCHOR_TEXT = {_header_anchor_text};
 
     function calcDtick(width, currentRange) {{
         var xRange = currentRange || (X_MAX - X_MIN);
@@ -673,7 +803,16 @@ def render_chart(
         var btnHeight = btn.offsetHeight || fallbackHeight;
         var btnWidth = btn.offsetWidth || 88;
         var plotBox = plot.getBoundingClientRect();
-        var titleEl = plot.querySelector('.gtitle');
+        var titleEl = null;
+        var annotationNodes = plot.querySelectorAll('.annotation-text, .annotation text');
+        Array.prototype.forEach.call(annotationNodes, function(node) {{
+            if (!titleEl && (node.textContent || '').trim() === HEADER_ANCHOR_TEXT) {{
+                titleEl = node;
+            }}
+        }});
+        if (!titleEl) {{
+            titleEl = plot.querySelector('.gtitle');
+        }}
         var modebar = plot.querySelector('.modebar');
 
         if (titleEl && plotBox) {{

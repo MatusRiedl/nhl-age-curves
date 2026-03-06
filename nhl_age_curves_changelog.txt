@@ -264,3 +264,51 @@ v0.61.2 - share link title alignment fix
 - VALIDATED: `python -m unittest tests.test_chart -v` passed locally.
 - VALIDATED: `python -m unittest discover -s tests -v` passed locally with 31/31
   tests.
+
+v0.61.3 - semantic axis color cues
+---------------------------------------------------------
+- CHANGED: Replaced the single flat chart title with separate in-figure header
+  annotations so the metric and x-context can be color-coded independently.
+- CHANGED: Added soft blue highlighting for the y-side metric token and soft warm
+  highlighting for the x-side context token, while keeping season scope neutral.
+- CHANGED: Tinted the x-axis and y-axis tick labels to match those header cues so
+  axis meaning reads faster at a glance.
+- FIXED: Updated the custom `Copy link` positioning logic to anchor after the new
+  header annotation instead of the old Plotly title node.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.3`.
+- VALIDATED: `python -m unittest tests.test_chart -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 33/33
+  tests.
+
+v0.61.4 - tighter header spacing
+---------------------------------------------------------
+- FIXED: Tightened the header annotation spacing so words and chips no longer sit
+  awkwardly far apart.
+- CHANGED: Reduced the internal width estimate and padding used to position the
+  semantic header segments while keeping the share-link anchor logic intact.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.4`.
+- VALIDATED: `python -m unittest tests.test_chart -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 34/34
+  tests.
+
+v0.61.5 - normalized header spacing
+---------------------------------------------------------
+- FIXED: Rebalanced the chart header spacing so chip-to-word gaps look natural
+  again instead of cramped.
+- CHANGED: Increased the segment gap slightly and accounted for pill padding in
+  the width estimate so text after highlighted chips no longer crowds them.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.5`.
+- VALIDATED: `python -m unittest tests.test_chart -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 34/34
+  tests.
+
+v0.61.6 - reduced metric chip gap
+---------------------------------------------------------
+- FIXED: Reduced only the trailing space after the first highlighted metric chip
+  so `Points` no longer sits awkwardly far from `by`.
+- CHANGED: Added a dedicated smaller post-metric gap while leaving the rest of
+  the header spacing unchanged.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.6`.
+- VALIDATED: `python -m unittest tests.test_chart -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 34/34
+  tests.
