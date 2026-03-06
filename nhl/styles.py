@@ -1,10 +1,12 @@
 """
-nhl.styles — CSS injection for the NHL Age Curves Streamlit page.
+nhl.styles — CSS injection and UI asset helpers for the NHL Age Curves page.
 
-Contains a single public function, inject_css(), that writes the full style block
-into the Streamlit page.  Isolated here so the CSS blob does not clutter app.py
-and can be updated without touching any other module.
+Contains the CSS injection helpers plus a small favicon path resolver so app.py
+can keep page chrome configuration simple and robust across local and deployed
+environments.
 """
+
+from pathlib import Path
 
 import streamlit as st
 
@@ -409,6 +411,18 @@ _CSS = """
 # ---------------------------------------------------------------------------
 # Public function
 # ---------------------------------------------------------------------------
+
+def get_favicon_path() -> Path:
+    """Return the absolute path to the custom site favicon asset.
+
+    Args:
+        None.
+
+    Returns:
+        Path: Absolute path to the favicon SVG file in the repository assets folder.
+    """
+    return Path(__file__).resolve().parent.parent / "assets" / "favicon.svg"
+
 
 def inject_css() -> None:
     """Inject the NHL Age Curves custom CSS into the Streamlit page.

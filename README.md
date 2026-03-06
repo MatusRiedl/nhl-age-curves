@@ -24,7 +24,7 @@ https://nhl-age-curves.streamlit.app/
 
 * **Season Snapshot:** Click any data point to see that player's exact season stats at that age, projected all-time career rank, and nearest historical matches.
 
-* **Shareable URLs:** All chart state (players on board, metric, toggles, category, season type) is encoded into the browser URL automatically. Copy the URL to share an exact comparison with anyone.
+* **Shareable URLs:** Click the chart's **Copy link** control to copy a compact exact-state URL only when you want to share it. Player and team names are omitted from the query string, default values are skipped, and the browser URL stays clean while you explore.
 
 * **Dynamic Search:** Type a player's first or last name to get live results. Selecting a match immediately adds them to the chart, no separate button required.
 

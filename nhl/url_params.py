@@ -1,17 +1,16 @@
-"""
-nhl.url_params — Shareable URL encoding and decoding for the NHL Age Curves app.
+"""Shareable URL encoding and decoding for the NHL Age Curves app.
 
 Provides two public functions:
     encode_state_to_params(ss) -> dict
-        Converts the current st.session_state into a flat dict suitable for
-        writing to st.query_params.
+        Converts the current st.session_state into a compact flat dict suitable
+        for writing to st.query_params.
     apply_params_to_state(params, ss) -> None
         Reads a dict of URL params and populates st.session_state accordingly,
         leaving any missing keys untouched so session-state defaults still apply.
 
-Player entries are encoded as semicolon-separated "id|name" pairs.
-Team entries use the same format with abbreviation instead of numeric id.
-Setting st.query_params does not trigger a Streamlit rerun (Streamlit 1.30+).
+Player entries are encoded as semicolon-separated player IDs.
+Team entries are encoded as semicolon-separated team abbreviations.
+Legacy "id|name" and "abbr|name" links are still accepted on read.
 Panel tab selections are encoded per category via pt_s / pt_g / pt_t.
 """
 
@@ -36,9 +35,31 @@ _BOOL_PARAMS = {
     "pf":  "do_prime",
 }
 
+_BOOL_DEFAULTS = {
+    "do_smooth": False,
+    "do_predict": True,
+    "do_era": False,
+    "do_cumul_toggle": False,
+    "do_base": True,
+    "do_prime": True,
+}
+
+_METRIC_DEFAULTS = {
+    "skater_metric": "Points",
+    "goalie_metric": "Save %",
+    "team_metric": "Points",
+}
+
 
 def _sanitize_panel_tab(value: str) -> str:
-    """Validate and normalize comparison-panel tab IDs from session/URL."""
+    """Validate and normalize comparison-panel tab IDs from session/URL.
+
+    Args:
+        value: Raw panel-tab identifier from session state or the query string.
+
+    Returns:
+        A safe lowercase tab key, or ``"overview"`` if the value is invalid.
+    """
     if value is None:
         return "overview"
     v = str(value).strip().lower()
@@ -51,45 +72,128 @@ def _sanitize_panel_tab(value: str) -> str:
     return v
 
 
-def encode_state_to_params(ss) -> dict:
-    """Convert current session state into a flat URL params dict.
+def _default_x_axis_mode(stat_category: str) -> str:
+    """Return the implicit default X-axis mode for a stat category.
 
     Args:
-        ss: st.session_state (or any dict-like mapping) containing app state.
+        stat_category: Current chart category.
 
     Returns:
-        dict mapping URL param keys to encoded string values. Player and team
-        keys are omitted entirely when their corresponding dicts are empty.
+        ``"Season Year"`` for Team mode and ``"Age"`` otherwise.
+    """
+    return "Season Year" if stat_category == "Team" else "Age"
+
+
+def _parse_player_params(raw_value: str) -> dict[str, str]:
+    """Parse short or legacy player query params into session-state shape.
+
+    Args:
+        raw_value: Semicolon-separated player entries from the URL.
+
+    Returns:
+        Dict mapping player ID strings to either the decoded name or the raw ID
+        placeholder when the short ID-only format is used.
+    """
+    players: dict[str, str] = {}
+    for entry in str(raw_value or "").split(";"):
+        clean_entry = str(entry).strip()
+        if not clean_entry:
+            continue
+        if "|" in clean_entry:
+            pid, name = clean_entry.split("|", 1)
+            pid = pid.strip()
+            if pid:
+                players[pid] = name.strip() or pid
+            continue
+        players[clean_entry] = clean_entry
+    return players
+
+
+def _parse_team_params(raw_value: str) -> dict[str, str]:
+    """Parse short or legacy team query params into session-state shape.
+
+    Args:
+        raw_value: Semicolon-separated team entries from the URL.
+
+    Returns:
+        Dict mapping team abbreviations to the decoded name or the raw
+        abbreviation placeholder when the short format is used.
+    """
+    teams: dict[str, str] = {}
+    for entry in str(raw_value or "").split(";"):
+        clean_entry = str(entry).strip()
+        if not clean_entry:
+            continue
+        if "|" in clean_entry:
+            abbr, name = clean_entry.split("|", 1)
+            abbr = abbr.strip().upper()
+            if abbr:
+                teams[abbr] = name.strip() or abbr
+            continue
+        teams[clean_entry.upper()] = clean_entry.upper()
+    return teams
+
+
+def encode_state_to_params(ss) -> dict:
+    """Convert current session state into a compact URL params dict.
+
+    Args:
+        ss: ``st.session_state`` or any dict-like mapping containing app state.
+
+    Returns:
+        Dict mapping URL param keys to encoded string values, omitting entries
+        that still match the app defaults.
     """
     params = {}
 
-    params["cat"] = _CAT_ENCODE.get(ss.get("stat_category", "Skater"), "S")
+    stat_category = ss.get("stat_category", "Skater")
+    if stat_category != "Skater":
+        params["cat"] = _CAT_ENCODE.get(stat_category, "S")
 
-    if "skater_metric" in ss:
+    if ss.get("skater_metric") not in (None, _METRIC_DEFAULTS["skater_metric"]):
         params["sk_m"] = ss["skater_metric"]
-    if "goalie_metric" in ss:
+    if ss.get("goalie_metric") not in (None, _METRIC_DEFAULTS["goalie_metric"]):
         params["go_m"] = ss["goalie_metric"]
-    if "team_metric" in ss:
+    if ss.get("team_metric") not in (None, _METRIC_DEFAULTS["team_metric"]):
         params["tm_m"] = ss["team_metric"]
 
-    params["sp"]  = ss.get("season_type", "Regular")
-    params["xm"]  = _XM_ENCODE.get(ss.get("x_axis_mode", "Age"), "A")
-    params["lg"]  = ",".join(ss.get("league_filter") or ["NHL"])
+    season_type = ss.get("season_type", "Regular")
+    if season_type != "Regular":
+        params["sp"] = season_type
+
+    x_axis_mode = ss.get("x_axis_mode", _default_x_axis_mode(stat_category))
+    if x_axis_mode != _default_x_axis_mode(stat_category):
+        params["xm"] = _XM_ENCODE.get(x_axis_mode, "A")
+
+    league_filter = ss.get("league_filter") or ["NHL"]
+    if league_filter != ["NHL"]:
+        params["lg"] = ",".join(league_filter)
 
     for url_key, ss_key in _BOOL_PARAMS.items():
-        params[url_key] = "1" if ss.get(ss_key) else "0"
+        default_value = _BOOL_DEFAULTS[ss_key]
+        current_value = bool(ss.get(ss_key, default_value))
+        if current_value != default_value:
+            params[url_key] = "1" if current_value else "0"
 
-    params["pt_s"] = _sanitize_panel_tab(ss.get("panel_tab_skater", "overview"))
-    params["pt_g"] = _sanitize_panel_tab(ss.get("panel_tab_goalie", "overview"))
-    params["pt_t"] = _sanitize_panel_tab(ss.get("panel_tab_team", "overview"))
+    panel_tab_skater = _sanitize_panel_tab(ss.get("panel_tab_skater", "overview"))
+    if panel_tab_skater != "overview":
+        params["pt_s"] = panel_tab_skater
+
+    panel_tab_goalie = _sanitize_panel_tab(ss.get("panel_tab_goalie", "overview"))
+    if panel_tab_goalie != "overview":
+        params["pt_g"] = panel_tab_goalie
+
+    panel_tab_team = _sanitize_panel_tab(ss.get("panel_tab_team", "overview"))
+    if panel_tab_team != "overview":
+        params["pt_t"] = panel_tab_team
 
     pl = ss.get("players") or {}
     if pl:
-        params["pl"] = ";".join(f"{pid}|{name}" for pid, name in pl.items())
+        params["pl"] = ";".join(str(pid).strip() for pid in pl if str(pid).strip())
 
     tm = ss.get("teams") or {}
     if tm:
-        params["tm"] = ";".join(f"{abbr}|{name}" for abbr, name in tm.items())
+        params["tm"] = ";".join(str(abbr).strip().upper() for abbr in tm if str(abbr).strip())
 
     return params
 
@@ -97,15 +201,15 @@ def encode_state_to_params(ss) -> dict:
 def apply_params_to_state(params: dict, ss) -> None:
     """Populate session state from a URL params dict.
 
-    Only keys present in params are written; absent keys leave session state
-    untouched so app.py default values still apply normally.
+    Only keys present in params are written. Missing keys are left untouched so
+    app.py can keep applying its own defaults.
 
     Args:
-        params: dict of URL param key to value string (from dict(st.query_params)).
-        ss: st.session_state (or any dict-like mapping) to write into.
+        params: Dict of URL param key to value string from ``dict(st.query_params)``.
+        ss: ``st.session_state`` or any dict-like mapping to update in place.
 
     Returns:
-        None
+        None.
     """
     if not params:
         return
@@ -146,24 +250,14 @@ def apply_params_to_state(params: dict, ss) -> None:
     if "pt_t" in params:
         ss["panel_tab_team"] = _sanitize_panel_tab(params["pt_t"])
 
-    # Decode unified players param; also accept legacy sk/go params for backward compat.
     _players = {}
     for _key in ("sk", "go", "pl"):
         if _key in params and params[_key]:
-            for entry in params[_key].split(";"):
-                if "|" in entry:
-                    pid, name = entry.split("|", 1)
-                    if pid.strip():
-                        _players[pid.strip()] = name.strip()
+            _players.update(_parse_player_params(params[_key]))
     if _players:
         ss["players"] = _players
 
     if "tm" in params and params["tm"]:
-        teams = {}
-        for entry in params["tm"].split(";"):
-            if "|" in entry:
-                abbr, name = entry.split("|", 1)
-                if abbr.strip():
-                    teams[abbr.strip()] = name.strip()
+        teams = _parse_team_params(params["tm"])
         if teams:
             ss["teams"] = teams

@@ -64,3 +64,38 @@ v0.57.7 - mobile header compaction
   to free more above-the-fold space on phones.
 - CHANGED: Shrunk the NHL logo on mobile so the header reads cleaner on narrow
   screens without changing the desktop layout.
+
+v0.57.8 - custom favicon branding
+---------------------------------------------------------
+- ADDED: A custom `assets/favicon.svg` badge using the app's silver, blue, and
+  red palette with a hockey puck plus rising curve motif for tiny-size clarity.
+- CHANGED: Wired `app.py` page config to use the custom favicon via the new
+  `nhl.styles.get_favicon_path()` helper so the browser tab shows branded chrome.
+- ADDED: Focused unittest coverage to verify the favicon asset exists and that
+  `app.py` stays connected to the favicon helper.
+
+v0.57.9 - clearer headline and share title
+---------------------------------------------------------
+- CHANGED: Updated the browser/share title to `NHL Analytics | Age Curves,`
+  `Projections & Player Comparisons` so search and shared links explain the app
+  more clearly than the old short title.
+- CHANGED: Replaced the on-page header text with `NHL Analytics` and added a
+  concise tagline covering age curves, career projections, player comparisons,
+  and team trends.
+- ADDED: Focused unittest coverage to keep the new title and headline copy from
+  drifting during future UI edits.
+
+v0.58.0 - compact on-demand share links
+---------------------------------------------------------
+- CHANGED: Share URLs now use player IDs and team abbreviations only, so copied
+  links are much shorter than the old name-heavy query strings.
+- CHANGED: Default state values are now omitted from share links, trimming the
+  query string down to only the settings that actually differ from the app's
+  defaults.
+- CHANGED: The browser URL now stays clean while exploring and the compact
+  share URL is only generated when the chart's `Copy link` control is clicked.
+- ADDED: Backward-compatible decoding for older long-form shared URLs plus
+  focused tests covering compact encoding, default omission, and on-demand
+  share-link UI wiring.
+- FIXED: Removed the temporary page-level share button and status message so
+  the existing chart clipboard control handles on-demand link sharing by itself.

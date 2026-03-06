@@ -35,16 +35,71 @@ from nhl.data_loaders import (
 )
 from nhl.player_pipeline import process_players
 from nhl.sidebar import render_sidebar
-from nhl.styles import inject_css, inject_mobile_dropdown_fix
+from nhl.styles import get_favicon_path, inject_css, inject_mobile_dropdown_fix
 from nhl.team_pipeline import process_teams
 from nhl.schedule import get_featured_players, get_live_or_recent_game
 from nhl.url_params import apply_params_to_state, encode_state_to_params
+
+
+def _resolve_shared_player_names(players: dict[str, str]) -> dict[str, str]:
+    """Resolve display names for player IDs loaded from compact shared URLs.
+
+    Args:
+        players: Dict mapping player ID strings to either names or ID placeholders.
+
+    Returns:
+        Dict mapping player ID strings to human-readable player names.
+    """
+    if not players:
+        return {}
+
+    id_to_name_lookup = {
+        str(pid): name
+        for category in ("Skater", "Goalie")
+        for pid, name in get_id_to_name_map(category).items()
+    }
+    resolved_players = {}
+    for player_id, display_name in players.items():
+        clean_player_id = str(player_id).strip()
+        clean_display_name = str(display_name or "").strip()
+        if clean_display_name and clean_display_name != clean_player_id:
+            resolved_players[clean_player_id] = clean_display_name
+            continue
+        resolved_players[clean_player_id] = id_to_name_lookup.get(
+            clean_player_id,
+            f"Unknown (ID {clean_player_id})",
+        )
+    return resolved_players
+
+
+def _resolve_shared_team_names(teams: dict[str, str]) -> dict[str, str]:
+    """Resolve full team names for abbreviations loaded from compact shared URLs.
+
+    Args:
+        teams: Dict mapping team abbreviations to names or abbreviation placeholders.
+
+    Returns:
+        Dict mapping team abbreviations to full franchise names when available.
+    """
+    if not teams:
+        return {}
+
+    resolved_teams = {}
+    for team_abbr, display_name in teams.items():
+        clean_team_abbr = str(team_abbr).strip().upper()
+        clean_display_name = str(display_name or "").strip()
+        if clean_display_name and clean_display_name != clean_team_abbr:
+            resolved_teams[clean_team_abbr] = clean_display_name
+            continue
+        resolved_teams[clean_team_abbr] = ACTIVE_TEAMS.get(clean_team_abbr, clean_team_abbr)
+    return resolved_teams
 
 # =============================================================================
 # Page configuration — must be the first Streamlit call
 # =============================================================================
 st.set_page_config(
-    page_title="NHL Age Curves",
+    page_title="NHL Analytics | Age Curves, Projections & Player Comparisons",
+    page_icon=get_favicon_path().as_posix(),
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -81,6 +136,18 @@ if 'panel_tab_skater'  not in st.session_state: st.session_state.panel_tab_skate
 if 'panel_tab_goalie'  not in st.session_state: st.session_state.panel_tab_goalie  = "overview"
 if 'panel_tab_team'    not in st.session_state: st.session_state.panel_tab_team    = "overview"
 
+if st.session_state.players and any(
+    str(name or "").strip() in ("", str(pid).strip())
+    for pid, name in st.session_state.players.items()
+):
+    st.session_state.players = _resolve_shared_player_names(st.session_state.players)
+
+if st.session_state.teams and any(
+    str(name or "").strip() in ("", str(abbr).strip().upper())
+    for abbr, name in st.session_state.teams.items()
+):
+    st.session_state.teams = _resolve_shared_team_names(st.session_state.teams)
+
 # =============================================================================
 # Auto-populate from live/recent NHL game — fires once per session, only when
 # no players or teams were loaded from a shared URL.
@@ -108,9 +175,15 @@ if "_preloaded" not in st.session_state:
 st.markdown("""
     <h1 class='page-header'>
         <img src='https://assets.nhle.com/logos/nhl/svg/NHL_light.svg' class='nhl-logo'>
-        <span class='animated-title' style='font-size:0.9em;'>Age Curves</span>
+        <span class='animated-title' style='font-size:0.9em;'>NHL Analytics</span>
     </h1>
 """, unsafe_allow_html=True)
+st.markdown(
+    "<p style='margin-top:-0.45rem;margin-bottom:0.75rem;color:#c0c0c0;font-size:1.02rem;'>"
+    "Hockey like never before: age curves, career projections, player comparisons, and team trends."
+    "</p>",
+    unsafe_allow_html=True,
+)
 st.markdown("---")
 
 # =============================================================================
@@ -145,6 +218,7 @@ sidebar_keys = render_sidebar()
 # =============================================================================
 team_mode  = st.session_state.stat_category == "Team"
 games_mode = st.session_state.x_axis_mode == "Games Played"
+share_params = encode_state_to_params(st.session_state)
 
 # Active player board — shared across Skater and Goalie categories.
 # The pipeline's is_goalie gatekeeper filters per category at render time.
@@ -245,6 +319,7 @@ with col_chart:
         sidebar_keys         = sidebar_keys,
         peak_info            = peak_info,
         do_prime             = st.session_state.do_prime,
+        share_params         = share_params,
     )
 
 if col_stats is not None:
@@ -261,19 +336,13 @@ if col_stats is not None:
         )
 
 # =============================================================================
-# Sync current state to URL (does not trigger a rerun in Streamlit 1.30+)
-# =============================================================================
-st.query_params.clear()
-st.query_params.update(encode_state_to_params(st.session_state))
-
-# =============================================================================
 # Footer
 # =============================================================================
 st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.57.7 <br>"
+    "Created by Iksperial. v0.58.0 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

@@ -16,6 +16,8 @@ Imports from project:
     nhl.dialog    — show_season_details
 """
 
+import json
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -43,6 +45,7 @@ def render_chart(
     sidebar_keys: dict,
     peak_info: dict = None,
     do_prime: bool = False,
+    share_params: dict | None = None,
 ) -> None:
     """Build and render the Plotly age-curve chart.
 
@@ -66,7 +69,8 @@ def render_chart(
         sidebar_keys:         Dict with 'search_term', 'top_selected', 'team_abbr',
                               'roster_player' — used for chart widget key generation.
         peak_info:            {base_name: {age, x, y, ...}} from player_pipeline.
-        do_prime:            Whether to show peak age highlight bands.
+        do_prime:             Whether to show peak age highlight bands.
+        share_params:         Compact URL params to copy from the chart share control.
     """
     if peak_info is None:
         peak_info = {}
@@ -454,6 +458,7 @@ def render_chart(
     # Zoom range for JS (used for responsive dtick in season year mode)
     _x_zoom_min = _team_initial_range[0] if _team_initial_range else _x_min
     _x_zoom_max = _team_initial_range[1] if _team_initial_range else _x_max
+    _share_params_json = json.dumps(share_params or {})
 
     components.html(f"""<script>
 (function() {{
@@ -465,6 +470,7 @@ def render_chart(
     var Y_MAX = {_y_max:.4f};
     var IS_AGE_MODE   = {'true' if _is_age_mode else 'false'};
     var IS_GAMES_MODE = {'true' if _is_games_mode else 'false'};
+    var SHARE_PARAMS = {_share_params_json};
 
     function calcDtick(width, currentRange) {{
         var xRange = currentRange || (X_MAX - X_MIN);
@@ -619,12 +625,39 @@ def render_chart(
             + '</svg>'
             + '<span>Copy link</span>';
 
+        function encodeShareValue(value) {{
+            return encodeURIComponent(String(value))
+                .replace(/%3B/gi, ';')
+                .replace(/%2C/gi, ',');
+        }}
+
+        function buildShareUrl(parent) {{
+            var UrlCtor = parent.URL || URL;
+            var url = new UrlCtor(parent.location.href);
+            var parts = [];
+
+            Object.entries(SHARE_PARAMS).forEach(function(entry) {{
+                var key = entry[0];
+                var value = entry[1];
+                if (value === null || value === undefined) return;
+                var clean = String(value);
+                if (!clean.length) return;
+                parts.push(encodeURIComponent(key) + '=' + encodeShareValue(clean));
+            }});
+
+            url.search = parts.length ? ('?' + parts.join('&')) : '';
+            return url.toString();
+        }}
+
         btn.addEventListener('click', function() {{
-            var url = parent.location.href;
+            var url = buildShareUrl(parent);
             var succeed = function() {{
                 btn.style.color = '#4caf50';
                 setTimeout(function() {{ btn.style.color = ''; }}, 1500);
             }};
+            if (parent.history && parent.history.replaceState) {{
+                parent.history.replaceState(null, '', url);
+            }}
             if (parent.navigator && parent.navigator.clipboard) {{
                 parent.navigator.clipboard.writeText(url).then(succeed).catch(function() {{
                     var t = parent.document.createElement('input');

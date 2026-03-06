@@ -20,10 +20,12 @@ The parquet file is the backbone of the ML engine and baseline. Without it,
 the app still works but KNN projections and the 75th percentile baseline
 are disabled.
 
-app.py is a ~200-line orchestrator. It initializes session state, calls
-render_sidebar() and render_controls() for UI, dispatches to process_players()
-or process_teams() for data, then calls render_chart(). All business logic,
-caching, and computation live in the nhl/ package modules described in Section 2.
+app.py is a ~200-line orchestrator. It initializes session state, hydrates
+shared URL params once, resolves compact ID-only share links back to display
+names, calls render_sidebar() and render_controls() for UI, dispatches to
+process_players() or process_teams() for data, then calls render_chart(). All
+business logic, caching, and computation live in the nhl/ package modules
+described in Section 2.
 
 SECTION 2 — FILE STRUCTURE
 -----------------------------
@@ -67,8 +69,9 @@ nhl/ package (all logic lives here — see Section 12 for full detail):
                              overlays + JS pan-clamp injection.
   comparison.py            — render_comparison_panel() side-by-side player stat cards.
   url_params.py            — encode_state_to_params() / apply_params_to_state().
-                             Serializes full session state to URL query params and
-                             restores it on first page load. No Streamlit import.
+                             Builds compact share-link query params, omits default
+                             values, and restores them on first page load. No
+                             Streamlit import.
   schedule.py              — get_live_or_recent_game() / get_featured_players().
                              Fetches live or recent NHL game via score API and
                              identifies best skater + starting goalie per team for
@@ -121,6 +124,11 @@ All 14 persistent session state keys (initialized at top of script):
   st.session_state.league_filter    list[str]: subset of NHLE_MULTIPLIERS keys, default ['NHL']
   st.session_state._url_loaded      bool: set True after URL params are read on first page load;
                                     prevents re-reading on subsequent reruns this session
+
+  URL behavior:
+    app.py reads dict(st.query_params) once during startup.
+    During normal exploration it does not sync state back into the browser URL.
+    The compact share URL is generated only when the chart Copy link control is clicked.
 
   do_cumul (not in session state) is derived each render:
     do_cumul = do_cumul_toggle AND metric not in RATE_STATS AND not games_mode
@@ -575,13 +583,14 @@ MODULE: nhl/dialog.py
                         historical_baselines, stat_category) -> None
 
 MODULE: nhl/chart.py
-  Plotly chart assembly, aggregate baseline overlay, JS pan-clamp, and click dispatch.
+  Plotly chart assembly, aggregate baseline overlay, JS pan-clamp, click dispatch,
+  and Copy link clipboard control.
   Builds Skater or Goalie baseline rows inline from the cached baseline DataFrames.
   Exports:
     render_chart(processed_dfs, metric, team_mode, games_mode, do_cumul,
                  do_base, do_smooth, stat_category, historical_baselines,
                  team_baselines, raw_dfs_cache, ml_clones_dict,
-                 season_type, sidebar_keys) -> None
+                 season_type, sidebar_keys, peak_info, do_prime, share_params) -> None
 
 MODULE: nhl/comparison.py
   Right-column player stat comparison cards rendered alongside the chart.
@@ -592,11 +601,11 @@ MODULE: nhl/comparison.py
 
 MODULE: nhl/url_params.py
   URL query param serialization and deserialization. No Streamlit import. No project imports.
-  Called from app.py: loaded once per session via _url_loaded guard, synced at end of every run.
-  Setting st.query_params does not trigger a rerun (Streamlit 1.30+).
+  Called from app.py: loaded once per session via _url_loaded guard and encoded
+  only when the chart Copy link control is clicked.
   Exports:
     encode_state_to_params(ss) -> dict
-      Converts session state to a flat dict for st.query_params.update().
+      Converts session state to a compact dict for st.query_params.update().
       Encoded URL param keys:
         cat    — stat_category: S / G / T
         sk_m   — skater_metric (stat name string)
@@ -605,15 +614,16 @@ MODULE: nhl/url_params.py
         sp     — season_type: Regular / Playoffs / Both
         xm     — x_axis_mode: A / GP / SY
         lg     — league_filter: comma-joined list
-        sm / pr / era / cu / bl — bool toggles: 1 or 0
-        sk     — skater_players: semicolon-joined "pid|name" pairs
-        go     — goalie_players: semicolon-joined "pid|name" pairs
-        tm     — teams: semicolon-joined "abbr|name" pairs
-      Empty player/team dicts are omitted from output entirely.
+        sm / pr / era / cu / bl / pf  — bool toggles only when non-default
+        pt_s / pt_g / pt_t            — panel tabs only when not "overview"
+        pl     — players: semicolon-joined player IDs
+        tm     — teams: semicolon-joined team abbreviations
+      Default-valued params are omitted from output entirely.
     apply_params_to_state(params, ss) -> None
       Reads dict(st.query_params) and writes into session state.
       Validates metric values against known-valid sets before applying.
       Only writes keys that are present; absent keys keep their session-state defaults.
+      Accepts both compact ID-only links and legacy "id|name" / "abbr|name" links.
 
 MODULE: nhl/schedule.py
   Live game detection and featured player selection for chart auto-population.
