@@ -149,6 +149,31 @@ _CSS = """
             padding-top: 0 !important;
         }
 
+        /* Normalize the first Team dropdown so it matches Global Search spacing and sizing */
+        [data-testid="stSidebar"] hr + .element-container .stSelectbox label {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }
+        [data-testid="stSidebar"] hr + .element-container [data-baseweb="select"] > div {
+            min-height: 3.25rem !important;
+            border-radius: 0.75rem !important;
+            padding-left: 0.95rem !important;
+            padding-right: 2.75rem !important;
+            align-items: center !important;
+        }
+        [data-testid="stSidebar"] hr + .element-container [data-baseweb="select"] > div > div:first-child {
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
+        [data-testid="stSidebar"] hr + .element-container [data-baseweb="select"] * {
+            font-size: 15px !important;
+            line-height: 1.3 !important;
+        }
+        [data-testid="stSidebar"] hr + .element-container [data-baseweb="select"] svg {
+            width: 18px !important;
+            height: 18px !important;
+        }
+
         /* Compact controls expander — reduce vertical whitespace */
         [data-testid="stExpander"] details summary {
             padding-top: 0.4rem !important;

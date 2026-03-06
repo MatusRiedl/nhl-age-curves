@@ -391,8 +391,6 @@ def _render_team_sidebar() -> dict:
     Returns:
         Dict with sidebar keys for chart cache-busting (only 'team_abbr' is relevant).
     """
-    st.subheader("Team Comparison")
-
     if 'team_ver' not in st.session_state:
         st.session_state.team_ver = 0
 
@@ -419,12 +417,12 @@ def _render_team_sidebar() -> dict:
         )
 
     _team_sel = st.selectbox(
-        "Select Team:",
+        "Team Comparison",
         [_SENT] + _team_keys,
         format_func=lambda x: x if x == _SENT else f"{x} — {ACTIVE_TEAMS[x]}",
         key=f"_team_pick_{st.session_state.team_ver}",
         on_change=_on_team_select,
-        label_visibility="collapsed",
+        label_visibility="visible",
     )
 
     st.markdown("---")

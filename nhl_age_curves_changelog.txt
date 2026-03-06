@@ -99,3 +99,31 @@ v0.58.0 - compact on-demand share links
   share-link UI wiring.
 - FIXED: Removed the temporary page-level share button and status message so
   the existing chart clipboard control handles on-demand link sharing by itself.
+
+v0.58.1 - team dropdown input alignment
+---------------------------------------------------------
+- FIXED: Normalized the Team Comparison dropdown control so its text sizing,
+  left padding, and vertical alignment match the Skater and Goalie Global
+  Search field more closely.
+- CHANGED: Scoped the Team sidebar selectbox styling behind a dedicated anchor
+  so the normalization only affects that first Team selector.
+- VALIDATED: `python -m unittest tests.test_styles -v` passed locally with 5/5
+  tests after adding a regression check for the Team dropdown style hook.
+
+v0.58.2 - team label normalization correction
+---------------------------------------------------------
+- FIXED: Replaced the bold `st.subheader("Team Comparison")` heading with the
+  Team selectbox's native visible label so it matches the Skater and Goalie
+  `Global Search` label size, weight, and placement above the field.
+- VALIDATED: `python -m unittest tests.test_styles -v` passed locally after
+  tightening the sidebar regression test around the Team selector label.
+
+v0.58.3 - team top spacing normalization
+---------------------------------------------------------
+- FIXED: Removed the extra empty Team anchor block that was leaving too much
+  space between the top divider and the `Team Comparison` label.
+- CHANGED: Targeted the first selectbox after the sidebar divider directly so
+  the Team label and field spacing now follow the same compact pattern as
+  `Global Search` without needing a separate spacer element.
+- VALIDATED: `python -m unittest tests.test_styles -v` passed locally after
+  updating the style regression to assert the post-divider selectbox rule.
