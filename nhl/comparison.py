@@ -54,6 +54,7 @@ _TEAM_SHORT_NAMES = {
     "WPG": "Jets",
 }
 _DEFAULT_PANEL_TAB = "overview"
+_DEFAULT_PLAYER_RANK_COLOR = "#4caf50"
 _CATEGORY_TAB_KEYS = {
     "Skater": "panel_tab_skater",
     "Goalie": "panel_tab_goalie",
@@ -102,6 +103,27 @@ def _get_category_tab_key(stat_category: str) -> str:
 def get_panel_tab_ids() -> set[str]:
     """Return all registered panel tab IDs."""
     return {t.id for t in _PANEL_TABS}
+
+
+def _get_player_chart_colors() -> dict[str, str | None]:
+    """Return the active chart color map for real player traces.
+
+    Args:
+        None.
+
+    Returns:
+        Mapping of player display names to the colors used on the chart.
+    """
+    session_state = getattr(st, "session_state", None)
+    if session_state is None:
+        return {}
+
+    if hasattr(session_state, "get"):
+        player_colors = session_state.get("player_chart_colors", {})
+    else:
+        player_colors = getattr(session_state, "player_chart_colors", {})
+
+    return player_colors if isinstance(player_colors, dict) else {}
 
 
 def _iter_visible_players_for_category(processed_dfs: list, players: dict):
@@ -334,6 +356,7 @@ def _render_overview_players(
 ) -> None:
     """Overview tab: existing right-column player comparison cards."""
     is_goalie = stat_category == "Goalie"
+    player_colors = _get_player_chart_colors()
     rank_suffix_map = {"Goals": "Goals", "Assists": "Assists", "Points": "Points"}
     rank_suffix = "Wins" if is_goalie else rank_suffix_map.get(metric, "Points")
 
@@ -374,8 +397,9 @@ def _render_overview_players(
         rank = get_player_career_rank(int(pid), stat_category, season_type, metric)
         rank_row = ""
         if rank is not None:
+            rank_color = player_colors.get(name) or _DEFAULT_PLAYER_RANK_COLOR
             rank_row = (
-                "<br><span style='font-size:14px;color:#4caf50;font-weight:bold;'>"
+                f"<br><span style='font-size:14px;color:{rank_color};font-weight:bold;'>"
                 f"#{rank} all-time {rank_suffix}"
                 "</span>"
             )

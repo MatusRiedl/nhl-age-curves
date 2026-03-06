@@ -36,6 +36,19 @@ Y_AXIS_CUE_COLOR = "rgba(255, 255, 255, 0.25)"
 BASELINE_LINE_DASH = "14px,10px"
 BASELINE_LINE_COLOR = "rgba(190, 190, 190, 0.72)"
 BASELINE_MARKER_COLOR = "rgba(220, 220, 220, 0.92)"
+PLAYER_COLOR_STATE_KEY = "player_chart_colors"
+
+
+def _store_player_chart_colors(player_colors: dict[str, str | None]) -> None:
+    """Persist the active player-to-chart-color map for sibling UI panels.
+
+    Args:
+        player_colors: Mapping of real-player names to their assigned chart colors.
+
+    Returns:
+        None.
+    """
+    setattr(st.session_state, PLAYER_COLOR_STATE_KEY, dict(player_colors))
 
 
 def _get_chart_context_label(team_mode: bool, games_mode: bool) -> str:
@@ -228,6 +241,7 @@ def render_chart(
     share_params: dict | None = None,
 ) -> None:
     """Build the Plotly chart, optional baseline overlays, and click handling."""
+    _store_player_chart_colors({})
     if peak_info is None:
         peak_info = {}
     if not processed_dfs:
@@ -409,6 +423,8 @@ def render_chart(
                 'color': proj_color,
                 'legendgroup': player_name,
             })
+
+    _store_player_chart_colors(player_colors)
 
     _apply_special_trace_styling(fig, player_colors)
 

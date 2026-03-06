@@ -2,6 +2,12 @@
 NHL AGE CURVES - CHANGELOG
 =========================================================
 
+v0.63.8 - player color-matched comparison ranks
+---------------------------------------------------------
+- CHANGED: Matched each player Overview card's all-time rank text color to that player's actual chart line color so the right panel maps cleanly back to the graph.
+- CHANGED: Stored the live chart player-color map in session state and added targeted chart/comparison tests so the color link does not quietly drift.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.63.8`.
+
 v0.62.16 - default dark theme
 ---------------------------------------------------------
 - CHANGED: Added project-level Streamlit config at `.streamlit/config.toml` so the app now defaults to Streamlit's dark theme.
