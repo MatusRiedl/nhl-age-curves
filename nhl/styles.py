@@ -24,8 +24,27 @@ _CSS = """
             flex-wrap: nowrap;
             gap: 0;
             padding-bottom: 0;
+            margin-top: 0;
             margin-bottom: 0;
             white-space: nowrap;
+        }
+
+        .page-hero {
+            margin-bottom: 0 !important;
+        }
+
+        .page-subtitle {
+            margin: -0.35rem 0 0.2rem 0;
+            color: #c0c0c0;
+            font-size: 1.02rem;
+        }
+
+        div.element-container:has(.page-hero) {
+            margin-bottom: 0.45rem !important;
+        }
+
+        [data-testid="stExpander"] {
+            margin-top: 0 !important;
         }
 
         .animated-title {
@@ -55,6 +74,11 @@ _CSS = """
                 margin-top: 0 !important;
                 margin-bottom: 0 !important;
             }
+            .page-subtitle {
+                margin-top: -0.2rem;
+                margin-bottom: 0.15rem;
+                font-size: 0.92rem;
+            }
             .page-header .animated-title {
                 font-size: 2.15rem !important;
                 line-height: 1 !important;
@@ -81,7 +105,7 @@ _CSS = """
         }
 
         /* Remove button styling - transparent background with white X */
-        [data-testid="stSidebar"] button[kind="secondary"][data-testid="stBaseButton-secondary"] {
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button[kind="secondary"][data-testid="stBaseButton-secondary"] {
             background-color: transparent !important;
             border: none !important;
             color: white !important;
@@ -96,7 +120,7 @@ _CSS = """
             align-items: center !important;
             justify-content: center !important;
         }
-        [data-testid="stSidebar"] button[kind="secondary"][data-testid="stBaseButton-secondary"]:hover {
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button[kind="secondary"][data-testid="stBaseButton-secondary"]:hover {
             background-color: rgba(255, 255, 255, 0.1) !important;
             color: #ff4b4b !important;
         }
@@ -174,7 +198,7 @@ _CSS = """
             height: 18px !important;
         }
 
-        /* Compact controls expander — reduce vertical whitespace */
+        /* Compact header and controls expander — reduce vertical whitespace */
         [data-testid="stExpander"] details summary {
             padding-top: 0.4rem !important;
             padding-bottom: 0.4rem !important;

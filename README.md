@@ -1,5 +1,5 @@
 # NHL Player Age Curves & Career Projections 🏒
-An interactive analytics dashboard built in Python that visualizes aging curves and career trajectories for NHL players using live data and hybrid nearest-match projections.
+Hockey analytics like never before!
 
 ## Available online here
 https://nhl-age-curves.streamlit.app/

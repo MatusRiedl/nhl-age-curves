@@ -27,6 +27,62 @@ from nhl.data_loaders import (
     search_local_players,
     search_player,
 )
+from nhl.dialog import show_app_guide
+
+
+_VALID_STAT_CATEGORIES = ("Skater", "Goalie", "Team")
+
+
+def _sanitize_stat_category(stat_category: str | None, fallback: str = "Skater") -> str:
+    """Return a valid stat category for the sidebar selector.
+
+    Args:
+        stat_category: Raw category value from session state or the widget.
+        fallback: Category to use when the raw value is missing or invalid.
+
+    Returns:
+        One of ``"Skater"``, ``"Goalie"``, or ``"Team"``.
+    """
+    if stat_category in _VALID_STAT_CATEGORIES:
+        return stat_category
+    if fallback in _VALID_STAT_CATEGORIES:
+        return fallback
+    return "Skater"
+
+
+def _resolve_stat_category_selection(
+    selected_category: str | None,
+    current_category: str | None,
+) -> str:
+    """Resolve the effective category after a segmented-control interaction.
+
+    Args:
+        selected_category: Raw widget value, which may be ``None`` after a deselect.
+        current_category: Current canonical app category before the click.
+
+    Returns:
+        A valid category string. Deselecting the active segment preserves the
+        current category instead of allowing an empty app state.
+    """
+    safe_current = _sanitize_stat_category(current_category)
+    return _sanitize_stat_category(selected_category, fallback=safe_current)
+
+
+def _sync_stat_category_selection() -> None:
+    """Keep the category widget and canonical app state in sync.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    resolved_category = _resolve_stat_category_selection(
+        st.session_state.get("_stat_category_picker"),
+        st.session_state.get("stat_category"),
+    )
+    st.session_state._stat_category_picker = resolved_category
+    st.session_state.stat_category = resolved_category
 
 
 @st.cache_data(ttl=300)
@@ -163,10 +219,26 @@ def render_sidebar() -> dict:
     """
     with st.sidebar:
         _inject_no_keyboard()   # Prevent mobile keyboard on dropdowns
+        current_category = _sanitize_stat_category(st.session_state.get("stat_category"))
+        st.session_state.stat_category = current_category
+        if st.session_state.get("_stat_category_picker") != current_category:
+            st.session_state._stat_category_picker = current_category
+
+        if st.button(
+            "FAQ",
+            key="open_app_guide_sidebar",
+            type="secondary",
+            use_container_width=True,
+            help="How this app works",
+        ):
+            show_app_guide()
+
         st.segmented_control(
             "Category",
-            options=["Skater", "Goalie", "Team"],
-            key="stat_category",
+            options=_VALID_STAT_CATEGORIES,
+            selection_mode="single",
+            key="_stat_category_picker",
+            on_change=_sync_stat_category_selection,
             label_visibility="collapsed",
             width="stretch",
         )

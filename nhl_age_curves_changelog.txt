@@ -127,3 +127,113 @@ v0.58.3 - team top spacing normalization
   `Global Search` without needing a separate spacer element.
 - VALIDATED: `python -m unittest tests.test_styles -v` passed locally after
   updating the style regression to assert the post-divider selectbox rule.
+
+v0.58.4 - team baseline toggle disable
+---------------------------------------------------------
+- FIXED: Greyed out the `Baseline` toggle in Team mode so it now reads as a
+  disabled control instead of an available comparison option.
+- FIXED: Team mode no longer forwards baseline overlays to the chart, even if
+  `do_base` was left enabled in player mode before switching categories.
+- VALIDATED: `python -m unittest tests.test_styles -v` passed locally after
+  adding a regression check for the disabled Team baseline control.
+
+v0.58.5 - tighter top header spacing
+---------------------------------------------------------
+- FIXED: Collapsed the extra whitespace between the hero text and the top
+  `Category & Metric` panel by consolidating the subtitle and divider into a
+  single compact header block.
+- CHANGED: Replaced the long subtitle with `Hockey like never before!` and
+  moved the divider directly underneath it.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.58.5`.
+- VALIDATED: `python -m unittest tests.test_styles -v` and
+  `python -m unittest discover -s tests -v` both passed locally.
+
+v0.58.6 - age analytics rebrand pass
+---------------------------------------------------------
+- CHANGED: Renamed the on-page hero title from `NHL Analytics` to
+  `Age Analytics`.
+- CHANGED: Shortened the browser tab title to `NHL Age Analytics`.
+- CHANGED: Replaced the repository description with
+  `Hockey analytics like never before!`.
+- FIXED: Removed the thin white divider below the hero copy.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.58.6`.
+- VALIDATED: `python -m unittest tests.test_styles -v` and
+  `python -m unittest discover -s tests -v` both passed locally.
+
+v0.58.7 - required category selection guard
+---------------------------------------------------------
+- FIXED: The sidebar category segmented control can no longer be deselected into
+  an empty state, so a second click on the active segment no longer mixes Skater,
+  Goalie, and Team logic.
+- FIXED: Added an app-level fallback guard in `app.py` so any invalid
+  `stat_category` value is coerced back to `Skater` before controls and
+  pipelines run.
+- ADDED: Focused regression coverage in `tests/test_sidebar.py` for category
+  sanitization, deselect handling, and the app-level invalid-state guard.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.58.7`.
+- VALIDATED: `python -m unittest tests.test_sidebar -v` and
+  `python -m unittest discover -s tests -v` both passed locally.
+
+v0.58.8 - header guide modal
+---------------------------------------------------------
+- ADDED: A compact circular `?` button beside the hero header that opens a
+  modal explaining the app's basics from the top of the page.
+- ADDED: A concise `How This App Works` dialog covering what the app shows,
+  how projection works, what is ML-ish versus rule-based, and how skater and
+  goalie baselines differ without exposing the full recipe.
+- CHANGED: Made the new header guide button sticky near the top of the page so
+  it stays reachable while scrolling.
+- CHANGED: Added targeted header-guide regression coverage in
+  `tests/test_styles.py` so the new button and dialog stay wired in.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.58.8`.
+- VALIDATED: `python -m unittest tests.test_styles -v` and
+  `python -m unittest discover -s tests -v` both passed locally.
+
+v0.58.9 - header guide alignment pass
+---------------------------------------------------------
+- FIXED: Moved the header guide button into alignment with the main title row
+  instead of the full hero block, so it now sits level with the header.
+- CHANGED: Split the subtitle onto its own row and tightened the title/button
+  spacing so the header stays compact.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.58.9`.
+- VALIDATED: `python -m unittest tests.test_styles -v` and
+  `python -m unittest discover -s tests -v` both passed locally.
+
+v0.59.0 - sidebar guide relocation
+---------------------------------------------------------
+- FIXED: Moved the app guide trigger out of the page header and into the sidebar
+  above the category buttons, which is a much cleaner home for it.
+- CHANGED: Restored the hero header to its simple title-plus-subtitle layout now
+  that the guide trigger no longer lives in the top-right corner.
+- CHANGED: Updated the guide regression check so it now verifies the sidebar
+  button wiring instead of the old header placement.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.58.10`.
+- VALIDATED: `python -m unittest tests.test_styles -v`,
+  `python -m unittest tests.test_sidebar -v`, and
+  `python -m unittest discover -s tests -v` all passed locally.
+
+v0.60.0 - sidebar guide button fix
+---------------------------------------------------------
+- FIXED: Turned the sidebar app guide trigger into a real full-width button
+  instead of letting it inherit the tiny delete-button styling.
+- FIXED: Scoped the sidebar secondary-button CSS to horizontal remove rows only,
+  so future sidebar buttons do not get crushed into icon-sized controls.
+- CHANGED: Updated style regression coverage to verify both the primary guide
+  button wiring and the tighter secondary-button CSS selector.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.58.11`.
+- VALIDATED: `python -m unittest tests.test_styles -v`,
+  `python -m unittest tests.test_sidebar -v`, and
+  `python -m unittest discover -s tests -v` all passed locally.
+
+v0.61.0 - FAQ button tone down
+---------------------------------------------------------
+- CHANGED: Renamed the sidebar guide trigger from `App guide` to `FAQ` so it is
+  more instantly recognizable.
+- FIXED: Switched the guide trigger from a bright primary button to a normal
+  darker secondary button that fits the sidebar better.
+- CHANGED: Updated the style regression check to expect the new `FAQ` label and
+  secondary button type.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.58.12`.
+- VALIDATED: `python -m unittest tests.test_styles -v`,
+  `python -m unittest tests.test_sidebar -v`, and
+  `python -m unittest discover -s tests -v` all passed locally.

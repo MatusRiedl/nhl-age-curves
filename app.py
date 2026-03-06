@@ -98,7 +98,7 @@ def _resolve_shared_team_names(teams: dict[str, str]) -> dict[str, str]:
 # Page configuration — must be the first Streamlit call
 # =============================================================================
 st.set_page_config(
-    page_title="NHL Analytics | Age Curves, Projections & Player Comparisons",
+    page_title="NHL Age Analytics",
     page_icon=get_favicon_path().as_posix(),
     layout="wide",
     initial_sidebar_state="expanded",
@@ -136,6 +136,9 @@ if 'panel_tab_skater'  not in st.session_state: st.session_state.panel_tab_skate
 if 'panel_tab_goalie'  not in st.session_state: st.session_state.panel_tab_goalie  = "overview"
 if 'panel_tab_team'    not in st.session_state: st.session_state.panel_tab_team    = "overview"
 
+if st.session_state.stat_category not in {"Skater", "Goalie", "Team"}:
+    st.session_state.stat_category = "Skater"
+
 if st.session_state.players and any(
     str(name or "").strip() in ("", str(pid).strip())
     for pid, name in st.session_state.players.items()
@@ -172,19 +175,18 @@ if "_preloaded" not in st.session_state:
 # =============================================================================
 # Page header
 # =============================================================================
-st.markdown("""
-    <h1 class='page-header'>
-        <img src='https://assets.nhle.com/logos/nhl/svg/NHL_light.svg' class='nhl-logo'>
-        <span class='animated-title' style='font-size:0.9em;'>NHL Analytics</span>
-    </h1>
-""", unsafe_allow_html=True)
 st.markdown(
-    "<p style='margin-top:-0.45rem;margin-bottom:0.75rem;color:#c0c0c0;font-size:1.02rem;'>"
-    "Hockey like never before: age curves, career projections, player comparisons, and team trends."
-    "</p>",
+    """
+    <div class='page-hero'>
+        <h1 class='page-header'>
+            <img src='https://assets.nhle.com/logos/nhl/svg/NHL_light.svg' class='nhl-logo'>
+            <span class='animated-title' style='font-size:0.9em;'>Age Analytics</span>
+        </h1>
+        <p class='page-subtitle'>Hockey like never before!</p>
+    </div>
+    """,
     unsafe_allow_html=True,
 )
-st.markdown("---")
 
 # =============================================================================
 # x_axis_mode guard: reset to a valid mode when switching between categories.
@@ -218,6 +220,7 @@ sidebar_keys = render_sidebar()
 # =============================================================================
 team_mode  = st.session_state.stat_category == "Team"
 games_mode = st.session_state.x_axis_mode == "Games Played"
+do_base    = st.session_state.do_base and not team_mode
 share_params = encode_state_to_params(st.session_state)
 
 # Active player board — shared across Skater and Goalie categories.
@@ -308,7 +311,7 @@ with col_chart:
         team_mode            = team_mode,
         games_mode           = games_mode,
         do_cumul             = do_cumul,
-        do_base              = st.session_state.do_base,
+        do_base              = do_base,
         do_smooth            = st.session_state.do_smooth,
         stat_category        = st.session_state.stat_category,
         historical_baselines = historical_baselines,
@@ -342,7 +345,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.58.3 <br>"
+    "Created by Iksperial. v0.61 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

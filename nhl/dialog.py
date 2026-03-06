@@ -32,6 +32,86 @@ BASELINE_LABEL_TO_KEY = {
 }
 
 
+@st.dialog("How This App Works")
+def show_app_guide() -> None:
+    """Show a concise methodology guide without exposing the full recipe.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    st.markdown(
+        "This app turns NHL careers into age curves so you can compare real results, "
+        "historical baselines, and a forward-looking projection in one place."
+    )
+    st.caption(
+        "This guide is intentionally high level: enough to explain the approach, "
+        "not enough to hand over the sauce."
+    )
+
+    st.markdown("#### Basics")
+    st.markdown(
+        "- **Solid line:** real performance already logged.\n"
+        "- **Dotted line:** projected continuation of the current career path.\n"
+        "- **Dashed line:** strong historical benchmark, not a player-specific forecast."
+    )
+
+    st.markdown("#### How projection works")
+    proj_skater_col, proj_goalie_col = st.columns(2)
+    with proj_skater_col:
+        st.markdown(
+            "**Skaters**\n\n"
+            "Compared only against historical skaters with similar early and mid-career "
+            "shapes, then extended using how those comparable careers aged."
+        )
+    with proj_goalie_col:
+        st.markdown(
+            "**Goalies**\n\n"
+            "Compared only against historical goalies. Their projection rules stay "
+            "separate because goalie aging and volatility behave differently."
+        )
+
+    ml_col, rules_col = st.columns(2)
+    with ml_col:
+        st.markdown(
+            "**What is ML-ish**\n\n"
+            "The nearest-match layer. The app uses historical similarity to find the "
+            "closest career paths and borrow aging behavior from them."
+        )
+    with rules_col:
+        st.markdown(
+            "**What is not ML**\n\n"
+            "The guardrails. Caps, smoothing, presentation logic, and late-career "
+            "stability rules are deliberate system design, not black-box learning."
+        )
+
+    st.info(
+        "Short version: this is a hybrid forecasting system, not a single opaque model."
+    )
+
+    st.markdown("#### How baseline works")
+    base_skater_col, base_goalie_col = st.columns(2)
+    with base_skater_col:
+        st.markdown(
+            "**Skater baseline**\n\n"
+            "A skater-only 75th percentile age curve built from historical player "
+            "seasons. It answers: what does a strong skater age track usually look like?"
+        )
+    with base_goalie_col:
+        st.markdown(
+            "**Goalie baseline**\n\n"
+            "A separate goalie-only 75th percentile curve. Goalie benchmarks are handled "
+            "independently because their counting stats and rate stats age differently."
+        )
+
+    st.markdown(
+        "The baseline is **not ML** and it is **not trying to predict this player**. "
+        "It is a historical measuring stick so you can judge how exceptional a curve is."
+    )
+
+
 @st.dialog("Season Snapshot")
 def show_season_details(
     player_name: str,

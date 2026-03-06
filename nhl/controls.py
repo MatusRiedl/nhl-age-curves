@@ -85,7 +85,10 @@ def render_controls() -> tuple:
             st.toggle("Cumulative", key="do_cumul_toggle")
 
         with c_t5:
-            st.toggle("Baseline", key="do_base", disabled=games_mode)
+            if team_mode:
+                st.toggle("Baseline", value=False, disabled=True, help="Unavailable in Team mode.")
+            else:
+                st.toggle("Baseline", key="do_base", disabled=games_mode)
 
         with c_t6:
             st.toggle("Prime years", key="do_prime", disabled=team_mode)
