@@ -1,15 +1,4 @@
-"""
-nhl.team_pipeline — Per-team data processing pipeline.
-
-Filters, transforms, and prepares team-season DataFrames for Plotly chart rendering.
-The team pipeline is intentionally simpler than the player pipeline: no KNN projection,
-no era adjustment, no NHLe conversion.
-
-No Streamlit import — all session-state values are passed as plain parameters.
-
-Imports from project:
-    nhl.constants — TEAM_RATE_STATS
-"""
+"""Per-team processing pipeline for chart-ready season or games-played curves."""
 
 import pandas as pd
 
@@ -25,33 +14,7 @@ def process_teams(
     do_smooth: bool,
     games_mode: bool,
 ) -> list:
-    """Filter and transform team-season data for chart rendering.
-
-    For each team on the board:
-        1. Filter rows to the selected team abbreviation.
-        2. Apply season type filter (Regular / Playoffs / Both).
-        3. For "Both", collapse regular+playoffs into one row per SeasonYear.
-        4. Sort by SeasonYear.
-        5. Guard that the metric column exists (PP% absent for old seasons is OK).
-        6. Apply cumulative toggle (counting stats only).
-        7. Apply 3-season rolling average smoothing.
-        8. Compute CumGP column for Games Played mode.
-
-    Args:
-        teams:        Dict of {team_abbr: team_name} from session state.
-        all_team_df:  Full team-season DataFrame from load_all_team_seasons().
-                      Must contain 'teamAbbrev', 'SeasonYear', 'GP', 'gameTypeId' columns.
-        metric:       Currently selected stat metric string.
-        season_type:  'Regular', 'Playoffs', or 'Both'.
-        do_cumul:     Whether cumulative mode is active (already resolved: False for
-                      rate stats, False in games_mode).
-        do_smooth:    Whether 3-season rolling average is active.
-        games_mode:   Whether x-axis is Games Played (not Season Year).
-
-    Returns:
-        List of DataFrames, one per team, ready for pd.concat and Plotly rendering.
-        Empty list if all_team_df is empty or no teams have data for the given metric.
-    """
+    """Filter, aggregate, and format selected team seasons for the chart."""
     processed_dfs = []
 
     if all_team_df.empty or "teamAbbrev" not in all_team_df.columns:

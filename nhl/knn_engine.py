@@ -1,27 +1,7 @@
-"""nhl.knn_engine — KNN ML projection engine for NHL player age curves.
+"""KNN projection helpers for player age curves.
 
-Projects a player's future stat trajectory by finding the 10 most similar
-historical players using L1 distance across shared career ages, then mapping
-clone movement forward with equal-weight averages and a fixed prior blend.
-
-Key design decisions:
-    - L1 distance (Manhattan), not L2.
-    - Partial career matching: requires >= max(2, len(ages)//3) shared ages.
-    - Tier pre-filter: clones must have a career peak >= 50% of the live player's
-      peak to prevent elite players matching against journeymen.
-    - Top-10 clone influence is equal-weighted.
-    - Clone/prior blending uses a fixed 70/30 split.
-    - pct_change clamp: [-0.12, +0.25].
-    - GP excluded from KNN. GP uses the 4-phase durability curve in
-      player_pipeline.py instead.
-
-No Streamlit import — this module is pure pandas math and is independently
-testable without mocking any Streamlit state.
-
-Imports from project:
-    nhl.constants — RATE_STATS, ML_SUPPORTED_METRICS, STAT_CAPS, STAT_FLOORS,
-                    CURRENT_SEASON_YEAR
-    nhl.era       — apply_era_to_hist
+Uses L1 distance, the top 10 equal-weight clones, and a fixed 70/30
+clone-prior blend. GP stays out of the KNN path.
 """
 
 import pandas as pd
@@ -41,19 +21,7 @@ from nhl.era import apply_era_to_hist
 # ---------------------------------------------------------------------------
 
 def _apply_stat_cap(val: float, metric: str, stat_category: str) -> float:
-    """Apply the stat cap (and optional floor) for a single projected value.
-
-    GAA is treated as a floor rather than a ceiling — no goalie projects below
-    1.8 GAA long-term.  The GP cap is lowered to 65 for goalies.
-
-    Args:
-        val:           The current projected value.
-        metric:        Stat column name.
-        stat_category: 'Skater' or 'Goalie'.
-
-    Returns:
-        Value after applying caps and floors.
-    """
+    """Clamp one projected value to the configured cap, or floor for `GAA`."""
     if metric in STAT_CAPS:
         cap = STAT_CAPS[metric]
         if metric == "GP" and stat_category == "Goalie":
@@ -188,29 +156,7 @@ def run_knn_projection(
     id_to_name_map: dict,
     clone_details_map: dict,
 ) -> tuple:
-    """Run KNN age-curve projection for a single player.
-
-    Finds 10 historical clones using L1 distance on shared career ages, then
-    projects future seasons with equal-weight clone averages, a fixed 70/30
-    blend against the prior target, and a pct_change clamp of [-0.12, +0.25].
-
-    Args:
-        career_df:         Pre-processed player career DataFrame (Age, metric columns).
-        metric:            Stat column name to project (must be in ML_SUPPORTED_METRICS).
-        hist_df:           Raw historical parquet DataFrame.
-        is_goalie:         True if the player is a goalie.
-        pos_code:          Raw position code from the NHL API (for strict position filter).
-        do_era:            Whether era adjustment is currently active.
-        season_type:       'Regular', 'Playoffs', or 'Both' (mid-season pacing guard).
-        stat_category:     'Skater' or 'Goalie'.
-        id_to_name_map:    {playerId: name} for fallback clone display names.
-        clone_details_map: {playerId: stats_dict} for clone career stat display.
-
-    Returns:
-        Tuple of (proj_rows, clone_names):
-            proj_rows: List of dicts with Age, metric, Player, BaseName keys.
-            clone_names: List of clone detail dicts for the dialog popup.
-    """
+    """Project future ages with KNN clones and return rows plus clone details."""
     max_age       = career_df['Age'].max()
     base_name     = career_df['BaseName'].iloc[0] if 'BaseName' in career_df.columns else ''
     career_paced  = career_df[metric].copy()
@@ -392,23 +338,7 @@ def run_linear_fallback(
     max_age: int,
     stat_category: str,
 ) -> list:
-    """Project future ages using a simple linear or rule-based fallback.
-
-    Used when KNN is unavailable (hist_df empty, metric not in ML_SUPPORTED_METRICS,
-    or not enough valid historical players found).
-
-    GP uses a 4-phase durability curve based on real long-career NHL reference data
-    (Jagr ~68 GP at 40, Lidstrom ~73 GP at 40, Thornton ~60 GP at 39).
-
-    Args:
-        career_df:     Pre-processed player career DataFrame (Age, metric columns).
-        metric:        Stat column name to project.
-        max_age:       Last real-data age; projection starts at max_age + 1.
-        stat_category: 'Skater' or 'Goalie'.
-
-    Returns:
-        List of dicts with Age, metric, Player, BaseName keys.
-    """
+    """Project future ages with the non-KNN fallback path."""
     base_name   = career_df['BaseName'].iloc[0] if 'BaseName' in career_df.columns else ''
     match_vals  = career_df[metric].tolist()
     current_val = float(career_df.loc[career_df['Age'] == max_age, metric].values[0])

@@ -226,31 +226,7 @@ def render_chart(
     do_prime: bool = False,
     share_params: dict | None = None,
 ) -> None:
-    """Build and render the Plotly age-curve chart.
-
-    If processed_dfs is empty, shows an informational message instead.
-
-    Args:
-        processed_dfs:        List of DataFrames from process_players() or
-                              process_teams().
-        metric:               Currently selected stat metric string.
-        team_mode:            True when stat_category == 'Team'.
-        games_mode:           True when x_axis_mode == 'Games Played'.
-        do_cumul:             Resolved cumulative flag (False for rate stats).
-        do_base:              Whether to overlay the 75th-percentile baseline.
-        do_smooth:            Whether spline line shape is active (cosmetic only here).
-        stat_category:        'Skater' or 'Goalie' (passed to dialog).
-        historical_baselines: Baseline dict keyed by Skater and Goalie.
-        team_baselines:       {season_year: {metric: value}}.
-        raw_dfs_cache:        Raw DataFrames for the click dialog.
-        ml_clones_dict:       KNN clone dicts for the click dialog.
-        season_type:          'Regular', 'Playoffs', or 'Both'.
-        sidebar_keys:         Dict with 'search_term', 'top_selected', 'team_abbr',
-                              'roster_player' — used for chart widget key generation.
-        peak_info:            {base_name: {age, x, y, ...}} from player_pipeline.
-        do_prime:             Whether to show peak age highlight bands.
-        share_params:         Compact URL params to copy from the chart share control.
-    """
+    """Build the Plotly chart, optional baseline overlays, and click handling."""
     if peak_info is None:
         peak_info = {}
     if not processed_dfs:

@@ -1,25 +1,4 @@
-"""
-nhl.dialog — Season-detail popup dialog for the NHL Age Curves app.
-
-Triggered when the user clicks a data point on the Plotly chart.  Three cases:
-
-    Case 1 — Real data click:
-        Shows career totals, career subtotals up to clicked age, and a season
-        detail table for that specific age.
-
-    Case 2 — Projection click:
-        Shows estimated all-time career ranking for the projected stat total,
-        and a table of the 10 ML clone players used to build the projection.
-
-    Case 3 — Baseline click:
-        Shows the 75th-percentile reference stats at the clicked age.
-
-The @st.dialog decorator must remain on the function definition at module level —
-Streamlit registers it at import time.
-
-Imports from project:
-    nhl.data_loaders — get_all_time_rank
-"""
+"""Chart click dialogs for season snapshots, projections, and baselines."""
 
 import streamlit as st
 
@@ -122,24 +101,7 @@ def show_season_details(
     historical_baselines: dict,
     stat_category: str,
 ) -> None:
-    """Show a season-detail popup for a clicked data point on the age curve chart.
-
-    Determines which of the three cases applies (real data, projection, baseline)
-    and renders the appropriate content.
-
-    Args:
-        player_name:         Player label from the chart trace (may contain ' (Proj)').
-        age:                 Age (or age-equivalent) at the clicked point.
-        raw_dfs_list:        List of raw DataFrames (pre-pipeline) from raw_dfs_cache.
-        metric:              Currently selected stat metric string.
-        val:                 Y-axis value at the clicked point.
-        is_cumul:            Whether the cumulative toggle is active.
-        full_df:             Concatenated processed DataFrame (all players, real+proj).
-        s_type:              Season type ('Regular', 'Playoffs', or 'Both').
-        ml_clones_dict:      {base_name: list[clone_dict]} from player pipeline.
-        historical_baselines: Baseline dict from baselines.
-        stat_category:       'Skater' or 'Goalie' (passed in, not read from session state).
-    """
+    """Render the correct click dialog for a real point, projection, or baseline."""
     age = int(age)
     clean_name    = player_name.replace(" (Proj)", "")
     baseline_key  = BASELINE_LABEL_TO_KEY.get(clean_name)

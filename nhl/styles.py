@@ -521,22 +521,7 @@ def inject_css() -> None:
 
 
 def inject_mobile_dropdown_fix() -> None:
-    """Inject CSS to prevent mobile keyboard from opening on dropdown taps.
-
-    Streamlit's selectbox/multiselect use React Select which has a searchable
-    input field. On mobile touch devices, focusing this input triggers the
-    on-screen keyboard. This CSS disables pointer events on the input field
-    for touch devices only, preventing keyboard popup while preserving full
-    dropdown functionality.
-
-    The fix targets:
-        - Top 50 All-Time Skaters/Goalies dropdown
-        - Active Rosters team selector
-        - Select Player roster dropdown
-        - X axis, Metric, Season Type, Leagues dropdowns
-
-    Must be called once per app run, after st.set_page_config().
-    """
+    """Inject the CSS-only mobile dropdown fix after page config is set."""
     mobile_css = """
     <style>
         /* Disable search input in dropdowns on touch devices (mobile/tablet)

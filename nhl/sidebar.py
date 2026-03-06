@@ -87,17 +87,7 @@ def _sync_stat_category_selection() -> None:
 
 @st.cache_data(ttl=300)
 def _check_api_health() -> list:
-    """Probe each NHL API endpoint and return (label, ok) pairs.
-
-    Uses stream=True + close() to check HTTP status without downloading
-    response bodies — critical for the Records endpoint which returns
-    all-time career data and would be very large to fully download.
-    Results are cached for 5 minutes to avoid hammering APIs on every rerun.
-
-    Returns:
-        List of (label, ok) tuples where ok is True when the endpoint
-        responds with an HTTP status below 400, False on any error or timeout.
-    """
+    """Probe key NHL endpoints and return `(label, ok)` pairs."""
     probes = [
         ("Search",       "https://search.d3.nhle.com/api/v1/search/player?q=Mc&limit=1&culture=en-us"),
         ("Player Stats", "https://api-web.nhle.com/v1/player/8478402/landing"),
@@ -121,18 +111,7 @@ def _check_api_health() -> list:
 
 
 def _render_ram_footer() -> None:
-    """Render a live process RAM readout and API health check at the bottom of the sidebar.
-
-    Tries psutil first (cross-platform). Falls back to /proc/self/status
-    (Linux / Streamlit Cloud, no external deps). Shows 'N/A' on Windows
-    without psutil installed.
-
-    API health shows a 🟢/🟡 traffic light for each NHL endpoint, cached
-    for 5 minutes via _check_api_health().
-
-    All status info is wrapped in an expandable "App status" section that
-    is collapsed by default.
-    """
+    """Render the sidebar RAM readout plus cached API health indicators."""
     rss_mb = "N/A"
     try:
         import os
@@ -162,20 +141,7 @@ def _render_ram_footer() -> None:
 
 
 def _inject_no_keyboard() -> None:
-    """Prevent mobile virtual keyboard from opening on st.selectbox widgets.
-
-    Injects JavaScript that sets inputmode='none' and readonly='readonly'
-    on BaseWeb Select component inputs. This explicitly instructs mobile
-    browsers not to show a virtual keyboard when dropdown menus receive focus.
-
-    Uses st.components.v1.html() which renders inside an iframe, allowing
-    access to the parent document via window.parent.document. A MutationObserver
-    re-applies attributes after each Streamlit rerun since DOM nodes are re-mounted.
-
-    Note: The readonly attribute disables the built-in selectbox search/filter
-    feature (typing to filter options). This is acceptable for pure selector
-    dropdowns that don't require free-text search.
-    """
+    """Stop mobile browsers from popping the keyboard on selector-style dropdowns."""
     components.html(
         """
         <script>
@@ -205,18 +171,7 @@ def _inject_no_keyboard() -> None:
 
 
 def render_sidebar() -> dict:
-    """Render the full sidebar UI and return chart cache-busting keys.
-
-    Renders the Skater/Goalie/Team category segmented control at the top of the sidebar,
-    then dispatches to _render_player_sidebar() or _render_team_sidebar() based
-    on st.session_state.stat_category.
-
-    Returns:
-        Dict with keys 'search_term', 'top_selected', 'team_abbr', 'roster_player'.
-        Values are strings (empty string if the widget was not shown this run).
-        Used as part of the chart widget key to force a re-render when sidebar
-        selections change.
-    """
+    """Render the sidebar and return the widget-derived chart cache keys."""
     with st.sidebar:
         _inject_no_keyboard()   # Prevent mobile keyboard on dropdowns
         current_category = _sanitize_stat_category(st.session_state.get("stat_category"))

@@ -1,23 +1,4 @@
-"""
-nhl.controls — Category/Metric expander for the NHL Age Curves app.
-
-Renders a single "Category & Metric" expander that appears below the page title.
-It contains all controls in two rows:
-    Row 1: 5 toggles spread across the full expander width (category radio lives
-           in the sidebar)
-    Row 2: X axis, Metric, Season Type, Leagues dropdowns (compact, left→right)
-
-The expander uses expanded=True so it is always open on every rerun, ensuring toggles
-remain visible after player add/remove actions.
-
-Reads and writes st.session_state directly (that is the correct Streamlit pattern
-for widget state).  Returns (metric, do_cumul) so app.py can pass both values into
-the pipelines and chart renderer without reading session state itself.
-
-Imports from project:
-    nhl.constants — TEAM_METRICS, RATE_STATS, TEAM_RATE_STATS
-    nhl.data_loaders — get_player_league_abbrevs
-"""
+"""Top control surface for category, metric, view mode, and chart toggles."""
 
 import streamlit as st
 
@@ -26,31 +7,7 @@ from nhl.data_loaders import get_player_league_abbrevs
 
 
 def render_controls() -> tuple:
-    """Render the unified Category & Metric expander with all controls.
-
-    The expander uses expanded=True so it is always open on every rerun, ensuring
-    toggles remain visible and accessible after player add/remove actions.
-
-    A single expander holds two rows:
-        Row 1 — 5 toggles spread across the full expander width. The category
-                radio (Skater/Goalie/Team) is rendered in the sidebar instead.
-        Row 2 — X axis, Metric, Season Type, Leagues dropdowns.
-
-    Reads:
-        st.session_state.stat_category   — drives metric selectbox options
-        st.session_state.x_axis_mode     — determines which mode note to show
-        st.session_state.do_cumul_toggle — raw toggle value
-        st.session_state.league_filter   — current league multiselect
-    Writes (via widget keys):
-        x_axis_mode, league_filter, season_type,
-        do_smooth, do_predict, do_era, do_cumul_toggle, do_base, do_prime
-
-    Returns:
-        Tuple of (metric, do_cumul):
-            metric   — currently selected stat metric string (e.g. 'Points').
-            do_cumul — resolved cumulative flag: True only when the toggle is on,
-                       the metric is not a rate stat, and games_mode is False.
-    """
+    """Render the controls expander and return `(metric, do_cumul)`."""
     team_mode   = st.session_state.stat_category == "Team"
     games_mode  = st.session_state.x_axis_mode == "Games Played"
 

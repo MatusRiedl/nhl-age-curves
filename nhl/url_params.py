@@ -1,18 +1,4 @@
-"""Shareable URL encoding and decoding for the NHL Age Curves app.
-
-Provides two public functions:
-    encode_state_to_params(ss) -> dict
-        Converts the current st.session_state into a compact flat dict suitable
-        for writing to st.query_params.
-    apply_params_to_state(params, ss) -> None
-        Reads a dict of URL params and populates st.session_state accordingly,
-        leaving any missing keys untouched so session-state defaults still apply.
-
-Player entries are encoded as semicolon-separated player IDs.
-Team entries are encoded as semicolon-separated team abbreviations.
-Legacy "id|name" and "abbr|name" links are still accepted on read.
-Panel tab selections are encoded per category via pt_s / pt_g / pt_t.
-"""
+"""Compact URL encoding and decoding for shareable app state."""
 
 import re
 
@@ -199,18 +185,7 @@ def encode_state_to_params(ss) -> dict:
 
 
 def apply_params_to_state(params: dict, ss) -> None:
-    """Populate session state from a URL params dict.
-
-    Only keys present in params are written. Missing keys are left untouched so
-    app.py can keep applying its own defaults.
-
-    Args:
-        params: Dict of URL param key to value string from ``dict(st.query_params)``.
-        ss: ``st.session_state`` or any dict-like mapping to update in place.
-
-    Returns:
-        None.
-    """
+    """Apply known URL params into session state without overwriting missing defaults."""
     if not params:
         return
 

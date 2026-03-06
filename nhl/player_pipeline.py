@@ -1,33 +1,4 @@
-"""
-nhl.player_pipeline — Per-player data processing pipeline.
-
-Transforms raw API data for each player on the board through the full processing
-chain and returns DataFrames ready for Plotly rendering.
-
-Pipeline order (per player):
-    1.  Fetch raw stats (get_player_raw_stats)
-    2.  Skater/goalie gatekeeper — skip cross-mode players silently
-    3.  League filter + NHLe multiplier application (Points, Goals, Assists only)
-    4.  Season type filter (Regular / Playoffs / Both)
-    5.  Era adjustment (skaters: Points/Goals/Assists; goalies: GAA/WeightedSV/Shutouts)
-    6a. Games Played mode branch — groupby SeasonYear + cumsum all stats
-    6b. Age mode branch — groupby Age + compute rate stats
-    7.  Origin-anchor zero row (Games Played mode only)
-    8.  Peak detection (pre-smoothing, pre-cumsum)
-    9.  KNN projection (or linear fallback) if do_predict is True
-    10. Cumulative toggle
-    11. 3-season rolling average smoothing
-    12. Real / projection split
-
-No Streamlit import — all session-state values are passed as plain parameters,
-making this module independently testable.
-
-Imports from project:
-    nhl.constants      — RATE_STATS, NHLE_MULTIPLIERS, ML_SUPPORTED_METRICS, NO_PROJECTION_METRICS
-    nhl.era            — apply_era_to_hist, get_era_multiplier, get_goalie_era_sv_offset
-    nhl.data_loaders   — get_player_raw_stats
-    nhl.knn_engine     — run_knn_projection, run_linear_fallback
-"""
+"""Per-player processing pipeline for chart-ready age or games-played curves."""
 
 import pandas as pd
 
@@ -64,31 +35,7 @@ def process_players(
     games_mode: bool,
     league_filter: list,
 ) -> tuple:
-    """Process each player through the full data pipeline.
-
-    Args:
-        players:           Dict of {playerId: display_name} from session state.
-        metric:            Currently selected stat metric string.
-        hist_df:           Historical parquet DataFrame for KNN matching.
-        id_to_name_map:    {playerId: name} for KNN clone labels.
-        clone_details_map: {playerId: stats_dict} for KNN clone dialog table.
-        season_type:       'Regular', 'Playoffs', or 'Both'.
-        stat_category:     'Skater' or 'Goalie'.
-        do_era:            Whether era adjustment is active.
-        do_predict:        Whether projection to age 40 is active.
-        do_smooth:         Whether 3-season rolling average is active.
-        do_cumul:          Whether cumulative toggle is active (already resolved:
-                           False for rate stats, False in games_mode).
-        games_mode:        Whether x-axis is Games Played (not Age).
-        league_filter:     List of league abbreviations to include.
-
-    Returns:
-        Tuple of (processed_dfs, raw_dfs_cache, ml_clones_dict, peak_info):
-            processed_dfs:   List of DataFrames ready for Plotly chart rendering.
-            raw_dfs_cache:   List of raw DataFrames (pre-pipeline) for click dialog.
-            ml_clones_dict:  {base_name: list[clone_dict]} for dialog popup.
-            peak_info:       {base_name: {x, y, raw_peak_val, age, season_year, pid}}
-    """
+    """Run the player pipeline and return chart data, raw caches, clones, and peaks."""
     processed_dfs  = []
     raw_dfs_cache  = []
     ml_clones_dict = {}

@@ -1,12 +1,4 @@
-"""Schedule helpers for live defaults, upcoming games, and featured players.
-
-Fetches the current or most recently completed NHL game for first-load default
-selection, the next few upcoming games for the comparison panel, and the
-current-season featured skater and goalie for a pair of teams.
-
-All external requests keep the existing try/except fallback behavior so NHL API
-weirdness degrades cleanly instead of taking the app down with it.
-"""
+"""Live schedule helpers for defaults, upcoming games, and featured players."""
 
 import streamlit as st
 import requests
@@ -50,19 +42,7 @@ _MONTH_ABBR         = (
 
 @st.cache_data(ttl=300)
 def get_live_or_recent_game() -> tuple[str, str] | None:
-    """Returns (home_abbr, away_abbr) for the current or most recent NHL game.
-
-    Tries the scoreboard endpoint first (returns ~11 days in one reliable call,
-    searched newest-to-oldest). Falls back to single-day score endpoints if the
-    scoreboard returns no qualifying game.
-
-    Args:
-        None
-
-    Returns:
-        A (home_abbr, away_abbr) string tuple, or None if no game is found or
-        the NHL score API is unreachable.
-    """
+    """Return the current or most recent NHL matchup, or `None` on failure."""
     try:
         # Scoreboard is more reliable and covers ~11 days in one request.
         # reverse_dates=True so we find the most recent FINAL game first.
@@ -83,16 +63,7 @@ def get_live_or_recent_game() -> tuple[str, str] | None:
 
 @st.cache_data(ttl=300)
 def get_upcoming_games(limit: int = 4, days_ahead: int = 14) -> list[dict]:
-    """Return the next few upcoming NHL games for the Live games tab.
-
-    Args:
-        limit: Maximum number of future games to return.
-        days_ahead: How many calendar days ahead to scan, starting today.
-
-    Returns:
-        A list of dicts containing game metadata needed by the comparison panel.
-        Returns an empty list if the score API is unreachable.
-    """
+    """Return the next few upcoming games for the Live games tab."""
     if limit <= 0:
         return []
 
@@ -120,22 +91,7 @@ def get_upcoming_games(limit: int = 4, days_ahead: int = 14) -> list[dict]:
 
 @st.cache_data(ttl=3600)
 def get_featured_players(home_abbr: str, away_abbr: str) -> dict:
-    """Return featured skaters, goalies, and team metadata for two teams.
-
-    For each team fetches the current-season club stats and identifies:
-    - The skater with the most points this season.
-    - The goalie with the best current-season save percentage.
-
-    Args:
-        home_abbr: Three-letter abbreviation of the home team (e.g. 'PIT').
-        away_abbr: Three-letter abbreviation of the away team (e.g. 'VGK').
-
-    Returns:
-        A dict with two keys:
-            'players': {player_id (int): player_name (str), ...}
-            'teams':   {team_abbr (str): full_name (str), ...}
-        Both inner dicts may be empty if the API is unreachable.
-    """
+    """Return featured skaters, goalies, and team names for a matchup pair."""
     try:
         players: dict[int, str] = {}
         teams:   dict[str, str] = {}

@@ -1,21 +1,7 @@
-"""
-NHL Age Curves — Main Application Entry Point
+"""Streamlit entry point for NHL Age Curves.
 
-This file is the thin orchestrator.  All logic lives in the nhl/ package modules.
-Streamlit re-executes this file top-to-bottom on every user interaction.
-
-Module responsibilities:
-    nhl.styles          — inject_css(): animated title, logo, sidebar, modebar CSS
-    nhl.constants       — ACTIVE_TEAMS and all shared constants
-    nhl.data_loaders    — load_historical_data(), load_all_team_seasons(),
-                          get_id_to_name_map(), get_clone_details_map()
-    nhl.baselines       — get_historical_baselines(), get_team_baselines()
-    nhl.sidebar         — render_sidebar(): player/team board + search UI
-    nhl.controls        — render_controls(): Category/Metric + View Options expanders
-    nhl.player_pipeline — process_players(): full per-player data pipeline
-    nhl.team_pipeline   — process_teams(): per-team data pipeline
-    nhl.chart           — render_chart(): Plotly figure + JS clamping + click dialog
-    nhl.comparison      — render_comparison_area(): tabbed right-column comparison panel
+Keeps orchestration in one place and delegates data loading, processing,
+charting, and comparison rendering to `nhl/` modules.
 """
 
 import streamlit as st
@@ -42,14 +28,7 @@ from nhl.url_params import apply_params_to_state, encode_state_to_params
 
 
 def _resolve_shared_player_names(players: dict[str, str]) -> dict[str, str]:
-    """Resolve display names for player IDs loaded from compact shared URLs.
-
-    Args:
-        players: Dict mapping player ID strings to either names or ID placeholders.
-
-    Returns:
-        Dict mapping player ID strings to human-readable player names.
-    """
+    """Replace compact shared-link player IDs with display names when possible."""
     if not players:
         return {}
 
@@ -346,7 +325,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.61.20 <br>"
+    "Created by Iksperial. v0.62.1 <br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

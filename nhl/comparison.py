@@ -1,12 +1,4 @@
-"""Tabbed right-column comparison panel for the NHL Age Curves app.
-
-Renders native Streamlit tabs above the comparison cards:
-    - Overview: existing player/team stat cards
-    - Trophies: awards/cup summary cards
-    - Live games: upcoming-game picker that can seed the comparison board
-
-Imported and called from app.py.
-"""
+"""Tabbed comparison panel for overview cards, trophies, and live games."""
 
 from dataclasses import dataclass
 from html import escape
@@ -151,24 +143,7 @@ def render_comparison_area(
     season_type: str,
     team_mode: bool,
 ) -> None:
-    """Render the comparison tabs and active tab contents.
-
-    Args:
-        processed_dfs: Player or team processed DataFrames for the active chart.
-        players: Selected comparison players from session state.
-        teams: Selected comparison teams from session state.
-        peak_info: Per-player best-season metadata for overview cards.
-        metric: Active metric name.
-        stat_category: Active category string.
-        season_type: Active season scope.
-        team_mode: Whether the app is currently in Team mode.
-
-    Returns:
-        None.
-
-    The panel respects the last tab saved for the active category, but falls
-    back to the Live games tab when the current board has no visible cards.
-    """
+    """Render the tabbed comparison area for the active category."""
     tab_lookup = {tab.id: tab for tab in _PANEL_TABS}
     tab_ids = list(tab_lookup.keys())
     if not tab_ids:
@@ -733,19 +708,7 @@ def render_comparison_panel(
     stat_category: str,
     season_type: str,
 ) -> None:
-    """Render legacy Overview-only player comparison cards.
-
-    Args:
-        processed_dfs: Active processed player DataFrames.
-        players: Selected comparison players.
-        peak_info: Per-player best-season metadata.
-        metric: Active metric name.
-        stat_category: Active category string.
-        season_type: Active season scope.
-
-    Returns:
-        None.
-    """
+    """Render the legacy player overview panel without tabs."""
     _render_overview_players(
         processed_dfs=processed_dfs,
         players=players,

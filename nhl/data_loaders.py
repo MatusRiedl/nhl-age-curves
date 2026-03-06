@@ -1,16 +1,7 @@
-"""
-nhl.data_loaders — Cached data-fetch functions for the NHL Age Curves app.
+"""Cached parquet and NHL API loaders.
 
-All external API calls and the parquet load live here. Network-heavy loaders use
-@st.cache_data so the app does not hammer the APIs on each Streamlit rerun.
-Lightweight player metadata helpers delegate to a shared cached landing payload
-instead of refetching the same JSON through multiple wrappers.
-
-Try/except fallbacks are intentional. The NHL APIs are undocumented and
-occasionally return unexpected payloads. Never remove the fallback returns.
-
-Imports from project:
-    nhl.constants  — URL strings and NHLE_MULTIPLIERS / TEAM_METRICS
+Keep the silent fallback behavior. The APIs are undocumented and occasionally
+weird.
 """
 
 import os
@@ -33,19 +24,7 @@ from nhl.constants import (
 
 
 def _normalize_historical_goalie_rates(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize goalie SavePct values loaded from the historical parquet.
-
-    Older parquet files may contain percent-scale SavePct values from legacy
-    scraper output or malformed traded-season rows. This keeps the app usable
-    while transitioning to a rebuilt historical file.
-
-    Args:
-        df: Historical seasons DataFrame loaded from parquet.
-
-    Returns:
-        Copy of df with goalie SavePct coerced to 0-1 scale and clipped to a
-        sane range.
-    """
+    """Coerce historical goalie `SavePct` values into sane 0-1 scale."""
     if df.empty or 'SavePct' not in df.columns or 'Position' not in df.columns:
         return df
 
@@ -69,16 +48,7 @@ def _normalize_historical_goalie_rates(df: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_data
 def load_historical_data() -> pd.DataFrame:
-    """Load the local NHL historical seasons parquet file.
-
-    Adds PPG (Points/GP) and Save% (alias of SavePct) columns so downstream
-    functions don't have to recompute them. Also sanitizes legacy goalie
-    SavePct values so old parquet files do not produce impossible save rates.
-
-    Returns:
-        DataFrame with one row per player-season, or an empty DataFrame if
-        the parquet file is missing or unreadable.
-    """
+    """Load the historical parquet and add the derived columns the app expects."""
     try:
         if os.path.exists("nhl_historical_seasons.parquet"):
             df = pd.read_parquet("nhl_historical_seasons.parquet")
@@ -361,18 +331,7 @@ def get_top_50_goalies() -> dict:
 
 @st.cache_data(ttl=3600)
 def search_player(query: str) -> list:
-    """Search for players by name using the D3 NHL search API.
-
-    Cached for 1 hour so mid-season trades (which change teamAbbrev) expire
-    automatically without a full restart.
-
-    Args:
-        query: Partial or full player name string.
-
-    Returns:
-        List of player dicts from the D3 API (each has 'name', 'playerId',
-        'teamAbbrev').  Returns [] on empty query or network failure.
-    """
+    """Search the D3 NHL player endpoint. Returns `[]` on empty query or failure."""
     if not query:
         return []
     try:
@@ -384,21 +343,7 @@ def search_player(query: str) -> list:
 
 
 def search_local_players(query: str, category: str) -> dict:
-    """Supplement D3 API results with first- or last-name matches from local records.
-
-    The D3 search API does full-name prefix matching, so 'Bedard' won't find
-    Connor Bedard (his name starts with 'Connor', not 'Bedard').  This function
-    fills that gap by matching the query against both first and last names in
-    the id_to_name_map.
-
-    Args:
-        query:    Partial name string (minimum 2 characters).
-        category: 'Skater' or 'Goalie' — selects the correct records pool.
-
-    Returns:
-        Dict mapping display label ('[TEAM] Full Name') to playerId int.
-        Returns {} if query is too short or no matches found.
-    """
+    """Fill D3 search gaps by matching first or last names from local records."""
     q = query.lower().strip()
     if len(q) < 2:
         return {}
@@ -512,20 +457,7 @@ def get_player_current_team(player_id: int) -> str:
 
 
 def get_player_roster_info(player_id: int) -> dict:
-    """Return position code and jersey number for an active NHL player.
-
-    Active players have a non-empty currentTeamAbbrev and valid position /
-    sweaterNumber fields. Retired players and free agents return an empty dict
-    so callers can skip the position/number display.
-
-    Args:
-        player_id: Numeric NHL player ID.
-
-    Returns:
-        Dict with keys 'position' (str, e.g. 'C', 'LW', 'RW', 'D', 'G')
-        and 'sweater_number' (int), or {} if the player is inactive or
-        the payload is incomplete.
-    """
+    """Return active-player position and sweater number, or `{}` if unavailable."""
     _POS_MAP = {'C': 'C', 'L': 'LW', 'R': 'RW', 'D': 'D', 'G': 'G'}
     try:
         res = get_player_landing(player_id)
@@ -544,18 +476,7 @@ def get_player_roster_info(player_id: int) -> dict:
 
 
 def get_player_hero_image(player_id: int) -> str:
-    """Return the hero image URL from the cached player landing payload.
-
-    The heroImage field is a full-body action render with transparent background,
-    available for current and recent players. Falls back to the headshot URL if
-    heroImage is absent (common for retired players).
-
-    Args:
-        player_id: Numeric NHL player ID.
-
-    Returns:
-        URL string for heroImage or headshot fallback, or '' on failure.
-    """
+    """Return the player hero image, falling back to headshot when needed."""
     res = get_player_landing(player_id)
     return str(res.get('heroImage', res.get('headshot', '')) or '')
 
@@ -647,26 +568,7 @@ def get_team_trophy_summary() -> dict:
 # ---------------------------------------------------------------------------
 
 def discover_all_leagues(sample_player_ids: list[str]) -> dict[str, int]:
-    """Discover all leagueAbbrev values from player landing API seasonTotals.
-
-    Standalone audit helper (not wired into app flow). Pass a curated multi-league
-    player list to enumerate observed league abbreviations and their frequencies.
-
-    Example diverse sample IDs (24 players):
-        8471214 (Ovechkin), 8448208 (Jagr), 8476453 (Kucherov), 8458520 (Forsberg),
-        8482116 (Stutzle), 8481542 (Seider), 8476834 (Cervenka), 8477970 (Vanecek),
-        8479318 (Matthews), 8477939 (Nylander), 8476887 (Filip Forsberg),
-        8478971 (Ingram), 8480947 (Lankinen), 8474550 (Antti Niemi),
-        8476914 (Korpisalo), 8475193 (Tatar), 8478416 (Cernak), 8480002 (Hischier),
-        8478414 (T. Meier), 8478009 (Sorokin), 8476412 (Binnington),
-        8476434 (J. Gibson), 8471276 (Krejci), 8478864 (Kaprizov).
-
-    Args:
-        sample_player_ids: List of NHL player IDs as str or int.
-
-    Returns:
-        Dict {leagueAbbrev: occurrence_count} sorted by descending count.
-    """
+    """Audit helper that counts observed `leagueAbbrev` values for sample players."""
     counts: dict[str, int] = {}
     for pid in sample_player_ids:
         try:
@@ -704,29 +606,10 @@ def get_player_raw_stats(
     player_id: int,
     base_name: str,
 ) -> tuple:
-    """Fetch raw season-by-season stats for a player from the NHL API.
+    """Fetch raw player seasons across all leagues and both game types.
 
-    Uses the shared cached landing payload, then covers regular season
-    (gameTypeId=2) and playoffs (gameTypeId=3) across all leagues returned by
-    the API (unknown leagues are kept, not dropped).
-    Each row carries NHLeMultiplier resolved from normalized league key with a
-    safe fallback (NHLE_DEFAULT_MULTIPLIER). Multipliers are applied downstream
-    in player_pipeline.py so raw parquet-level values are preserved.
-
-    Saves calculation (FIX #5): prefers the 'saves' field; falls back to
-    shotsAgainst - goalsAgainst only when shotsAgainst > 0, preventing
-    false goalie identification from 0-0=0 calculations.
-
-    Args:
-        player_id: Numeric NHL player ID.
-        base_name: Display name used as the BaseName column in the returned DataFrame.
-
-    Returns:
-        Tuple of (DataFrame, base_name, position_code).
-        DataFrame has one row per season with columns: League, Age, SeasonYear,
-        GameType, GP, Points, Goals, Assists, PIM, +/-, Shots, TotalTOIMins,
-        Wins, Shutouts, Saves, WeightedSV, WeightedGAA, NHLeMultiplier.
-        Returns (empty DataFrame, base_name, 'S') on failure.
+    Keeps unknown leagues, stores NHLe multipliers for downstream use, and
+    preserves the goalie-safe saves fallback.
     """
     try:
         res = get_player_landing(player_id)
@@ -812,19 +695,7 @@ def get_id_to_name_map(category: str) -> dict:
 
 @st.cache_data(ttl=3600)
 def get_clone_details_map(category: str) -> dict:
-    """Build a player ID -> career stats dict from the records API.
-
-    Used to populate the KNN clone table shown in the projection dialog.
-    Handles franchise sub-totals by keeping only the row with the highest GP.
-
-    Args:
-        category: 'Skater' or 'Goalie'.
-
-    Returns:
-        Dict mapping int playerId to a stats dict.
-        Skater keys: name, team, gp, pts, g, a, pm.
-        Goalie keys:  name, team, gp, w, sv, so.
-    """
+    """Build the player-career lookup used by the KNN clone dialog."""
     records = fetch_all_time_records(category, "Regular")
     details = {}
     for r in records:
@@ -868,18 +739,7 @@ def get_all_time_rank(
     metric: str,
     value: float,
 ) -> int | None:
-    """Estimate a stat value's all-time career rank among NHL players.
-
-    Args:
-        category: 'Skater' or 'Goalie'.
-        s_type:   'Regular', 'Playoffs', or 'Both'.
-        metric:   Stat name (e.g. 'Points', 'Wins').
-        value:    The career total to rank.
-
-    Returns:
-        Integer rank (1 = all-time leader), or None if the metric has no
-        matching records key or the records list is empty.
-    """
+    """Estimate where a career total would rank on the all-time NHL list."""
     records = fetch_all_time_records(category, s_type)
     if not records:
         return None
@@ -909,23 +769,7 @@ def get_all_time_rank(
 
 
 def get_player_career_rank(pid: int, category: str, s_type: str, metric: str = "Points") -> int | None:
-    """Return a player's exact all-time career rank looked up by player ID.
-
-    Unlike get_all_time_rank (value comparison), this matches the player's
-    record by playerId in the sorted list, eliminating float drift and API
-    ordering discrepancies that cause off-by-N errors.
-
-    Args:
-        pid:      Numeric NHL player ID.
-        category: 'Skater' or 'Goalie'.
-        s_type:   'Regular', 'Playoffs', or 'Both'.
-        metric:   Stat to rank by: 'Points', 'Goals', or 'Assists' for skaters;
-            other values default to Points. Ignored for Goalies (always Wins).
-
-    Returns:
-        1-based integer rank (1 = all-time leader), or None if the player is
-        not found in the records list (rookie, non-NHL career, etc.).
-    """
+    """Look up a player's exact all-time rank by player ID instead of by value."""
     records = fetch_all_time_records(category, s_type)
     if not records:
         return None
