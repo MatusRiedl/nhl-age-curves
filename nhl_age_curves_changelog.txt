@@ -237,3 +237,30 @@ v0.61.0 - FAQ button tone down
 - VALIDATED: `python -m unittest tests.test_styles -v`,
   `python -m unittest tests.test_sidebar -v`, and
   `python -m unittest discover -s tests -v` all passed locally.
+
+v0.61.1 - compact in-chart axis label
+---------------------------------------------------------
+- CHANGED: Replaced the native x-axis and y-axis titles with a compact in-figure
+  Plotly header such as `Points by Age in Regular szn` so the chart wastes less
+  space.
+- CHANGED: The in-figure header now switches between `Age`, `GP`, and `Season`
+  plus `Regular szn`, `Play-offs`, or `Both` based on the active chart mode.
+- CHANGED: Kept the new label inside the Plotly figure so the modebar camera
+  export includes it in screenshots.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.1`.
+- VALIDATED: `python -m unittest tests.test_chart -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 30/30
+  tests.
+
+v0.61.2 - share link title alignment fix
+---------------------------------------------------------
+- FIXED: Moved the in-figure chart header slightly lower so it sits more level
+  with the Plotly modebar controls instead of crowding the top edge.
+- FIXED: Repositioned the custom `Copy link` control to sit after the Plotly
+  title text instead of overlapping underneath it.
+- FIXED: Added a safety fallback so the share control drops below the title on
+  tighter widths rather than crashing into the modebar buttons.
+- CHANGED: Synced the visible footer version in `app.py` to `v0.61.2`.
+- VALIDATED: `python -m unittest tests.test_chart -v` passed locally.
+- VALIDATED: `python -m unittest discover -s tests -v` passed locally with 31/31
+  tests.

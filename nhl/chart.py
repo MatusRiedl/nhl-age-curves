@@ -28,6 +28,57 @@ from nhl.constants import RATE_STATS, TEAM_RATE_STATS
 from nhl.dialog import show_season_details
 
 
+def _get_chart_context_label(team_mode: bool, games_mode: bool) -> str:
+    """Return the compact x-context label for the in-figure chart header.
+
+    Args:
+        team_mode: True when the chart is rendering team comparisons.
+        games_mode: True when the x-axis uses games played instead of age.
+
+    Returns:
+        str: Short label describing the x context, such as Age, GP, or Season.
+    """
+    if team_mode and not games_mode:
+        return "Season"
+    if games_mode:
+        return "GP"
+    return "Age"
+
+
+def _get_chart_season_label(season_type: str) -> str:
+    """Return the compact season descriptor for the in-figure chart header.
+
+    Args:
+        season_type: Selected season scope string from the UI.
+
+    Returns:
+        str: Short label suitable for compact chart copy.
+    """
+    season_labels = {
+        "Regular": "Regular szn",
+        "Playoffs": "Play-offs",
+        "Both": "Both",
+    }
+    return season_labels.get(season_type, season_type)
+
+
+def _build_chart_header(metric: str, team_mode: bool, games_mode: bool, season_type: str) -> str:
+    """Build the compact in-figure chart header shown above the plot area.
+
+    Args:
+        metric: Selected y-axis metric.
+        team_mode: True when the chart is rendering team comparisons.
+        games_mode: True when the x-axis uses games played instead of age.
+        season_type: Selected season scope string from the UI.
+
+    Returns:
+        str: Header text such as ``Points by Age in Regular szn``.
+    """
+    x_label = _get_chart_context_label(team_mode=team_mode, games_mode=games_mode)
+    season_label = _get_chart_season_label(season_type)
+    return f"{metric} by {x_label} in {season_label}"
+
+
 def render_chart(
     processed_dfs: list,
     metric: str,
@@ -207,6 +258,13 @@ def render_chart(
     else:
         _team_dtick = 20
 
+    chart_header = _build_chart_header(
+        metric=metric,
+        team_mode=team_mode,
+        games_mode=games_mode,
+        season_type=season_type,
+    )
+
     # ------------------------------------------------------------------
     # Build Plotly figure
     # ------------------------------------------------------------------
@@ -314,10 +372,18 @@ def render_chart(
 
     fig.update_layout(
         uirevision  = 'constant',
-        margin      = dict(l=0, r=0, t=40, b=12),
+        margin      = dict(l=0, r=0, t=58, b=12),
         height      = 500,
         font        = dict(size=17),
         hoverlabel  = dict(font_size=17, font_family="Arial", bgcolor="#1E1E1E"),
+        title       = dict(
+            text=chart_header,
+            x=0.01,
+            xanchor="left",
+            y=0.955,
+            yanchor="middle",
+            font=dict(size=15, family="Arial", color="rgba(255,255,255,0.82)"),
+        ),
         legend      = dict(
             title=None, orientation="h",
             yanchor="top", y=-0.22,
@@ -334,7 +400,7 @@ def render_chart(
 
     if team_mode and not games_mode:
         fig.update_layout(
-            margin = dict(l=0, r=0, t=40, b=18),
+            margin = dict(l=0, r=0, t=58, b=18),
             legend = dict(y=-0.35),
         )
         fig.update_traces(
@@ -347,11 +413,10 @@ def render_chart(
             ),
         )
         fig.update_xaxes(
-            title_text  = "Season Year",
+            title_text  = "",
             dtick       = _team_dtick,
             tickangle   = -45,
             automargin  = True,
-            title_font  = dict(size=25, family='Arial Black'),
             tickfont    = dict(size=18, family='Arial Black'),
             range       = _team_initial_range,
         )
@@ -367,10 +432,9 @@ def render_chart(
             ),
         )
         fig.update_xaxes(
-            title_text  = "Games Played",
+            title_text  = "",
             tickangle   = 0,
             automargin  = True,
-            title_font  = dict(size=25, family='Arial Black'),
             tickfont    = dict(size=18, family='Arial Black'),
         )
     else:
@@ -384,14 +448,14 @@ def render_chart(
             ),
         )
         fig.update_xaxes(
+            title_text  = "",
             tickangle   = 0,
             automargin  = True,
-            title_font  = dict(size=25, family='Arial Black'),
             tickfont    = dict(size=18, family='Arial Black'),
         )
 
     fig.update_yaxes(
-        title_font = dict(size=25, family='Arial Black'),
+        title_text = "",
         tickfont   = dict(size=18, family='Arial Black'),
     )
 
@@ -579,6 +643,7 @@ def render_chart(
             '  background:none;',
             '  font-size:13px; font-weight:600;',
             '}}',
+            '.nhl-share-btn span {{ white-space:nowrap; }}',
             '.nhl-share-btn:hover {{ color:#ffffff; }}',
             '.nhl-share-btn svg {{ width:22px; height:22px; display:block; }}',
             '@media (max-width:768px) {{',
@@ -590,7 +655,7 @@ def render_chart(
     }}
 
     function positionShareBtn(plot, btn, parent) {{
-        // Keep the button centered in the top gutter above the plotting area.
+        // Keep the button aligned with the Plotly title and clear of the modebar.
         var topGutter = 40;
         if (
             plot && plot._fullLayout && plot._fullLayout._size &&
@@ -606,6 +671,31 @@ def render_chart(
 
         var fallbackHeight = ((parent.innerWidth || 1024) <= 768) ? 20 : 28;
         var btnHeight = btn.offsetHeight || fallbackHeight;
+        var btnWidth = btn.offsetWidth || 88;
+        var plotBox = plot.getBoundingClientRect();
+        var titleEl = plot.querySelector('.gtitle');
+        var modebar = plot.querySelector('.modebar');
+
+        if (titleEl && plotBox) {{
+            var titleBox = titleEl.getBoundingClientRect();
+            var leftPx = Math.round(titleBox.right - plotBox.left + 10);
+            var topPx = Math.round(titleBox.top - plotBox.top + ((titleBox.height - btnHeight) / 2));
+
+            if (modebar) {{
+                var modebarBox = modebar.getBoundingClientRect();
+                var maxLeft = Math.round(modebarBox.left - plotBox.left - btnWidth - 10);
+                if (leftPx > maxLeft) {{
+                    leftPx = 10;
+                    topPx = Math.round(titleBox.bottom - plotBox.top + 4);
+                }}
+            }}
+
+            btn.style.left = Math.max(10, leftPx) + 'px';
+            btn.style.top = Math.max(4, topPx) + 'px';
+            return;
+        }}
+
+        btn.style.left = '10px';
         var topPx = Math.max(4, Math.round((topGutter - btnHeight) / 2));
         btn.style.top = topPx + 'px';
     }}
