@@ -33,6 +33,11 @@ from nhl.dialog import show_app_guide
 
 
 _VALID_STAT_CATEGORIES = ("Skater", "Goalie", "Team")
+_STAT_CATEGORY_LABELS = {
+    "Skater": "⛸️ Skater",
+    "Goalie": "🥅 Goalie",
+    "Team": "🏒 Team",
+}
 _SUPPORT_URL = "https://ko-fi.com/iksperial"
 _SUPPORT_LABEL = "Buy me a coffee"
 _SUPPORT_SUBLABEL = "Support the development"
@@ -89,6 +94,19 @@ def _sync_stat_category_selection() -> None:
     )
     st.session_state._stat_category_picker = resolved_category
     st.session_state.stat_category = resolved_category
+
+
+def _format_stat_category_label(stat_category: str) -> str:
+    """Return the emoji-decorated label for the category segmented control.
+
+    Args:
+        stat_category: Canonical internal category value.
+
+    Returns:
+        Display label with emoji while preserving plain internal values.
+    """
+    safe_category = _sanitize_stat_category(stat_category)
+    return _STAT_CATEGORY_LABELS[safe_category]
 
 
 @st.cache_data(ttl=300)
@@ -243,6 +261,7 @@ def render_sidebar() -> dict:
             "Category",
             options=_VALID_STAT_CATEGORIES,
             selection_mode="single",
+            format_func=_format_stat_category_label,
             key="_stat_category_picker",
             on_change=_sync_stat_category_selection,
             label_visibility="collapsed",
