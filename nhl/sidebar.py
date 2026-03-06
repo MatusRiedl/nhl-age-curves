@@ -229,6 +229,7 @@ def render_sidebar() -> dict:
         if st.session_state.get("_stat_category_picker") != current_category:
             st.session_state._stat_category_picker = current_category
 
+        st.markdown("<div class='faq-btn-anchor'></div>", unsafe_allow_html=True)
         if st.button(
             "FAQ",
             key="open_app_guide_sidebar",

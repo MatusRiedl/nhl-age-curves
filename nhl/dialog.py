@@ -1,8 +1,9 @@
-"""Chart click dialogs for season snapshots, projections, and baselines."""
+"""Chart click dialogs for season snapshots, projections, baselines, and help."""
 
 import streamlit as st
 
 from nhl.data_loaders import get_all_time_rank
+from nhl.era import get_era_multiplier
 
 
 BASELINE_LABEL_TO_KEY = {
@@ -10,10 +11,20 @@ BASELINE_LABEL_TO_KEY = {
     'Goalie 75th Percentile Baseline': 'Goalie',
 }
 
+_ERA_EXPLAINER_BANDS: tuple[tuple[str, int], ...] = (
+    ("<= 1967", 1967),
+    ("1968-79", 1975),
+    ("1980-92", 1985),
+    ("1993-96", 1995),
+    ("1997-2004", 2001),
+    ("2005-12", 2010),
+    ("2013-17", 2015),
+    ("2018+", 2022),
+)
 
-@st.dialog("How This App Works")
-def show_app_guide() -> None:
-    """Show a concise methodology guide without exposing the full recipe.
+
+def _render_projection_guide_tab() -> None:
+    """Render the projection explainer content.
 
     Args:
         None.
@@ -21,11 +32,6 @@ def show_app_guide() -> None:
     Returns:
         None.
     """
-    st.markdown(
-        "This app turns NHL careers into age curves so you can compare real results, "
-        "historical baselines, and a forward-looking projection in one place."
-    )
-
     st.markdown("#### Basics")
     st.markdown(
         "- **Solid line:** real performance already logged.\n"
@@ -62,29 +68,187 @@ def show_app_guide() -> None:
             "stability rules are deliberate system design, not black-box learning."
         )
 
-    st.info(
-        "Short version: this is a hybrid forecasting system, not a single opaque model."
+
+def _render_baseline_guide_tab() -> None:
+    """Render the baseline explainer content.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    st.markdown(
+        "The dashed baseline line is your historical benchmark. It is there so you can see "
+        "whether a player is tracking below, around, or above a strong historical standard."
     )
 
-    st.markdown("#### How baseline works")
     base_skater_col, base_goalie_col = st.columns(2)
     with base_skater_col:
         st.markdown(
             "**Skater baseline**\n\n"
-            "A skater-only 75th percentile age curve built from historical player "
-            "seasons. It answers: what does a strong skater age track usually look like?"
+            "A skater-only 75th percentile age curve built from historical player seasons. "
+            "Think of it as: what does a really strong skater age track usually look like?"
         )
     with base_goalie_col:
         st.markdown(
             "**Goalie baseline**\n\n"
-            "A separate goalie-only 75th percentile curve. Goalie benchmarks are handled "
-            "independently because their counting stats and rate stats age differently."
+            "A separate goalie-only 75th percentile curve. Goalies get their own baseline "
+            "because goalie stats age differently from skater stats."
         )
 
+    st.markdown("#### How to read it")
     st.markdown(
-        "The baseline is **not ML** and it is **not trying to predict this player**. "
-        "It is a historical measuring stick so you can judge how exceptional a curve is."
+        "- above the baseline usually means an exceptional track for that age\n"
+        "- around the baseline means the player is in strong company\n"
+        "- below the baseline does not mean bad — just below that specific historical bar"
     )
+
+
+def _render_era_adjust_skaters_guide_tab() -> None:
+    """Render the skater era-adjustment explainer content.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    st.markdown(
+        "Era adjust normalizes NHL scoring to a modern baseline so cross-era comparisons "
+        "stop cheating. It fixes the obvious problem: a raw point total from the 80s and "
+        "a raw point total from the dead-puck era are not the same accomplishment."
+    )
+
+    st.markdown("#### What changes")
+    st.markdown(
+        "- **Raw stats:** the original season totals for **Goals**, **Assists**, and **Points**.\n"
+        "- **Era-adjusted stats:** those same NHL totals after the app applies the era multiplier."
+    )
+
+    example_80s_col, example_dead_puck_col = st.columns(2)
+    with example_80s_col:
+        st.markdown(
+            "**Example: 1985 skater**\n\n"
+            "The 80s were offense-heavy, so the app deflates raw scoring from that environment."
+        )
+    with example_dead_puck_col:
+        st.markdown(
+            "**Example: 2001 skater**\n\n"
+            "Dead-puck seasons were tougher for offense, so the app boosts scoring from that environment."
+        )
+
+    st.markdown("#### Multipliers used")
+    st.markdown(
+        "\n".join(
+            f"- **{label}:** `{get_era_multiplier(sample_year):.2f}`"
+            for label, sample_year in _ERA_EXPLAINER_BANDS
+        )
+    )
+
+    st.markdown("#### Why it changed")
+    st.markdown(
+        "- High-scoring eras get **deflated** because offense was easier to rack up.\n"
+        "- Low-scoring eras get **boosted** because offense was harder to produce.\n"
+        "- That gives you a fairer apples-to-apples curve when players come from different generations."
+    )
+
+
+def _render_era_adjust_goalies_guide_tab() -> None:
+    """Render the goalie era-adjustment explainer content.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    st.markdown(
+        "Goalie era adjust uses separate logic because goalie stats are not the same beast as skater scoring. "
+        "The app tries to move goalie seasons into a modern context without pretending Save %, GAA, and Shutouts all behave the same way."
+    )
+
+    st.markdown("#### What changes")
+    st.markdown(
+        "- **Save %:** shifted toward the modern 2018+ environment while keeping how far above or below league average the goalie was.\n"
+        "- **GAA:** scaled by the era multiplier so goals-against sits in the same modern scoring context.\n"
+        "- **Shutouts:** moved the opposite way, because shutouts were harder to pile up in high-scoring eras."
+    )
+
+    goalie_sv_col, goalie_misc_col = st.columns(2)
+    with goalie_sv_col:
+        st.markdown(
+            "**Save % logic**\n\n"
+            "This is not the skater method. The app compares a goalie's Save % to that era's league average, then shifts it toward the modern baseline."
+        )
+    with goalie_misc_col:
+        st.markdown(
+            "**GAA + Shutouts logic**\n\n"
+            "GAA gets scaled into the modern scoring environment, while Shutouts move inversely so old high-scoring eras do not get unfairly punished."
+        )
+
+def _render_smoothing_guide_tab() -> None:
+    """Render the smoothing explainer content.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    st.markdown(
+        "Smoothing is a display aid. It makes the visible curve easier to read without pretending "
+        "the raw season-to-season noise is the real story."
+    )
+
+    smooth_math_col, smooth_visual_col = st.columns(2)
+    with smooth_math_col:
+        st.markdown(
+            "**What the app does**\n\n"
+            "When **Smooth** is on, the selected metric becomes a **3-season rolling average**. "
+            "At the start of a career it uses whatever history exists, so the early points still render cleanly."
+        )
+    with smooth_visual_col:
+        st.markdown(
+            "**Why it looks calmer**\n\n"
+            "The chart also switches to a curved line shape, so the trend reads more like a career arc "
+            "and less like a seismograph having a bad day."
+        )
+
+    st.markdown("#### What smoothing helps with")
+    st.markdown(
+        "- softens one-year spikes and dips\n"
+        "- makes long careers easier to scan\n"
+        "- visually reduces harsh jumps between neighboring seasons"
+    )
+
+
+@st.dialog("How This App Works")
+def show_app_guide() -> None:
+    """Show a concise methodology guide without exposing the full recipe.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    st.markdown(
+        "This app turns NHL careers into age curves so you can compare real results, "
+        "historical baselines, and a forward-looking projection in one place."
+    )
+
+    projection_tab, baseline_tab, era_adjust_skaters_tab, era_adjust_goalies_tab, smoothing_tab = st.tabs(["Projection", "Baseline", "Era adjust skaters", "Era adjust goalies", "Smoothing"])
+    with projection_tab:
+        _render_projection_guide_tab()
+    with baseline_tab:
+        _render_baseline_guide_tab()
+    with era_adjust_skaters_tab:
+        _render_era_adjust_skaters_guide_tab()
+    with era_adjust_goalies_tab:
+        _render_era_adjust_goalies_guide_tab()
+    with smoothing_tab:
+        _render_smoothing_guide_tab()
 
 
 @st.dialog("Season Snapshot")

@@ -354,6 +354,18 @@ _CSS = """
             border-color: #1a569d !important;
         }
 
+        div.element-container:has(.faq-btn-anchor) + div.element-container button {
+            background: rgba(43, 113, 199, 0.16) !important;
+            border: 1px solid rgba(103, 168, 255, 0.28) !important;
+            color: rgba(230, 241, 255, 0.95) !important;
+            box-shadow: inset 0 0 0 1px rgba(43, 113, 199, 0.05) !important;
+        }
+        div.element-container:has(.faq-btn-anchor) + div.element-container button:hover {
+            background: rgba(43, 113, 199, 0.24) !important;
+            border-color: rgba(124, 184, 255, 0.4) !important;
+            color: #ffffff !important;
+        }
+
         div.element-container:has(.live-games-matchup),
         div.element-container:has(.live-games-detail) {
             margin-bottom: 0 !important;
