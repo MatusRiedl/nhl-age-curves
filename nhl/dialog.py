@@ -137,8 +137,9 @@ def _render_era_adjust_skaters_guide_tab() -> None:
 
     st.markdown("#### Leagues")
     st.markdown(
-        "The app does not pretend every league scores like the NHL. Non-NHL seasons get a "
-        "**league multiplier** first so outside-league production is translated into a rough NHL-equivalent level."
+        "When **Era** is on, the app does not pretend every league scores like the NHL. "
+        "Non-NHL skater seasons get a **league multiplier** first so outside-league production "
+        "is translated into a rough NHL-equivalent level."
     )
     st.markdown(
         "The multiplier is looked up from the season's league code: "
@@ -147,10 +148,9 @@ def _render_era_adjust_skaters_guide_tab() -> None:
         f"or rare leagues fall back to **{NHLE_DEFAULT_MULTIPLIER:.2f}**."
     )
     st.markdown(
-        "It only scales **Points**, **Goals**, and **Assists**. GP and the other non-scoring stats stay raw. "
-        "A point is not equally hard in every league, so this keeps junior, college, European, and minor-league "
-        "production from being treated like raw NHL scoring. After that, skater **era adjust** only runs on **NHL rows**, "
-        "so the app does not double-count the adjustment."
+        "With **Era off**, the chart shows raw league scoring. With **Era on**, it only scales "
+        "**Points**, **Goals**, and **Assists**. GP and the other non-scoring stats stay raw. "
+        "After that, skater **era adjust** only runs on **NHL rows**, so the app does not double-count the adjustment."
     )
 
 

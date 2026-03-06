@@ -68,7 +68,7 @@ def process_players(
         raw_df['BaseName'] = base_name
         raw_dfs_cache.append(raw_df.copy())
 
-        # --- Step 3: League filter + NHLe conversion ---
+        # --- Step 3: League filter + optional NHLe conversion ---
         _selected_norm = {
             normalize_league_abbrev(_lg)
             for _lg in _league_filter
@@ -79,18 +79,20 @@ def process_players(
         ].copy()
         if raw_df.empty:
             continue
-        # Apply per-row NHLe multipliers to scoring stats only.
-        # GP and all non-scoring stats are intentionally kept raw.
+        # When Era is on, translate skater scoring from other leagues into a rough
+        # NHL-equivalent level before the NHL-only era adjustment runs. With Era off,
+        # keep the selected leagues raw.
         if 'NHLeMultiplier' not in raw_df.columns:
             raw_df['NHLeMultiplier'] = raw_df['League'].apply(
                 lambda _lg: NHLE_MULTIPLIERS.get(
                     normalize_league_abbrev(_lg), NHLE_DEFAULT_MULTIPLIER
                 )
             )
-        _mult = raw_df['NHLeMultiplier'].fillna(NHLE_DEFAULT_MULTIPLIER)
-        raw_df['Points'] *= _mult
-        raw_df['Goals'] *= _mult
-        raw_df['Assists'] *= _mult
+        if do_era and stat_category == "Skater":
+            _mult = raw_df['NHLeMultiplier'].fillna(NHLE_DEFAULT_MULTIPLIER)
+            raw_df['Points'] *= _mult
+            raw_df['Goals'] *= _mult
+            raw_df['Assists'] *= _mult
 
         # --- Step 4: Season type filter ---
         if season_type != "Both":
@@ -102,7 +104,7 @@ def process_players(
         if do_era and stat_category == "Skater":
             # FIX #4: Adjust Goals and Assists independently, not just Points.
             # Era multipliers derived from NHL GF/GP data; apply to NHL rows only
-            # so non-NHL rows are not double-adjusted (NHLe already scales them).
+            # so non-NHL rows are not double-adjusted after the league-normalisation step.
             _nhl_mask = raw_df['League'].apply(normalize_league_abbrev) == 'NHL'
             if _nhl_mask.any():
                 _era_mults = raw_df.loc[_nhl_mask, 'SeasonYear'].apply(get_era_multiplier)

@@ -136,7 +136,7 @@ SECTION 6 - DATA PIPELINE (PER PLAYER, PER RENDER)
 1. Fetch raw player data with `get_player_raw_stats()`.
 2. Apply the skater/goalie gatekeeper.
 3. Filter to the selected leagues.
-4. Apply NHLe to non-NHL `Points`, `Goals`, and `Assists` only.
+4. If `Era` is on for skaters, apply NHLe to non-NHL `Points`, `Goals`, and `Assists`. If `Era` is off, keep league scoring raw.
 5. Filter to `Regular`, `Playoffs`, or `Both`.
 6. Apply era adjustment.
 7. Branch by x-axis mode.

@@ -263,7 +263,8 @@ def render_controls() -> tuple:
                     help=(
                         "NHL is available but optional. Additional options are discovered from "
                         "seasonTotals leagueAbbrev values of currently loaded players. "
-                        "Points, Goals, and Assists are NHLe-adjusted; GP stays raw."
+                        "With Era on, non-NHL skater Points, Goals, and Assists are "
+                        "league-normalized; with Era off, league scoring stays raw. GP stays raw."
                     ),
                 )
                 _non_nhl = [
@@ -271,7 +272,10 @@ def render_controls() -> tuple:
                     if normalize_league_abbrev(l) != 'NHL'
                 ]
                 if _non_nhl:
-                    st.caption(f"NHLe-adjusted: {', '.join(_non_nhl)}")
+                    if st.session_state.do_era:
+                        st.caption(f"League-normalized with Era on: {', '.join(_non_nhl)}")
+                    else:
+                        st.caption(f"Raw league scoring with Era off: {', '.join(_non_nhl)}")
 
         # Captions for toggle context (rendered after metric is resolved)
         if st.session_state.do_cumul_toggle and metric in _cumul_rate_set:
