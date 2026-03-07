@@ -26,7 +26,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from nhl.constants import RATE_STATS, TEAM_RATE_STATS
-from nhl.dialog import show_season_details
+from nhl.dialog import show_season_details, show_team_game_details
 
 
 X_AXIS_TICK_COLOR = "rgba(255, 255, 255, 0.80)"
@@ -78,7 +78,7 @@ def _get_chart_context_label(
     if team_mode and not games_mode:
         return "Season"
     if games_mode:
-        if not team_mode and str(selected_season) != "All":
+        if str(selected_season) != "All":
             return "Game Number"
         return "Games Played"
     return "Age"
@@ -193,7 +193,7 @@ def _build_chart_header(
     era_label = _get_chart_era_label(metric, stat_category, do_era, team_mode)
     header_verb = "at" if (not team_mode and games_mode and str(selected_season) != "All") else "by"
     header_parts = [f"{metric} {header_verb} {x_label}", season_label]
-    if not team_mode and str(selected_season) != "All":
+    if str(selected_season) != "All":
         header_parts.insert(1, _format_chart_season_label(selected_season))
     if era_label:
         header_parts.append(era_label)
@@ -657,17 +657,51 @@ def render_chart(
     # ------------------------------------------------------------------
     # Determine x-axis column and custom_data columns
     # ------------------------------------------------------------------
-    is_single_season_player_games = (
-        games_mode and not team_mode and str(selected_season) != "All"
-    )
+    is_single_season_mode = games_mode and str(selected_season) != "All"
+    is_single_season_player_games = is_single_season_mode and not team_mode
+    is_single_season_team_games = is_single_season_mode and team_mode
     has_exact_game_custom_data = (
         is_single_season_player_games
         and all(col in final_df.columns for col in ["GameId", "GameDate", "GameType"])
+    )
+    has_exact_team_game_custom_data = (
+        is_single_season_team_games
+        and all(
+            col in final_df.columns
+            for col in [
+                "GameId",
+                "GameDate",
+                "GameType",
+                "OpponentAbbrev",
+                "OpponentName",
+                "HomeRoadFlag",
+                "Goals",
+                "GoalsAgainst",
+                "ResultLabel",
+                "RecordLabel",
+            ]
+        )
     )
 
     if team_mode and not games_mode:
         x_col       = "SeasonYear"
         custom_cols = ["BaseName", "Player", "SeasonLabel"]
+    elif is_single_season_team_games and has_exact_team_game_custom_data:
+        x_col = "CumGP"
+        custom_cols = [
+            "BaseName",
+            "Player",
+            "GameDate",
+            "GameType",
+            "OpponentAbbrev",
+            "OpponentName",
+            "HomeRoadFlag",
+            "ResultLabel",
+            "Goals",
+            "GoalsAgainst",
+            "GameId",
+            "RecordLabel",
+        ]
     elif games_mode:
         x_col       = "CumGP"
         if has_exact_game_custom_data:
@@ -688,6 +722,7 @@ def render_chart(
         chart_key = (
             f"chart_team_{hash(str(st.session_state.teams))}"
             f"_{metric}_{st.session_state.do_smooth}_{st.session_state.x_axis_mode}"
+            f"_{selected_season}_{season_type}"
         )
     else:
         player_names = [df['BaseName'].iloc[0] for df in processed_dfs if not df.empty]
@@ -919,6 +954,24 @@ def render_chart(
             )
             if is_single_season_lollipop_mode:
                 fig.update_traces(mode="markers")
+        elif is_single_season_team_games:
+            fig.update_traces(
+                connectgaps   = True,
+                line          = dict(width=4, shape='spline', smoothing=0.6),
+                marker        = dict(
+                    size=SEASON_MARKER_SIZE,
+                    line=dict(width=1.6, color=SEASON_MARKER_OUTLINE),
+                ),
+                hovertemplate = (
+                    "<b>Click for details</b><br>"
+                    "<b>%{customdata[1]}</b><br>"
+                    "%{customdata[2]} · %{customdata[3]}<br>"
+                    "Opponent: %{customdata[5]} (%{customdata[6]})<br>"
+                    "Result: %{customdata[7]} %{customdata[8]:.0f}-%{customdata[9]:.0f}<br>"
+                    f"{games_hover_label} %{{x}}<br>"
+                    f"Value: %{{y:{_val_fmt}}}<extra></extra>"
+                ),
+            )
         else:
             fig.update_traces(
                 connectgaps    = True,
@@ -970,6 +1023,17 @@ def render_chart(
                     f"<b>%{{customdata[1]}}</b><br>Season %{{customdata[2]}}<br>%{{y:.1f}}%<extra></extra>"
                 )
             )
+        elif is_single_season_team_games:
+            fig.update_traces(
+                hovertemplate=(
+                    "<b>Click for details</b><br>"
+                    "<b>%{customdata[1]}</b><br>"
+                    "%{customdata[2]} · %{customdata[3]}<br>"
+                    "Opponent: %{customdata[5]} (%{customdata[6]})<br>"
+                    "Result: %{customdata[7]} %{customdata[8]:.0f}-%{customdata[9]:.0f}<br>"
+                    "Game %{x}<br>%{y:.1f}%<extra></extra>"
+                )
+            )
         else:
             x_label = "Game" if games_mode and str(selected_season) != "All" else "Career Game" if games_mode else "Age"
             fig.update_traces(
@@ -987,6 +1051,9 @@ def render_chart(
         if is_single_season_lollipop_mode:
             helper_traces = _build_single_season_lollipop_stem_traces(fig, player_colors) + helper_traces
         _prepend_traces(fig, helper_traces)
+        _disable_click_selection_dimming(fig)
+    elif is_single_season_team_games:
+        _prepend_traces(fig, _build_single_season_marker_glow_traces(fig, player_colors))
         _disable_click_selection_dimming(fig)
     elif is_clickable_age_chart:
         _prepend_traces(fig, _build_clickable_age_marker_glow_traces(fig, player_colors))
@@ -1294,7 +1361,52 @@ def render_chart(
     # ------------------------------------------------------------------
     # Click handler: fire season-detail dialog on point selection
     # ------------------------------------------------------------------
-    if not team_mode and event and event.selection.get("points"):
+    if team_mode and is_single_season_team_games and event and event.selection.get("points"):
+        point = event.selection["points"][0]
+        cd = point.get("customdata", [])
+        clicked_team_abbr = str(cd[0]) if len(cd) > 0 else ""
+        clicked_team_name = str(cd[1]) if len(cd) > 1 else ""
+        clicked_game_date = str(cd[2]) if len(cd) > 2 else ""
+        clicked_game_type = str(cd[3]) if len(cd) > 3 else ""
+        clicked_opponent_abbr = str(cd[4]) if len(cd) > 4 else ""
+        clicked_opponent_name = str(cd[5]) if len(cd) > 5 else ""
+        clicked_home_road = str(cd[6]) if len(cd) > 6 else ""
+        clicked_result = str(cd[7]) if len(cd) > 7 else ""
+        try:
+            clicked_goals_for = float(cd[8]) if len(cd) > 8 else 0.0
+        except Exception:
+            clicked_goals_for = 0.0
+        try:
+            clicked_goals_against = float(cd[9]) if len(cd) > 9 else 0.0
+        except Exception:
+            clicked_goals_against = 0.0
+        try:
+            clicked_game_id = int(cd[10]) if len(cd) > 10 and cd[10] not in (None, "") else None
+        except Exception:
+            clicked_game_id = None
+        clicked_record_label = str(cd[11]) if len(cd) > 11 else ""
+
+        show_team_game_details(
+            team_name=clicked_team_name,
+            team_abbr=clicked_team_abbr,
+            metric=metric,
+            val=point["y"],
+            full_df=final_df,
+            s_type=season_type,
+            selected_season=selected_season,
+            game_number=int(point["x"]),
+            game_id=clicked_game_id,
+            game_date=clicked_game_date,
+            clicked_game_type=clicked_game_type,
+            opponent_abbr=clicked_opponent_abbr,
+            opponent_name=clicked_opponent_name,
+            home_road_flag=clicked_home_road,
+            result_label=clicked_result,
+            goals_for=clicked_goals_for,
+            goals_against=clicked_goals_against,
+            record_label=clicked_record_label,
+        )
+    elif not team_mode and event and event.selection.get("points"):
         point = event.selection["points"][0]
         cd = point.get("customdata", [])
         clicked_player_name = str(cd[1]) if len(cd) > 1 else ""

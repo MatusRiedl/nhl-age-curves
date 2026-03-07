@@ -176,7 +176,6 @@ def encode_state_to_params(ss) -> dict:
     x_axis_mode = ss.get("x_axis_mode", _default_x_axis_mode(stat_category))
     season_forces_games = (
         chart_season != "All"
-        and stat_category != "Team"
         and x_axis_mode == "Games Played"
     )
     if x_axis_mode != _default_x_axis_mode(stat_category) and not season_forces_games:

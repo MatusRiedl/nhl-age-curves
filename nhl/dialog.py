@@ -227,6 +227,69 @@ def _build_player_game_stat_frame(game_row, stat_category: str) -> pd.DataFrame:
     return pd.DataFrame([row])
 
 
+def _resolve_team_game_row(
+    full_df,
+    team_abbr: str,
+    game_id: int | None,
+    game_date: str | None,
+    clicked_game_type: str | None,
+):
+    """Return the selected team game row, preferring exact game identifiers."""
+    if full_df is None or getattr(full_df, "empty", True):
+        return None
+
+    filtered_df = full_df.copy()
+    if team_abbr and 'BaseName' in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df['BaseName'] == team_abbr]
+    if clicked_game_type and 'GameType' in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df['GameType'] == clicked_game_type]
+
+    if game_id and 'GameId' in filtered_df.columns:
+        game_match = filtered_df[filtered_df['GameId'] == int(game_id)]
+        if not game_match.empty:
+            return game_match.iloc[-1]
+
+    if game_date and 'GameDate' in filtered_df.columns:
+        date_match = filtered_df[filtered_df['GameDate'] == str(game_date)]
+        if not date_match.empty:
+            return date_match.iloc[-1]
+
+    return filtered_df.iloc[-1] if not filtered_df.empty else None
+
+
+def _build_team_game_stat_frame(game_row, metric: str, val: float) -> pd.DataFrame:
+    """Build the one-row team game snapshot table for the dialog."""
+    home_road_flag = str(game_row.get('HomeRoadFlag', '') or '').strip().upper()
+    site_label = 'Home' if home_road_flag == 'H' else 'Road' if home_road_flag == 'R' else ''
+    opponent_name = str(game_row.get('OpponentName', '') or game_row.get('OpponentAbbrev', '') or '')
+    metric_value = float(val) if val is not None else float(game_row.get(metric, 0) or 0)
+    if metric in {'Win%', 'PP%'}:
+        metric_display = f"{metric_value:.1f}%"
+    elif metric in {'GF/G', 'GA/G', 'PPG'}:
+        metric_display = f"{metric_value:.3f}"
+    else:
+        metric_display = str(int(round(metric_value)))
+
+    game_goals_for = int(round(float(game_row.get('GameGoalsFor', game_row.get('Goals', 0)) or 0)))
+    game_goals_against = int(round(float(game_row.get('GameGoalsAgainst', game_row.get('GoalsAgainst', 0)) or 0)))
+
+    row = {
+        'Date': str(game_row.get('GameDate', '') or ''),
+        'Type': str(game_row.get('GameType', '') or ''),
+        'Site': site_label,
+        'Opponent': opponent_name,
+        'Result': str(game_row.get('ResultLabel', '') or ''),
+        'Score': f'{game_goals_for}-{game_goals_against}',
+        'Record': str(game_row.get('RecordLabel', '') or ''),
+        'Pts': int(round(float(game_row.get('Points', 0) or 0))),
+        'W': int(round(float(game_row.get('Wins', 0) or 0))),
+        'GF': int(round(float(game_row.get('Goals', 0) or 0))),
+        'GA': int(round(float(game_row.get('GoalsAgainst', 0) or 0))),
+        metric: metric_display,
+    }
+    return pd.DataFrame([row])
+
+
 def _render_projection_guide_tab() -> None:
     """Render the projection explainer content.
 
@@ -684,3 +747,77 @@ def show_season_details(
                 table_html += "</tr>"
             table_html += "</table>"
             st.markdown(table_html, unsafe_allow_html=True)
+
+
+@st.dialog("Team Game Snapshot")
+def show_team_game_details(
+    team_name: str,
+    team_abbr: str,
+    metric: str,
+    val: float,
+    full_df,
+    s_type: str,
+    selected_season: str | int,
+    game_number: int,
+    game_id: int | None = None,
+    game_date: str | None = None,
+    clicked_game_type: str | None = None,
+    opponent_abbr: str | None = None,
+    opponent_name: str | None = None,
+    home_road_flag: str | None = None,
+    result_label: str | None = None,
+    goals_for: float | int | None = None,
+    goals_against: float | int | None = None,
+    record_label: str | None = None,
+) -> None:
+    """Render the dialog for one selected-season team game point."""
+    del s_type
+    try:
+        season_year = int(selected_season)
+        season_label = f"{season_year}-{str(season_year + 1)[2:]}"
+    except Exception:
+        season_label = str(selected_season)
+
+    type_label = clicked_game_type or "Game"
+    st.markdown(f"### {team_name} — Game {int(game_number)} · {season_label} · {type_label}")
+
+    game_row = _resolve_team_game_row(
+        full_df=full_df,
+        team_abbr=team_abbr,
+        game_id=game_id,
+        game_date=game_date,
+        clicked_game_type=clicked_game_type,
+    )
+    if game_row is None:
+        st.write("No team data available for this click.")
+        return
+
+    game_row = game_row.copy()
+    if home_road_flag:
+        game_row['HomeRoadFlag'] = home_road_flag
+    if opponent_abbr:
+        game_row['OpponentAbbrev'] = opponent_abbr
+    if opponent_name:
+        game_row['OpponentName'] = opponent_name
+    if result_label:
+        game_row['ResultLabel'] = result_label
+    if record_label:
+        game_row['RecordLabel'] = record_label
+    if goals_for is not None:
+        game_row['GameGoalsFor'] = goals_for
+    if goals_against is not None:
+        game_row['GameGoalsAgainst'] = goals_against
+    if team_abbr:
+        game_row['TeamAbbrev'] = team_abbr
+    if team_name:
+        game_row['TeamName'] = team_name
+
+    score_details = get_game_details(str(game_date or game_row.get('GameDate', '') or ''), int(game_id or 0))
+    matchup_context = _build_matchup_context(game_row, score_details)
+    st.markdown(_build_matchup_card_html(matchup_context), unsafe_allow_html=True)
+    st.markdown("**Team snapshot**")
+    st.dataframe(
+        _build_team_game_stat_frame(game_row, metric, val),
+        hide_index=True,
+        use_container_width=True,
+    )

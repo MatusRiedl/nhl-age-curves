@@ -17,6 +17,7 @@ from nhl.data_loaders import (
     get_clone_details_map,
     get_id_to_name_map,
     get_player_available_nhl_seasons,
+    get_team_available_nhl_seasons,
     load_all_team_seasons,
     load_historical_data,
 )
@@ -186,10 +187,7 @@ if _tm and st.session_state.x_axis_mode == "Age":
 elif not _tm and st.session_state.x_axis_mode == "Season Year":
     st.session_state.x_axis_mode = "Age"
 
-if _tm and st.session_state.chart_season != "All":
-    st.session_state.chart_season = "All"
-
-_season_mode_requested = (not _tm) and st.session_state.chart_season != "All"
+_season_mode_requested = st.session_state.chart_season != "All"
 if _season_mode_requested:
     if st.session_state.x_axis_mode != "Games Played":
         st.session_state._pre_season_chart_x_axis_mode = st.session_state.x_axis_mode
@@ -203,7 +201,7 @@ if _season_mode_requested:
     st.session_state.do_era = False
 else:
     _saved_x_axis = st.session_state.get("_pre_season_chart_x_axis_mode")
-    if _saved_x_axis in {"Age", "Games Played"} and st.session_state.x_axis_mode == "Games Played":
+    if _saved_x_axis in {"Age", "Games Played", "Season Year"} and st.session_state.x_axis_mode == "Games Played":
         st.session_state.x_axis_mode = _saved_x_axis
     st.session_state._pre_season_chart_x_axis_mode = None
     _saved_leagues = st.session_state.get("_pre_season_league_filter")
@@ -253,10 +251,17 @@ team_mode = st.session_state.stat_category == "Team"
 # Active player board — shared across Skater and Goalie categories.
 # The pipeline's is_goalie gatekeeper filters per category at render time.
 active_players = {} if team_mode else st.session_state.players
+all_team_df = load_all_team_seasons() if team_mode else None
 
 chart_season_options: list[str | int] = ["All"]
 available_chart_seasons: set[int] = set()
-if active_players:
+if team_mode and st.session_state.teams:
+    for _abbr in st.session_state.teams.keys():
+        try:
+            available_chart_seasons.update(get_team_available_nhl_seasons(_abbr))
+        except Exception:
+            continue
+elif active_players:
     for _pid in active_players.keys():
         try:
             available_chart_seasons.update(get_player_available_nhl_seasons(int(_pid)))
@@ -272,7 +277,7 @@ chart_season_options.extend(sorted(available_chart_seasons, reverse=True))
 if st.session_state.chart_season not in chart_season_options:
     st.session_state.chart_season = "All"
     _saved_x_axis = st.session_state.get("_pre_season_chart_x_axis_mode")
-    if _saved_x_axis in {"Age", "Games Played"} and st.session_state.x_axis_mode == "Games Played":
+    if _saved_x_axis in {"Age", "Games Played", "Season Year"} and st.session_state.x_axis_mode == "Games Played":
         st.session_state.x_axis_mode = _saved_x_axis
     st.session_state._pre_season_chart_x_axis_mode = None
     _saved_leagues = st.session_state.get("_pre_season_league_filter")
@@ -280,9 +285,9 @@ if st.session_state.chart_season not in chart_season_options:
         st.session_state.league_filter = _saved_leagues or ["NHL"]
     st.session_state._pre_season_league_filter = None
 
-season_mode = (not team_mode) and st.session_state.chart_season != "All"
+season_mode = st.session_state.chart_season != "All"
 games_mode = st.session_state.x_axis_mode == "Games Played"
-do_base = st.session_state.do_base and not team_mode and not season_mode
+do_base    = st.session_state.do_base and not team_mode and not season_mode
 do_prime = st.session_state.do_prime and not season_mode
 share_params = encode_state_to_params(st.session_state)
 
@@ -312,7 +317,6 @@ team_baselines = {}
 
 if team_mode:
     # ── Team pipeline ─────────────────────────────────────────────────
-    all_team_df    = load_all_team_seasons()
     team_baselines = get_team_baselines()
 
     if all_team_df.empty or "teamAbbrev" not in all_team_df.columns:
@@ -330,6 +334,7 @@ if team_mode:
             do_cumul    = do_cumul,
             do_smooth   = st.session_state.do_smooth,
             games_mode  = games_mode,
+            selected_season = st.session_state.chart_season,
         )
 
 elif active_players:
@@ -404,7 +409,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.84.0 -- 5598 lines of Python<br>"
+    "Created by Iksperial. v0.86.0 -- 6303 lines of Python<br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

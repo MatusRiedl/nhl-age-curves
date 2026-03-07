@@ -7,14 +7,16 @@ from typing import Callable
 import pandas as pd
 import streamlit as st
 
-from nhl.constants import ACTIVE_TEAMS, RATE_STATS, TEAM_FOUNDED
+from nhl.constants import ACTIVE_TEAMS, RATE_STATS, TEAM_FOUNDED, TEAM_RATE_STATS
 from nhl.data_loaders import (
     get_player_awards,
     get_player_career_rank,
     get_player_current_team,
     get_player_hero_image,
     get_player_season_rank_map,
+    get_team_season_rank_map,
     get_player_roster_info,
+    get_team_season_summary,
     get_team_all_time_stats,
     get_team_trophy_summary,
 )
@@ -255,13 +257,13 @@ def get_panel_tab_ids() -> set[str]:
 
 
 def _get_player_chart_colors() -> dict[str, str | None]:
-    """Return the active chart color map for real player traces.
+    """Return the active chart color map for real chart traces.
 
     Args:
         None.
 
     Returns:
-        Mapping of player display names to the colors used on the chart.
+        Mapping of trace display names to the colors used on the chart.
     """
     session_state = getattr(st, "session_state", None)
     if session_state is None:
@@ -304,6 +306,21 @@ def _iter_visible_players_for_category(processed_dfs: list, players: dict):
         yield pid, name, proc_df
 
 
+def _iter_visible_teams(processed_dfs: list, active_teams: dict):
+    """Yield selected teams that still have visible rows in the active pipeline."""
+    proc_lookup: dict[str, pd.DataFrame] = {}
+    for proc_df in processed_dfs:
+        if proc_df.empty or "BaseName" not in proc_df.columns or "Player" not in proc_df.columns:
+            continue
+        proc_lookup[str(proc_df["BaseName"].iloc[0])] = proc_df
+
+    for abbr, full_name in active_teams.items():
+        proc_df = proc_lookup.get(str(abbr))
+        if proc_df is None or proc_df.empty:
+            continue
+        yield abbr, full_name, proc_df
+
+
 def render_comparison_area(
     processed_dfs: list,
     players: dict,
@@ -342,7 +359,7 @@ def render_comparison_area(
         default_tab = tab_lookup.get(default_tab_id, tab_lookup[_DEFAULT_PANEL_TAB])
     default_label = default_tab.label
 
-    if not team_mode and chart_season_options:
+    if chart_season_options:
         st.markdown("<div id='comparison-season-filter'></div>", unsafe_allow_html=True)
         active_chart_season_index = _prime_chart_season_picker(chart_season_options)
         st.selectbox(
@@ -366,7 +383,11 @@ def render_comparison_area(
             if team_mode:
                 tab_spec.render_team(
                     active_teams=teams,
+                    processed_dfs=processed_dfs,
                     metric=metric,
+                    season_type=season_type,
+                    selected_season=selected_season,
+                    do_cumul=do_cumul,
                 )
             else:
                 tab_spec.render_player(
@@ -500,7 +521,14 @@ def _render_live_games_players(
     _render_live_games_tab()
 
 
-def _render_live_games_teams(active_teams: dict, metric: str) -> None:
+def _render_live_games_teams(
+    active_teams: dict,
+    processed_dfs: list,
+    metric: str,
+    season_type: str = "Regular",
+    selected_season: str | int = "All",
+    do_cumul: bool = False,
+) -> None:
     """Live games tab for team mode.
 
     Args:
@@ -510,7 +538,7 @@ def _render_live_games_teams(active_teams: dict, metric: str) -> None:
     Returns:
         None.
     """
-    del active_teams, metric
+    del active_teams, processed_dfs, metric, season_type, selected_season, do_cumul
     _render_live_games_tab()
 
 
@@ -670,11 +698,151 @@ def _render_overview_players(
         )
 
 
-def _render_overview_teams(active_teams: dict, metric: str) -> None:
-    """Overview tab: existing right-column team comparison cards."""
+def _build_team_record_label(row: pd.Series) -> str:
+    """Return a standard team record string from a season-progress row."""
+    wins = int(round(float(row.get("Wins", 0) or 0)))
+    losses = int(round(float(row.get("Losses", 0) or 0)))
+    ot_losses = int(round(float(row.get("OTLosses", 0) or 0)))
+    ties = int(round(float(row.get("Ties", 0) or 0)))
+    if ot_losses > 0:
+        return f"{wins}-{losses}-{ot_losses}"
+    if ties > 0:
+        return f"{wins}-{losses}-{ties}"
+    return f"{wins}-{losses}"
+
+
+def _build_team_streak_label(real_df: pd.DataFrame) -> str:
+    """Return the closing streak label for a selected-season team trace."""
+    if real_df.empty or "ResultCode" not in real_df.columns:
+        return ""
+    result_codes = [str(code or "").strip().upper() for code in real_df["ResultCode"].tolist() if str(code or "").strip()]
+    if not result_codes:
+        return ""
+    last_code = result_codes[-1]
+    streak_len = 0
+    for code in reversed(result_codes):
+        if code != last_code:
+            break
+        streak_len += 1
+    if streak_len <= 0:
+        return ""
+    return f"Ended on {last_code}{streak_len}"
+
+
+def _render_overview_teams(
+    active_teams: dict,
+    processed_dfs: list,
+    metric: str,
+    season_type: str = "Regular",
+    selected_season: str | int = "All",
+    do_cumul: bool = False,
+) -> None:
+    """Overview tab for franchise cards or selected-season team summaries."""
+    del do_cumul
+    season_mode = _is_selected_season_mode(selected_season)
+    chart_colors = _get_player_chart_colors()
     team_stats = get_team_all_time_stats()
+    season_rank_map = (
+        get_team_season_rank_map(int(selected_season), season_type, metric)
+        if season_mode
+        else {}
+    )
+    season_summary_df = (
+        get_team_season_summary(int(selected_season), season_type)
+        if season_mode
+        else pd.DataFrame()
+    )
+    season_summary_map = (
+        season_summary_df.set_index("teamAbbrev").to_dict("index")
+        if not season_summary_df.empty and "teamAbbrev" in season_summary_df.columns
+        else {}
+    )
+    team_proc_lookup = {
+        team_abbr: proc_df
+        for team_abbr, _, proc_df in _iter_visible_teams(processed_dfs, active_teams)
+    }
 
     for abbr, full_name in active_teams.items():
+        if season_mode:
+            proc_df = team_proc_lookup.get(abbr)
+            if proc_df is None or proc_df.empty:
+                continue
+
+            real = proc_df.sort_values(["CumGP", "GameDate", "GameId"], na_position="last").reset_index(drop=True)
+            latest = real.iloc[-1]
+            summary_stats = season_summary_map.get(abbr, {})
+            logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
+            record_label = str(latest.get("RecordLabel") or _build_team_record_label(latest))
+            gp = int(round(float(latest.get("GP", 0) or 0)))
+            points = int(round(float(latest.get("Points", 0) or 0)))
+            wins = int(round(float(latest.get("Wins", 0) or 0)))
+            goals = int(round(float(latest.get("Goals", 0) or 0)))
+            goals_against = int(round(float(latest.get("GoalsAgainst", 0) or 0)))
+            name_html = f"<strong>{full_name}</strong>"
+            stats_row = (
+                f"Rec:&nbsp;{record_label} &nbsp;|&nbsp; "
+                f"Pts:&nbsp;{points} &nbsp;|&nbsp; "
+                f"GF:&nbsp;{goals} &nbsp;|&nbsp; "
+                f"GA:&nbsp;{goals_against} &nbsp;|&nbsp; "
+                f"GP:&nbsp;{gp}"
+            )
+            season_rank = season_rank_map.get(abbr)
+            scope_label = (
+                _build_selected_season_rank_label(selected_season, season_type, metric, season_rank)
+                if season_rank is not None
+                else _build_selected_season_scope_label(selected_season, season_type)
+            )
+            scope_color = chart_colors.get(full_name) or _DEFAULT_PLAYER_RANK_COLOR
+            rank_row = (
+                f"<br><span style='font-size:14px;color:{scope_color};font-weight:bold;'>"
+                f"{scope_label}"
+                "</span>"
+            )
+
+            extra_bits: list[str] = []
+            if season_type == "Regular" and gp > 0:
+                pace_points = int(round(points / gp * 82))
+                extra_bits.append(f"{pace_points}-pt pace")
+            streak_label = _build_team_streak_label(real)
+            if streak_label:
+                extra_bits.append(streak_label)
+            final_metric = summary_stats.get(metric)
+            if final_metric is not None and pd.notna(final_metric):
+                if metric in {'Win%', 'PP%'}:
+                    metric_value = f"{float(final_metric):.1f}%"
+                elif metric in TEAM_RATE_STATS:
+                    metric_value = f"{float(final_metric):.3f}"
+                else:
+                    metric_value = str(int(round(float(final_metric))))
+                extra_bits.append(f"Final {metric}: {metric_value}")
+            best_row = ""
+            if extra_bits:
+                best_row = (
+                    "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
+                    f"{' | '.join(extra_bits)}"
+                    "</span>"
+                )
+
+            with st.container():
+                st.markdown(
+                    "<div style='display:flex;align-items:flex-start;gap:14px;margin:4px 0;'>"
+                    f"<img src='{logo_url}' style='width:80px;flex-shrink:0;object-fit:contain;'>"
+                    "<div style='line-height:1.4;'>"
+                    f"{name_html}<br>"
+                    f"{stats_row}"
+                    f"{rank_row}"
+                    f"{best_row}"
+                    "</div>"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown(
+                "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
+                unsafe_allow_html=True,
+            )
+            continue
+
         stats = team_stats.get(abbr)
         if not stats:
             continue
@@ -701,7 +869,7 @@ def _render_overview_teams(active_teams: dict, metric: str) -> None:
             f"GP:&nbsp;{total_gp:,}"
         )
         rank_row = (
-            "<br><span style='font-size:14px;color:#4caf50;font-weight:bold;'>"
+            f"<br><span style='font-size:14px;color:{chart_colors.get(full_name) or _DEFAULT_PLAYER_RANK_COLOR};font-weight:bold;'>"
             f"#{wins_rank} all-time Wins"
             "</span>"
         )
@@ -857,9 +1025,16 @@ def _render_trophies_players(
         )
 
 
-def _render_trophies_teams(active_teams: dict, metric: str) -> None:
+def _render_trophies_teams(
+    active_teams: dict,
+    processed_dfs: list,
+    metric: str,
+    season_type: str = "Regular",
+    selected_season: str | int = "All",
+    do_cumul: bool = False,
+) -> None:
     """Trophies tab for team category (v1: Stanley Cups)."""
-    del metric
+    del processed_dfs, metric, season_type, selected_season, do_cumul
     trophy_summary = get_team_trophy_summary()
 
     for abbr, full_name in active_teams.items():
@@ -956,4 +1131,4 @@ def render_team_comparison_panel(active_teams: dict, metric: str) -> None:
     Returns:
         None.
     """
-    _render_overview_teams(active_teams=active_teams, metric=metric)
+    _render_overview_teams(active_teams=active_teams, processed_dfs=[], metric=metric)

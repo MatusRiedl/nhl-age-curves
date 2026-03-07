@@ -11,6 +11,7 @@ import requests
 import streamlit as st
 
 from nhl.constants import (
+    ACTIVE_TEAMS,
     CURRENT_SEASON_YEAR,
     NHLE_DEFAULT_MULTIPLIER,
     NHLE_MULTIPLIERS,
@@ -141,6 +142,9 @@ def load_all_team_seasons() -> pd.DataFrame:
         df["GF/G"]  = df["goalsForPerGame"].round(3)
         df["GA/G"]  = df["goalsAgainstPerGame"].round(3)
         df["Goals"] = df["goalsFor"]
+        df["Losses"] = df["losses"]
+        df["OTLosses"] = df["otLosses"]
+        df["Ties"] = df["ties"]
         df["PPG"]   = (df["goalsFor"] / df["gamesPlayed"] * 2.7).round(3)
         df["PP%"]   = (
             (df["powerPlayPct"] * 100).round(1)
@@ -150,7 +154,7 @@ def load_all_team_seasons() -> pd.DataFrame:
 
         keep = [
             "teamId", "teamFullName", "teamAbbrev", "seasonId", "gameTypeId",
-            "SeasonYear", "GP", "Wins", "Points", "Win%",
+            "SeasonYear", "GP", "Wins", "Losses", "OTLosses", "Ties", "Points", "Win%",
             "Goals", "GF/G", "GA/G", "PPG", "PP%",
         ]
         return df[[c for c in keep if c in df.columns]].reset_index(drop=True)
@@ -686,6 +690,281 @@ def _season_year_to_id(season_year: int) -> int | None:
     if year < 1900 or year > CURRENT_SEASON_YEAR:
         return None
     return int(f"{year}{year + 1}")
+
+
+def _weighted_team_metric(grp: pd.DataFrame, col: str) -> float:
+    """Return a GP-weighted team metric average, or NaN when unavailable."""
+    if col not in grp.columns or "GP" not in grp.columns:
+        return float("nan")
+    valid = grp[[col, "GP"]].dropna()
+    if valid.empty:
+        return float("nan")
+    total_gp = float(valid["GP"].sum())
+    if total_gp <= 0:
+        return float(valid[col].mean())
+    return float((valid[col] * valid["GP"]).sum() / total_gp)
+
+
+@st.cache_data(ttl=3600)
+def get_team_available_nhl_seasons(team_abbr: str) -> list[int]:
+    """Return descending NHL season start years available for one team."""
+    clean_abbr = str(team_abbr or "").strip().upper()
+    if not clean_abbr:
+        return []
+    df = load_all_team_seasons()
+    if df.empty or "teamAbbrev" not in df.columns or "SeasonYear" not in df.columns:
+        return []
+    seasons = pd.to_numeric(
+        df.loc[df["teamAbbrev"] == clean_abbr, "SeasonYear"],
+        errors="coerce",
+    ).dropna()
+    return sorted({int(year) for year in seasons.tolist()}, reverse=True)
+
+
+def _fetch_team_game_summary_rows(team_id: int, season_id: int, game_type_id: int) -> list[dict]:
+    """Fetch raw per-game team summary rows for one team-season and game type."""
+    try:
+        payload = requests.get(
+            TEAM_STATS_URL,
+            params={
+                "limit": -1,
+                "start": 0,
+                "sort": "gameDate",
+                "isGame": "true",
+                "cayenneExp": (
+                    f"teamId={int(team_id)} and seasonId={int(season_id)} "
+                    f"and gameTypeId={int(game_type_id)}"
+                ),
+            },
+            timeout=10,
+        ).json()
+        rows = payload.get("data", []) if isinstance(payload, dict) else []
+        return [row for row in rows if isinstance(row, dict)]
+    except Exception:
+        return []
+
+
+def _normalize_team_game_log_rows(
+    rows: list,
+    season_year: int,
+    team_abbr: str,
+    team_name: str,
+    game_type: str,
+    game_type_id: int,
+) -> list[dict]:
+    """Normalize one team-season game log into the app's team schema."""
+    normalized_rows: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        try:
+            game_id = int(row.get("gameId", 0) or 0)
+        except Exception:
+            game_id = 0
+
+        goals_for = float(row.get("goalsFor", 0) or 0)
+        goals_against = float(row.get("goalsAgainst", 0) or 0)
+        wins = float(row.get("wins", 0) or 0)
+        losses = float(row.get("losses", 0) or 0)
+        ot_losses = float(row.get("otLosses", 0) or 0)
+        ties = float(row.get("ties", 0) or 0)
+        points = float(row.get("points", 0) or 0)
+        point_pct = pd.to_numeric(row.get("pointPct"), errors="coerce")
+        power_play_pct = pd.to_numeric(row.get("powerPlayPct"), errors="coerce")
+        home_road_flag = str(row.get("homeRoad", "") or "").strip().upper()
+        opponent_abbr = str(row.get("opponentTeamAbbrev", "") or "").strip().upper()
+        opponent_name = ACTIVE_TEAMS.get(opponent_abbr, opponent_abbr)
+
+        if wins > 0:
+            result_code = "W"
+        elif ot_losses > 0:
+            result_code = "OTL"
+        elif ties > 0:
+            result_code = "T"
+        else:
+            result_code = "L"
+
+        normalized_rows.append(
+            {
+                "SeasonYear": int(season_year),
+                "gameTypeId": int(game_type_id),
+                "GameType": game_type,
+                "GameDate": str(row.get("gameDate", "") or ""),
+                "GameId": game_id,
+                "GP": 1.0,
+                "Wins": wins,
+                "Losses": losses,
+                "OTLosses": ot_losses,
+                "Ties": ties,
+                "Points": points,
+                "Goals": goals_for,
+                "GoalsAgainst": goals_against,
+                "Win%": float(point_pct * 100.0) if pd.notna(point_pct) else float("nan"),
+                "GF/G": goals_for,
+                "GA/G": goals_against,
+                "PP%": float(power_play_pct * 100.0) if pd.notna(power_play_pct) else float("nan"),
+                "PPG": goals_for * 2.7,
+                "TeamAbbrev": team_abbr,
+                "TeamName": team_name,
+                "OpponentAbbrev": opponent_abbr,
+                "OpponentName": opponent_name,
+                "HomeRoadFlag": home_road_flag,
+                "ResultCode": result_code,
+                "ResultLabel": result_code,
+            }
+        )
+    return normalized_rows
+
+
+@st.cache_data(ttl=3600)
+def get_team_season_game_log(team_abbr: str, season_year: int) -> pd.DataFrame:
+    """Fetch one NHL season of normalized per-game rows for a team."""
+    clean_abbr = str(team_abbr or "").strip().upper()
+    season_id = _season_year_to_id(season_year)
+    if not clean_abbr or season_id is None:
+        return pd.DataFrame()
+
+    try:
+        season_df = load_all_team_seasons()
+        if season_df.empty or "teamAbbrev" not in season_df.columns:
+            return pd.DataFrame()
+        team_rows = season_df[season_df["teamAbbrev"] == clean_abbr]
+        if team_rows.empty or "teamId" not in team_rows.columns:
+            return pd.DataFrame()
+
+        team_id = int(team_rows["teamId"].dropna().iloc[0])
+        team_name = str(team_rows["teamFullName"].dropna().iloc[0] or ACTIVE_TEAMS.get(clean_abbr, clean_abbr))
+
+        data: list[dict] = []
+        for game_type_id, game_type_label in ((2, "Regular"), (3, "Playoffs")):
+            raw_rows = _fetch_team_game_summary_rows(team_id, season_id, game_type_id)
+            data.extend(
+                _normalize_team_game_log_rows(
+                    rows=raw_rows,
+                    season_year=int(season_year),
+                    team_abbr=clean_abbr,
+                    team_name=team_name,
+                    game_type=game_type_label,
+                    game_type_id=game_type_id,
+                )
+            )
+
+        if not data:
+            return pd.DataFrame()
+
+        return (
+            pd.DataFrame(data)
+            .sort_values(["GameDate", "GameId", "gameTypeId"])
+            .reset_index(drop=True)
+        )
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)
+def get_team_season_summary(season_year: int, season_type: str) -> pd.DataFrame:
+    """Return one-row-per-team summary rows for one NHL season selection."""
+    df = load_all_team_seasons()
+    if df.empty or "SeasonYear" not in df.columns or "teamAbbrev" not in df.columns:
+        return pd.DataFrame()
+
+    season_df = df[df["SeasonYear"] == int(season_year)].copy()
+    if season_df.empty:
+        return pd.DataFrame()
+
+    if season_type == "Regular":
+        season_df = season_df[season_df["gameTypeId"] == 2]
+    elif season_type == "Playoffs":
+        season_df = season_df[season_df["gameTypeId"] == 3]
+
+    if season_df.empty:
+        return pd.DataFrame()
+
+    if season_type == "Both":
+        rows: list[dict] = []
+        group_cols = ["teamAbbrev"]
+        if "teamFullName" in season_df.columns:
+            group_cols.append("teamFullName")
+        if "teamId" in season_df.columns:
+            group_cols.append("teamId")
+
+        for keys, grp in season_df.groupby(group_cols, dropna=False, sort=True):
+            if not isinstance(keys, tuple):
+                keys = (keys,)
+            team_abbr = str(keys[0])
+            team_name = str(keys[1]) if len(keys) > 1 else ACTIVE_TEAMS.get(team_abbr, team_abbr)
+            team_id = keys[2] if len(keys) > 2 else None
+            gp = float(pd.to_numeric(grp.get("GP"), errors="coerce").fillna(0).sum())
+            goals = float(pd.to_numeric(grp.get("Goals"), errors="coerce").fillna(0).sum())
+            points = float(pd.to_numeric(grp.get("Points"), errors="coerce").fillna(0).sum())
+            wins = float(pd.to_numeric(grp.get("Wins"), errors="coerce").fillna(0).sum())
+            losses = float(pd.to_numeric(grp.get("Losses"), errors="coerce").fillna(0).sum())
+            ot_losses = float(pd.to_numeric(grp.get("OTLosses"), errors="coerce").fillna(0).sum())
+            ties = float(pd.to_numeric(grp.get("Ties"), errors="coerce").fillna(0).sum())
+            win_pct = (points / (gp * 2.0) * 100.0) if gp > 0 else _weighted_team_metric(grp, "Win%")
+            gf_g = (goals / gp) if gp > 0 else _weighted_team_metric(grp, "GF/G")
+            ga_g = _weighted_team_metric(grp, "GA/G")
+            ppg = ((goals / gp) * 2.7) if gp > 0 else _weighted_team_metric(grp, "PPG")
+            pp_pct = _weighted_team_metric(grp, "PP%")
+            rows.append(
+                {
+                    "teamAbbrev": team_abbr,
+                    "teamFullName": team_name,
+                    "teamId": team_id,
+                    "SeasonYear": int(season_year),
+                    "GP": int(round(gp)),
+                    "Wins": int(round(wins)),
+                    "Losses": int(round(losses)),
+                    "OTLosses": int(round(ot_losses)),
+                    "Ties": int(round(ties)),
+                    "Points": int(round(points)),
+                    "Goals": int(round(goals)),
+                    "Win%": round(float(win_pct), 1) if pd.notna(win_pct) else float("nan"),
+                    "GF/G": round(float(gf_g), 3) if pd.notna(gf_g) else float("nan"),
+                    "GA/G": round(float(ga_g), 3) if pd.notna(ga_g) else float("nan"),
+                    "PP%": round(float(pp_pct), 1) if pd.notna(pp_pct) else float("nan"),
+                    "PPG": round(float(ppg), 3) if pd.notna(ppg) else float("nan"),
+                }
+            )
+        return pd.DataFrame(rows).reset_index(drop=True)
+
+    return season_df.reset_index(drop=True)
+
+
+@st.cache_data(ttl=3600)
+def get_team_season_rank_map(
+    season_year: int,
+    season_type: str,
+    metric: str,
+) -> dict[str, int]:
+    """Return team abbreviation to 1-based league rank for one season metric."""
+    leaderboard = get_team_season_summary(season_year, season_type)
+    if leaderboard.empty or metric not in leaderboard.columns or "teamAbbrev" not in leaderboard.columns:
+        return {}
+
+    ranked = leaderboard[["teamAbbrev", metric]].copy()
+    ranked[metric] = pd.to_numeric(ranked[metric], errors="coerce")
+    ranked = ranked.dropna(subset=["teamAbbrev", metric])
+    if ranked.empty:
+        return {}
+
+    ascending = metric == "GA/G"
+    ranked = ranked.sort_values([metric, "teamAbbrev"], ascending=[ascending, True]).reset_index(drop=True)
+
+    rank_map: dict[str, int] = {}
+    previous_value = None
+    current_rank = 0
+    for index, (team_abbr, value) in enumerate(
+        ranked[["teamAbbrev", metric]].itertuples(index=False, name=None),
+        start=1,
+    ):
+        numeric_value = float(value)
+        if previous_value is None or numeric_value != previous_value:
+            current_rank = index
+            previous_value = numeric_value
+        rank_map[str(team_abbr)] = current_rank
+    return rank_map
 
 
 def _seconds_to_minutes(raw_seconds: object) -> float:

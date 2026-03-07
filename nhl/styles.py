@@ -528,7 +528,7 @@ _CSS = """
             line-height: 0 !important;
         }
         div:has(> #comparison-tabs) + div {
-            margin-top: -0.35rem !important;
+            margin-top: -0.38rem !important;
         }
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] {
             margin-top: 0 !important;
@@ -597,6 +597,10 @@ _CSS = """
 
         /* Responsive: stack chart and stats panel vertically on mobile */
         @media screen and (max-width: 768px) {
+            .main .block-container {
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
+            }
             .main [data-testid="stHorizontalBlock"] {
                 flex-wrap: wrap !important;
             }

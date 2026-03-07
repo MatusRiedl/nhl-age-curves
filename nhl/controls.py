@@ -23,7 +23,7 @@ def _get_control_pill_groups(
     games_mode: bool,
     season_mode: bool,
 ) -> tuple[list[dict[str, str]], list[str]]:
-    """Split toolbar pills into active and unavailable groups.
+    """Split toolbar pills into active and muted groups when needed.
 
     Args:
         team_mode: Whether Team mode is active.
@@ -31,11 +31,14 @@ def _get_control_pill_groups(
         season_mode: Whether single-season game-log mode is active.
 
     Returns:
-        tuple[list[dict[str, str]], list[str]]: Active pill specs and muted labels.
+        tuple[list[dict[str, str]], list[str]]: Active pill specs and any muted labels to show.
     """
     unavailable = set()
     hide_unavailable = False
-    if team_mode:
+    if team_mode and season_mode:
+        unavailable.update({"Smooth", "Proj", "Era", "Cumul", "Base", "Prime"})
+        hide_unavailable = True
+    elif team_mode:
         unavailable.update({"Proj", "Era", "Base", "Prime"})
     elif season_mode:
         unavailable.update({"Proj", "Era", "Base", "Prime"})
@@ -121,7 +124,7 @@ def _sync_control_bool_state(available_specs: list[dict[str, str]], selected_lab
 def render_controls() -> tuple:
     """Render the controls expander and return `(metric, do_cumul)`."""
     team_mode = st.session_state.stat_category == "Team"
-    season_mode = (not team_mode) and st.session_state.get("chart_season", "All") != "All"
+    season_mode = st.session_state.get("chart_season", "All") != "All"
     games_mode = st.session_state.x_axis_mode == "Games Played" or season_mode
 
     with st.expander("📊 Category & Metric", expanded=False):
@@ -146,6 +149,8 @@ def render_controls() -> tuple:
             width="stretch",
         )
         _sync_control_bool_state(_available_pills, _selected_pills)
+        if team_mode and season_mode:
+            st.session_state.do_smooth = False
 
         if _unavailable_pills:
             _muted_pills = "".join(
@@ -328,6 +333,7 @@ def render_controls() -> tuple:
         do_cumul = (
             st.session_state.do_cumul_toggle
             and metric not in _cumul_rate_set
+            and not (team_mode and season_mode)
         )
 
     return metric, do_cumul

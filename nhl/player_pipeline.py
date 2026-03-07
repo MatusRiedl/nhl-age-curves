@@ -33,8 +33,8 @@ def process_players(
     do_smooth: bool,
     do_cumul: bool,
     games_mode: bool,
-    selected_season: str | int,
-    league_filter: list,
+    selected_season: str | int = "All",
+    league_filter: list | None = None,
 ) -> tuple:
     """Run the player pipeline and return chart data, raw caches, clones, and peaks."""
     processed_dfs  = []

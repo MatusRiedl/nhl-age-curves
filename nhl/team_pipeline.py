@@ -3,6 +3,7 @@
 import pandas as pd
 
 from nhl.constants import TEAM_RATE_STATS
+from nhl.data_loaders import get_team_season_game_log
 
 
 def process_teams(
@@ -13,12 +14,15 @@ def process_teams(
     do_cumul: bool,
     do_smooth: bool,
     games_mode: bool,
+    selected_season: str | int = "All",
 ) -> list:
     """Filter, aggregate, and format selected team seasons for the chart."""
     processed_dfs = []
 
     if all_team_df.empty or "teamAbbrev" not in all_team_df.columns:
         return processed_dfs
+
+    season_mode = str(selected_season) != "All"
 
     def _weighted_avg(grp: pd.DataFrame, col: str) -> float:
         """Compute GP-weighted mean for a column; NaN if unavailable."""
@@ -32,7 +36,81 @@ def process_teams(
             return float(valid[col].mean())
         return float((valid[col] * valid["GP"]).sum() / total_w)
 
+    def _format_record_label(row: pd.Series) -> str:
+        """Build a conventional team record label from cumulative row values."""
+        wins = int(round(float(row.get("Wins", 0) or 0)))
+        losses = int(round(float(row.get("Losses", 0) or 0)))
+        ot_losses = int(round(float(row.get("OTLosses", 0) or 0)))
+        ties = int(round(float(row.get("Ties", 0) or 0)))
+        if ot_losses > 0:
+            return f"{wins}-{losses}-{ot_losses}"
+        if ties > 0:
+            return f"{wins}-{losses}-{ties}"
+        return f"{wins}-{losses}"
+
+    def _build_selected_season_df(team_abbr: str, team_name: str) -> pd.DataFrame:
+        """Build one row per game with season-to-date team metric values."""
+        try:
+            season_year = int(selected_season)
+        except Exception:
+            return pd.DataFrame()
+
+        df = get_team_season_game_log(team_abbr, season_year)
+        if df.empty:
+            return pd.DataFrame()
+
+        if season_type != "Both":
+            df = df[df["GameType"] == season_type].copy()
+        if df.empty:
+            return pd.DataFrame()
+
+        df = df.sort_values(["GameDate", "GameId", "gameTypeId"]).reset_index(drop=True)
+        df["CumGP"] = range(1, len(df) + 1)
+
+        cum_gp = df["CumGP"].astype(float)
+        cum_points = df["Points"].cumsum()
+        cum_wins = df["Wins"].cumsum()
+        cum_losses = df["Losses"].cumsum()
+        cum_ot_losses = df["OTLosses"].cumsum()
+        cum_ties = df["Ties"].cumsum()
+        cum_goals = df["Goals"].cumsum()
+        cum_goals_against = df["GoalsAgainst"].cumsum()
+
+        df["GP"] = cum_gp
+        df["Points"] = cum_points
+        df["Wins"] = cum_wins
+        df["Losses"] = cum_losses
+        df["OTLosses"] = cum_ot_losses
+        df["Ties"] = cum_ties
+        df["Goals"] = cum_goals
+        df["GoalsAgainst"] = cum_goals_against
+        df["Win%"] = (cum_points.div(cum_gp.mul(2.0))).mul(100.0).fillna(0).round(1)
+        df["GF/G"] = cum_goals.div(cum_gp).fillna(0).round(3)
+        df["GA/G"] = cum_goals_against.div(cum_gp).fillna(0).round(3)
+        # The public team game-summary feed exposes per-game PP%, but not PP chances.
+        # Use the running mean of game PP% to preserve a season-progress signal.
+        df["PP%"] = (
+            pd.to_numeric(df["PP%"], errors="coerce")
+            .expanding(min_periods=1)
+            .mean()
+            .round(1)
+        )
+        df["PPG"] = cum_goals.div(cum_gp).mul(2.7).fillna(0).round(3)
+        df["RecordLabel"] = df.apply(_format_record_label, axis=1)
+        df["Player"] = team_name
+        df["BaseName"] = team_abbr
+        return df
+
     for _abbr, _name in teams.items():
+        if season_mode:
+            df = _build_selected_season_df(_abbr, _name)
+            if df.empty or metric not in df.columns:
+                continue
+            if do_smooth:
+                df[metric] = df[metric].rolling(window=3, min_periods=1).mean()
+            processed_dfs.append(df)
+            continue
+
         df = all_team_df[all_team_df["teamAbbrev"] == _abbr].copy()
         if df.empty:
             continue

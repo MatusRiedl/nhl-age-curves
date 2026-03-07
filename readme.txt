@@ -311,6 +311,9 @@ Behavior:
 - counting stats become cumulative totals by game count when cumulative mode is on
 - rate stats become rolling visible averages in games mode
 - `Age` is preserved for click dialogs, but single-season clicks resolve by exact game identity instead of only age
+- Team selected-season mode is a season-progress branch, not the old franchise games view reused.
+- Team selected-season metric values are season-to-date after each game: counting stats are cumulative, rate stats are running rates, and `PP%` falls back to the running mean of game PP% because the public team game feed does not expose PP chances.
+- Team selected-season clicks now open a team game snapshot dialog with the matchup card and one-row team snapshot table.
 
 Normal app-flow restrictions:
 - no projection
@@ -335,12 +338,12 @@ Module responsibilities:
 - `baselines.py` - cached historical and team baseline builders
 - `knn_engine.py` - clone matching, hybrid-delta projection, stat caps, fallback projection
 - `player_pipeline.py` - end-to-end player pipeline and peak metadata
-- `team_pipeline.py` - end-to-end team pipeline
+- `team_pipeline.py` - end-to-end team pipeline, including selected-season team season-progress mode
 - `controls.py` - top control surface; returns `(metric, do_cumul)`
 - `sidebar.py` - player/team add flows plus sidebar status widgets
-- `dialog.py` - real data, projection, and baseline click dialogs
-- `chart.py` - figure assembly, baseline overlay, share-link button, click dispatch
-- `comparison.py` - tabbed comparison area with Overview, Trophies, and Live games
+- `dialog.py` - player clicks, team game snapshot clicks, projection, and baseline dialogs
+- `chart.py` - figure assembly, baseline overlay, share-link button, player/team click dispatch
+- `comparison.py` - tabbed comparison area with season-aware Overview, Trophies, and Live games
 - `url_params.py` - compact share-link encoder/decoder with legacy link support
 - `schedule.py` - live/recent matchup detection, upcoming games, featured players
 - `async_preloader.py` - background warming of non-active category caches
@@ -349,6 +352,8 @@ Key integration notes:
 - `schedule.py` only auto-seeds the board on first session load and only if a shared URL did not already populate players or teams
 - `comparison.py` stores tab memory per category via `panel_tab_skater`, `panel_tab_goalie`, and `panel_tab_team`
 - selected-season Overview cards prefer league-wide season rank text from the summary endpoints and fall back to the old game-log scope label if rank data is unavailable
+- Team chart-season options now come from `load_all_team_seasons()` history for the selected franchises, not from player landing payloads.
+- Team selected-season share links now rely on the same forced-games-mode URL logic as skater and goalie season mode.
 - `url_params.py` supports compact ID-only links, legacy `id|name` / `abbr|name` links, and the chart-top `chart_season` selector without redundantly encoding forced games mode
 
 That is the architecture. No magic, just disciplined pandas.
