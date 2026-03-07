@@ -69,8 +69,8 @@ _CSS = """
         @media (max-width: 768px) {
             .block-container {
                 padding-top: 0.75rem !important;
-                padding-left: 0.5rem !important;
-                padding-right: 0.5rem !important;
+                padding-left: 0.35rem !important;
+                padding-right: 0.35rem !important;
             }
             .page-header {
                 margin-top: 0 !important;

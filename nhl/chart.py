@@ -990,6 +990,23 @@ def render_chart(
         return 16;
     }}
 
+    function calcResponsiveYAxisTickFontSize(width) {{
+        if (width <= 480) return 11;
+        if (width <= 768) return 13;
+        return 16;
+    }}
+
+    function calcResponsiveYAxisTickFontFamily(width) {{
+        if (width <= 768) return 'Arial';
+        return 'Arial Black';
+    }}
+
+    function calcResponsiveChartHeight(width) {{
+        if (width <= 480) return 340;
+        if (width <= 768) return 360;
+        return 430;
+    }}
+
     function syncToolbarTitleOffset(plot, parent) {{
         var toolbar = parent.document.getElementById(TOOLBAR_ID);
         if (!toolbar) return;
@@ -1033,10 +1050,13 @@ def render_chart(
         var initialRange = (!IS_AGE_MODE && !IS_GAMES_MODE && X_ZOOM_MAX > X_ZOOM_MIN)
             ? (X_ZOOM_MAX - X_ZOOM_MIN) : (X_MAX - X_MIN);
         var axisTickFontSize = calcResponsiveAxisTickFontSize(width);
+        var yAxisTickFontSize = calcResponsiveYAxisTickFontSize(width);
         var updates = {{
             'xaxis.dtick': calcDtick(width, initialRange),
+            'height': calcResponsiveChartHeight(width),
             'xaxis.tickfont.size': axisTickFontSize,
-            'yaxis.tickfont.size': axisTickFontSize,
+            'yaxis.tickfont.family': calcResponsiveYAxisTickFontFamily(width),
+            'yaxis.tickfont.size': yAxisTickFontSize,
         }};
         updates['xaxis.tickangle'] = (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45;
         Plotly.relayout(plot, updates).then(function() {{
@@ -1152,9 +1172,11 @@ def render_chart(
                 var width = p.offsetWidth || parent.innerWidth;
                 Plotly.relayout(p, {{
                     'xaxis.dtick': calcDtick(width, range),
+                    'height': calcResponsiveChartHeight(width),
                     'xaxis.tickangle': (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45,
                     'xaxis.tickfont.size': calcResponsiveAxisTickFontSize(width),
-                    'yaxis.tickfont.size': calcResponsiveAxisTickFontSize(width),
+                    'yaxis.tickfont.family': calcResponsiveYAxisTickFontFamily(width),
+                    'yaxis.tickfont.size': calcResponsiveYAxisTickFontSize(width),
                 }}).then(function() {{
                     syncToolbarTitleOffset(p, parent);
                 }});
