@@ -37,6 +37,10 @@ BASELINE_LINE_DASH = "14px,10px"
 BASELINE_LINE_COLOR = "rgba(190, 190, 190, 0.72)"
 BASELINE_MARKER_COLOR = "rgba(220, 220, 220, 0.92)"
 PLAYER_COLOR_STATE_KEY = "player_chart_colors"
+CLICKABLE_AGE_MARKER_SIZE = 9
+CLICKABLE_AGE_MARKER_GLOW_SIZE = 16
+CLICKABLE_AGE_MARKER_GLOW_OPACITY = 0.115
+CLICKABLE_AGE_MARKER_OUTLINE = "rgba(255, 255, 255, 0.90)"
 SEASON_MARKER_SIZE = 13
 SEASON_MARKER_GLOW_SIZE = 24
 SEASON_MARKER_GLOW_OPACITY = 0.101
@@ -56,19 +60,26 @@ def _store_player_chart_colors(player_colors: dict[str, str | None]) -> None:
     setattr(st.session_state, PLAYER_COLOR_STATE_KEY, dict(player_colors))
 
 
-def _get_chart_context_label(team_mode: bool, games_mode: bool) -> str:
+def _get_chart_context_label(
+    team_mode: bool,
+    games_mode: bool,
+    selected_season: str | int = "All",
+) -> str:
     """Return the x-context label for the chart toolbar title.
 
     Args:
         team_mode: True when the chart is rendering team comparisons.
         games_mode: True when the x-axis uses games played instead of age.
+        selected_season: Selected chart-season value.
 
     Returns:
-        str: Label describing the x context, such as Age or Games Played.
+        str: Label describing the x context, such as Age, Games Played, or Game Number.
     """
     if team_mode and not games_mode:
         return "Season"
     if games_mode:
+        if not team_mode and str(selected_season) != "All":
+            return "Game Number"
         return "Games Played"
     return "Age"
 
@@ -173,10 +184,15 @@ def _build_chart_header(
     Returns:
         str: Title text such as ``Points by Age · Regular season · Era adjusted``.
     """
-    x_label = _get_chart_context_label(team_mode=team_mode, games_mode=games_mode)
+    x_label = _get_chart_context_label(
+        team_mode=team_mode,
+        games_mode=games_mode,
+        selected_season=selected_season,
+    )
     season_label = _get_chart_season_label(season_type)
     era_label = _get_chart_era_label(metric, stat_category, do_era, team_mode)
-    header_parts = [f"{metric} by {x_label}", season_label]
+    header_verb = "at" if (not team_mode and games_mode and str(selected_season) != "All") else "by"
+    header_parts = [f"{metric} {header_verb} {x_label}", season_label]
     if not team_mode and str(selected_season) != "All":
         header_parts.insert(1, _format_chart_season_label(selected_season))
     if era_label:
@@ -208,18 +224,28 @@ def _build_chart_toolbar_markup(title: str, share_button_id: str, toolbar_id: st
     )
 
 
-def _build_chart_axis_cue_annotations(metric: str, team_mode: bool, games_mode: bool) -> list[dict]:
+def _build_chart_axis_cue_annotations(
+    metric: str,
+    team_mode: bool,
+    games_mode: bool,
+    selected_season: str | int = "All",
+) -> list[dict]:
     """Build subtle in-chart axis cue annotations.
 
     Args:
         metric: Selected y-axis metric.
         team_mode: True when the chart is rendering team comparisons.
         games_mode: True when the x-axis uses games played instead of age.
+        selected_season: Selected chart-season value.
 
     Returns:
         list[dict]: Plotly annotation dictionaries for y/x context cues.
     """
-    x_label = _get_chart_context_label(team_mode=team_mode, games_mode=games_mode)
+    x_label = _get_chart_context_label(
+        team_mode=team_mode,
+        games_mode=games_mode,
+        selected_season=selected_season,
+    )
     return [
         dict(
             x=0.006,
@@ -291,7 +317,9 @@ def _apply_special_trace_styling(fig: go.Figure, player_colors: dict[str, str | 
             trace.showlegend = False
             trace.line.dash = 'dot'
             trace.line.color = proj_color
-            trace.marker.symbol = 'circle-open'
+            trace.marker.color = proj_color
+            trace.marker.line.width = 0
+            trace.marker.symbol = 'circle'
         elif _is_baseline_trace(trace.name):
             trace.legendgroup = trace.name
             trace.line.dash = BASELINE_LINE_DASH
@@ -301,6 +329,13 @@ def _apply_special_trace_styling(fig: go.Figure, player_colors: dict[str, str | 
             trace.marker.color = BASELINE_MARKER_COLOR
             trace.marker.line.width = 0
             trace.marker.symbol = 'circle'
+            trace.hovertemplate = str(getattr(trace, "hovertemplate", "")).replace(
+                "<b>Click for details</b><br>", ""
+            )
+            trace.selected = dict(
+                marker=dict(size=8, color=BASELINE_MARKER_COLOR, opacity=1.0)
+            )
+            trace.unselected = dict(marker=dict(opacity=1.0))
 
 
 def _with_alpha(color: str | None, alpha: float) -> str:
@@ -352,6 +387,54 @@ def _prepend_traces(fig: go.Figure, traces: list[go.Scatter]) -> None:
     fig.data = fig.data[-len(traces):] + fig.data[:-len(traces)]
 
 
+def _build_marker_glow_traces(
+    fig: go.Figure,
+    player_colors: dict[str, str | None],
+    glow_size: int,
+    glow_opacity: float,
+    trace_name: str,
+    include_projection_traces: bool = False,
+) -> list[go.Scatter]:
+    """Build soft background glow traces behind clickable player markers.
+
+    Args:
+        fig: Figure holding the visible player traces.
+        player_colors: Mapping of player names to their assigned colors.
+        glow_size: Marker size for the glow-only helper traces.
+        glow_opacity: Alpha value applied to the player color.
+        trace_name: Internal helper-trace name.
+        include_projection_traces: True to also glow projected player markers.
+
+    Returns:
+        list[go.Scatter]: Background glow-marker traces.
+    """
+    glow_traces: list[go.Scatter] = []
+    for trace in fig.data:
+        if trace.name.startswith("_") or _is_baseline_trace(trace.name):
+            continue
+        if "(Proj)" in trace.name and not include_projection_traces:
+            continue
+
+        player_name = trace.name.replace(" (Proj)", "")
+        player_color = player_colors.get(player_name) or getattr(trace.marker, "color", None) or trace.line.color
+        glow_traces.append(
+            go.Scatter(
+                x=trace.x,
+                y=trace.y,
+                mode="markers",
+                marker=dict(
+                    size=glow_size,
+                    color=_with_alpha(player_color, glow_opacity),
+                ),
+                showlegend=False,
+                legendgroup=trace.legendgroup or trace.name,
+                hoverinfo="skip",
+                name=trace_name,
+            )
+        )
+    return glow_traces
+
+
 def _build_single_season_marker_glow_traces(
     fig: go.Figure,
     player_colors: dict[str, str | None],
@@ -365,40 +448,52 @@ def _build_single_season_marker_glow_traces(
     Returns:
         list[go.Scatter]: Background glow-marker traces.
     """
-    glow_traces: list[go.Scatter] = []
-    for trace in fig.data:
-        if trace.name.startswith("_") or "(Proj)" in trace.name or _is_baseline_trace(trace.name):
-            continue
-        player_color = player_colors.get(trace.name) or getattr(trace.marker, "color", None) or trace.line.color
-        glow_traces.append(
-            go.Scatter(
-                x=trace.x,
-                y=trace.y,
-                mode="markers",
-                marker=dict(
-                    size=SEASON_MARKER_GLOW_SIZE,
-                    color=_with_alpha(player_color, SEASON_MARKER_GLOW_OPACITY),
-                ),
-                showlegend=False,
-                legendgroup=trace.legendgroup or trace.name,
-                hoverinfo="skip",
-                name="_season_marker_glow",
-            )
-        )
-    return glow_traces
+    return _build_marker_glow_traces(
+        fig=fig,
+        player_colors=player_colors,
+        glow_size=SEASON_MARKER_GLOW_SIZE,
+        glow_opacity=SEASON_MARKER_GLOW_OPACITY,
+        trace_name="_season_marker_glow",
+    )
 
 
-def _disable_single_season_selection_dimming(fig: go.Figure) -> None:
-    """Keep single-season click selection from dimming every other point.
+def _build_clickable_age_marker_glow_traces(
+    fig: go.Figure,
+    player_colors: dict[str, str | None],
+) -> list[go.Scatter]:
+    """Build subtle glow traces for clickable player age-chart markers.
 
     Args:
         fig: Figure holding the visible player traces.
+        player_colors: Mapping of player names to their assigned colors.
+
+    Returns:
+        list[go.Scatter]: Background glow-marker traces.
+    """
+    return _build_marker_glow_traces(
+        fig=fig,
+        player_colors=player_colors,
+        glow_size=CLICKABLE_AGE_MARKER_GLOW_SIZE,
+        glow_opacity=CLICKABLE_AGE_MARKER_GLOW_OPACITY,
+        trace_name="_age_marker_glow",
+        include_projection_traces=False,
+    )
+
+
+def _disable_click_selection_dimming(fig: go.Figure, include_projection_traces: bool = False) -> None:
+    """Keep clickable chart selection from dimming the rest of the points.
+
+    Args:
+        fig: Figure holding the visible player traces.
+        include_projection_traces: True to also preserve projection-point opacity.
 
     Returns:
         None.
     """
     for trace in fig.data:
-        if trace.name.startswith("_") or "(Proj)" in trace.name or _is_baseline_trace(trace.name):
+        if trace.name.startswith("_") or _is_baseline_trace(trace.name):
+            continue
+        if "(Proj)" in trace.name and not include_projection_traces:
             continue
 
         base_marker = getattr(trace, "marker", None)
@@ -584,6 +679,7 @@ def render_chart(
         custom_cols = ["BaseName", "Player"]
 
     is_single_season_lollipop_mode = is_single_season_player_games and not do_cumul
+    is_clickable_age_chart = not team_mode and not games_mode
 
     # ------------------------------------------------------------------
     # Chart widget key + persisted point selection
@@ -660,6 +756,7 @@ def render_chart(
         metric=metric,
         team_mode=team_mode,
         games_mode=games_mode,
+        selected_season=selected_season,
     )
 
     # ------------------------------------------------------------------
@@ -843,9 +940,12 @@ def render_chart(
         fig.update_traces(
             connectgaps    = True,
             line           = dict(width=4, shape='spline', smoothing=0.6),
-            marker         = dict(size=8),
+            marker         = dict(
+                size=CLICKABLE_AGE_MARKER_SIZE,
+                line=dict(width=1.35, color=CLICKABLE_AGE_MARKER_OUTLINE),
+            ),
             hovertemplate  = (
-                f"<b>%{{customdata[1]}}</b><br>Age %{{x}}<br>"
+                f"<b>Click for details</b><br><b>%{{customdata[1]}}</b><br>Age %{{x}}<br>"
                 f"Value: %{{y:{_val_fmt}}}<extra></extra>"
             ),
         )
@@ -876,7 +976,7 @@ def render_chart(
                 hovertemplate=(
                     (
                         f"<b>Click for details</b><br><b>%{{customdata[1]}}</b><br>{x_label} %{{x}}<br>%{{y:.1f}}%<extra></extra>"
-                        if is_single_season_player_games
+                        if is_single_season_player_games or is_clickable_age_chart
                         else f"<b>%{{customdata[1]}}</b><br>{x_label} %{{x}}<br>%{{y:.1f}}%<extra></extra>"
                     )
                 )
@@ -887,7 +987,10 @@ def render_chart(
         if is_single_season_lollipop_mode:
             helper_traces = _build_single_season_lollipop_stem_traces(fig, player_colors) + helper_traces
         _prepend_traces(fig, helper_traces)
-        _disable_single_season_selection_dimming(fig)
+        _disable_click_selection_dimming(fig)
+    elif is_clickable_age_chart:
+        _prepend_traces(fig, _build_clickable_age_marker_glow_traces(fig, player_colors))
+        _disable_click_selection_dimming(fig, include_projection_traces=True)
 
     _apply_special_trace_styling(fig, player_colors)
 
@@ -1194,6 +1297,9 @@ def render_chart(
     if not team_mode and event and event.selection.get("points"):
         point = event.selection["points"][0]
         cd = point.get("customdata", [])
+        clicked_player_name = str(cd[1]) if len(cd) > 1 else ""
+        if _is_baseline_trace(clicked_player_name):
+            return
         age_for_detail = int(cd[2]) if games_mode else point["x"]
         clicked_game_id = None
         clicked_game_date = None
@@ -1210,7 +1316,7 @@ def render_chart(
             clicked_game_type = str(cd[5] or "")
 
         show_season_details(
-            player_name          = cd[1],
+            player_name          = clicked_player_name,
             age                  = age_for_detail,
             raw_dfs_list         = raw_dfs_cache,
             metric               = metric,
