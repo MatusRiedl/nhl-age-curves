@@ -1,10 +1,14 @@
 """Chart click dialogs for season snapshots, projections, baselines, and help."""
 
+from html import escape
+
+import pandas as pd
 import streamlit as st
 
-from nhl.constants import NHLE_DEFAULT_MULTIPLIER, NHLE_MULTIPLIERS
+from nhl.constants import ACTIVE_TEAMS, NHLE_DEFAULT_MULTIPLIER, NHLE_MULTIPLIERS
 from nhl.data_loaders import get_all_time_rank
 from nhl.era import get_era_multiplier
+from nhl.schedule import get_game_details
 
 
 BASELINE_LABEL_TO_KEY = {
@@ -22,6 +26,205 @@ _ERA_EXPLAINER_BANDS: tuple[tuple[str, int], ...] = (
     ("2013-17", 2015),
     ("2018+", 2022),
 )
+
+_TEAM_LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbr}_light.svg"
+_TEAM_SHORT_NAMES = {
+    "ANA": "Ducks",
+    "BOS": "Bruins",
+    "BUF": "Sabres",
+    "CAR": "Hurricanes",
+    "CBJ": "Blue Jackets",
+    "CGY": "Flames",
+    "CHI": "Blackhawks",
+    "COL": "Avalanche",
+    "DAL": "Stars",
+    "DET": "Red Wings",
+    "EDM": "Oilers",
+    "FLA": "Panthers",
+    "LAK": "Kings",
+    "MIN": "Wild",
+    "MTL": "Canadiens",
+    "NJD": "Devils",
+    "NSH": "Predators",
+    "NYI": "Islanders",
+    "NYR": "Rangers",
+    "OTT": "Senators",
+    "PHI": "Flyers",
+    "PIT": "Penguins",
+    "SEA": "Kraken",
+    "SJS": "Sharks",
+    "STL": "Blues",
+    "TBL": "Lightning",
+    "TOR": "Leafs",
+    "UTA": "Utah",
+    "VAN": "Canucks",
+    "VGK": "Knights",
+    "WPG": "Jets",
+    "WSH": "Caps",
+}
+
+
+def _get_team_short_name(team_abbr: str, fallback_name: str) -> str:
+    """Return the short display name for a team.
+
+    Args:
+        team_abbr: Three-letter NHL team abbreviation.
+        fallback_name: Full team name to shorten when no mapping exists.
+
+    Returns:
+        Compact team nickname for tight matchup-card layouts.
+    """
+    mapped_name = _TEAM_SHORT_NAMES.get(team_abbr, ACTIVE_TEAMS.get(team_abbr, fallback_name))
+    clean_name = str(mapped_name or fallback_name or team_abbr).strip()
+    parts = clean_name.split()
+    if len(parts) <= 1:
+        return clean_name
+    return ' '.join(parts[-2:]) if clean_name in {"Blue Jackets", "Red Wings"} else parts[-1]
+
+
+def _get_raw_player_df(raw_dfs_list: list, clean_name: str):
+    """Return the raw dataframe for the clicked player, if present."""
+    for df in raw_dfs_list:
+        if not df.empty and 'BaseName' in df.columns and df['BaseName'].iloc[0] == clean_name:
+            return df
+    return None
+
+
+def _resolve_real_game_row(df, age: int, s_type: str, game_id: int | None, game_date: str | None, clicked_game_type: str | None):
+    """Resolve the clicked real-data row, preferring exact game identifiers."""
+    filtered_df = df[df['GameType'] == s_type] if s_type != "Both" else df
+    if clicked_game_type and s_type == "Both" and 'GameType' in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df['GameType'] == clicked_game_type]
+
+    if game_id and 'GameId' in filtered_df.columns:
+        game_match = filtered_df[filtered_df['GameId'] == int(game_id)]
+        if not game_match.empty:
+            return game_match.iloc[-1]
+
+    if game_date and 'GameDate' in filtered_df.columns:
+        date_match = filtered_df[filtered_df['GameDate'] == str(game_date)]
+        if not date_match.empty:
+            return date_match.iloc[-1]
+
+    age_match = filtered_df[filtered_df['Age'] == age]
+    if not age_match.empty:
+        return age_match.iloc[-1]
+    return None
+
+
+def _build_matchup_context(game_row, score_details: dict) -> dict:
+    """Merge score-endpoint data with preserved game-log matchup metadata."""
+    team_abbr = str(game_row.get('TeamAbbrev', '') or '').strip().upper()
+    opponent_abbr = str(game_row.get('OpponentAbbrev', '') or '').strip().upper()
+    home_road_flag = str(game_row.get('HomeRoadFlag', '') or '').strip().upper()
+    team_name = str(game_row.get('TeamName', '') or '').strip() or ACTIVE_TEAMS.get(team_abbr, team_abbr)
+    opponent_name = str(game_row.get('OpponentName', '') or '').strip() or ACTIVE_TEAMS.get(opponent_abbr, opponent_abbr)
+
+    if home_road_flag == 'H':
+        fallback_away_abbr, fallback_away_name = opponent_abbr, opponent_name
+        fallback_home_abbr, fallback_home_name = team_abbr, team_name
+    else:
+        fallback_away_abbr, fallback_away_name = team_abbr, team_name
+        fallback_home_abbr, fallback_home_name = opponent_abbr, opponent_name
+
+    return {
+        'away_abbr': str(score_details.get('away_abbr', '') or fallback_away_abbr),
+        'away_name': str(score_details.get('away_name', '') or fallback_away_name),
+        'away_score': score_details.get('away_score'),
+        'home_abbr': str(score_details.get('home_abbr', '') or fallback_home_abbr),
+        'home_name': str(score_details.get('home_name', '') or fallback_home_name),
+        'home_score': score_details.get('home_score'),
+        'venue': str(score_details.get('venue', '') or ''),
+        'start_label_cest': str(score_details.get('start_label_cest', '') or ''),
+        'status_label': str(score_details.get('status_label', '') or ''),
+    }
+
+
+def _build_matchup_card_html(game: dict) -> str:
+    """Render a compact matchup card with logos, score, and venue/time details."""
+    away_abbr = escape(str(game.get('away_abbr', '') or ''))
+    home_abbr = escape(str(game.get('home_abbr', '') or ''))
+    away_name = escape(str(game.get('away_name', '') or away_abbr))
+    home_name = escape(str(game.get('home_name', '') or home_abbr))
+    away_short_name = escape(_get_team_short_name(away_abbr, away_name))
+    home_short_name = escape(_get_team_short_name(home_abbr, home_name))
+    away_logo = _TEAM_LOGO_URL.format(abbr=away_abbr) if away_abbr else ''
+    home_logo = _TEAM_LOGO_URL.format(abbr=home_abbr) if home_abbr else ''
+    away_score = game.get('away_score')
+    home_score = game.get('home_score')
+    away_won = away_score is not None and home_score is not None and away_score > home_score
+    home_won = away_score is not None and home_score is not None and home_score > away_score
+
+    def _team_block(abbr: str, short_name: str, logo: str, side_label: str, align: str = 'left') -> str:
+        """Render one team column with an explicit home/away label."""
+        text_align = 'right' if align == 'right' else 'left'
+        direction = 'row-reverse' if align == 'right' else 'row'
+        return (
+            f"<div style='display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 0;flex-direction:{direction};overflow:hidden;'>"
+            f"<img src='{logo}' height='38'>"
+            f"<div style='text-align:{text_align};min-width:0;'>"
+            f"<div style='font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8b949e;font-weight:700;'>{side_label}</div>"
+            f"<div style='display:flex;align-items:baseline;gap:7px;justify-content:{'flex-end' if align == 'right' else 'flex-start'};white-space:nowrap;'>"
+            f"<div style='font-size:19px;font-weight:800;line-height:1.0;'>{abbr or short_name}</div>"
+            f"<div style='font-size:14px;color:#b7bcc2;font-weight:600;line-height:1.0;overflow:hidden;text-overflow:ellipsis;'>{short_name}</div>"
+            "</div>"
+            "</div>"
+            "</div>"
+        )
+
+    def _score_html(value, did_win: bool) -> str:
+        color = '#ffffff' if did_win else '#8b949e'
+        return f"<div style='font-size:32px;font-weight:800;color:{color};line-height:1.0;'>{value if value is not None else '—'}</div>"
+
+    detail_bits = [bit for bit in (game.get('status_label'), game.get('start_label_cest'), game.get('venue')) if bit]
+    detail_html = escape(' • '.join(detail_bits)) if detail_bits else 'Matchup details unavailable'
+
+    return (
+        "<div style='background:#231f20;border:1px solid #343434;border-radius:14px;padding:14px 16px;margin:10px 0 12px 0;'>"
+        "<div style='display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:nowrap;'>"
+        f"{_team_block(away_abbr, away_short_name, away_logo, 'Away')}"
+        f"<div style='display:flex;align-items:center;gap:12px;flex:0 0 auto;padding:0 4px;'>{_score_html(away_score, away_won)}<div style='font-size:18px;color:#8b949e;font-weight:700;'>@</div>{_score_html(home_score, home_won)}</div>"
+        f"{_team_block(home_abbr, home_short_name, home_logo, 'Home', align='right')}"
+        "</div>"
+        f"<div style='margin-top:10px;font-size:13px;color:#b7bcc2;'>{detail_html}</div>"
+        "</div>"
+    )
+
+
+def _format_game_toi(total_toi_mins: float) -> str:
+    """Convert stored total TOI minutes into a mm:ss display string."""
+    try:
+        total_seconds = max(0, int(round(float(total_toi_mins or 0) * 60)))
+    except Exception:
+        total_seconds = 0
+    return f"{total_seconds // 60}:{total_seconds % 60:02d}"
+
+
+def _build_player_game_stat_frame(game_row, stat_category: str) -> pd.DataFrame:
+    """Build the one-row exact-game stat table for the dialog."""
+    if stat_category == 'Skater':
+        row = {
+            'Date': str(game_row.get('GameDate', '') or ''),
+            'Type': str(game_row.get('GameType', '') or ''),
+            'G': int(round(float(game_row.get('Goals', 0) or 0))),
+            'A': int(round(float(game_row.get('Assists', 0) or 0))),
+            'Pts': int(round(float(game_row.get('Points', 0) or 0))),
+            '+/-': int(round(float(game_row.get('+/-', 0) or 0))),
+            'Shots': int(round(float(game_row.get('Shots', 0) or 0))),
+            'TOI': _format_game_toi(game_row.get('TotalTOIMins', 0)),
+        }
+    else:
+        row = {
+            'Date': str(game_row.get('GameDate', '') or ''),
+            'Type': str(game_row.get('GameType', '') or ''),
+            'W': int(round(float(game_row.get('Wins', 0) or 0))),
+            'Saves': int(round(float(game_row.get('Saves', 0) or 0))),
+            'SO': int(round(float(game_row.get('Shutouts', 0) or 0))),
+            'Save %': round(float(game_row.get('WeightedSV', 0) or 0), 1),
+            'GAA': round(float(game_row.get('WeightedGAA', 0) or 0), 2),
+            'TOI': _format_game_toi(game_row.get('TotalTOIMins', 0)),
+        }
+    return pd.DataFrame([row])
 
 
 def _render_projection_guide_tab() -> None:
@@ -264,6 +467,10 @@ def show_season_details(
     ml_clones_dict: dict,
     historical_baselines: dict,
     stat_category: str,
+    game_id: int | None = None,
+    game_date: str | None = None,
+    clicked_game_type: str | None = None,
+    game_number: int | None = None,
 ) -> None:
     """Render the correct click dialog for a real point, projection, or baseline."""
     age = int(age)
@@ -273,7 +480,10 @@ def show_season_details(
     is_projection = "(Proj)" in player_name
     is_real       = not is_baseline and not is_projection
 
-    st.markdown(f"### {player_name} at Age {age}")
+    if game_number is not None:
+        st.markdown(f"### {player_name} — Game {int(game_number)} · Age {age}")
+    else:
+        st.markdown(f"### {player_name} at Age {age}")
 
     # ── CASE 3: BASELINE LINE CLICK ────────────────────────────────────
     if is_baseline:
@@ -309,77 +519,98 @@ def show_season_details(
         return  # No further content for baseline clicks
 
     # ── SHARED: Career Totals (blue) — shown for both real & projection ─
-    for df in raw_dfs_list:
-        if not df.empty and 'BaseName' in df.columns and df['BaseName'].iloc[0] == clean_name:
-            display_df_career = df[df['GameType'] == s_type] if s_type != "Both" else df
-            career_gp         = int(display_df_career['GP'].sum())
-            label             = "Reg+Playoffs" if s_type == "Both" else s_type
-            if stat_category == "Skater":
-                career_pts = int(display_df_career['Points'].sum())
-                career_g   = int(display_df_career['Goals'].sum())
-                career_a   = int(display_df_career['Assists'].sum())
-                career_pm  = int(display_df_career['+/-'].sum())
-                st.info(
-                    f"**Career Totals ({label}):** {career_gp} GP | {career_pts} Pts | "
-                    f"{career_g} G | {career_a} A | {career_pm} +/-"
-                )
-            else:
-                career_w  = int(display_df_career['Wins'].sum())
-                career_so = int(display_df_career['Shutouts'].sum())
-                career_sv = int(display_df_career['Saves'].sum())
-                st.info(
-                    f"**Career Totals ({label}):** {career_gp} GP | {career_w} W | "
-                    f"{career_sv} Saves | {career_so} SO"
-                )
-            break
+    player_raw_df = _get_raw_player_df(raw_dfs_list, clean_name)
+    if player_raw_df is not None:
+        display_df_career = player_raw_df[player_raw_df['GameType'] == s_type] if s_type != "Both" else player_raw_df
+        career_gp         = int(display_df_career['GP'].sum())
+        label             = "Reg+Playoffs" if s_type == "Both" else s_type
+        if stat_category == "Skater":
+            career_pts = int(display_df_career['Points'].sum())
+            career_g   = int(display_df_career['Goals'].sum())
+            career_a   = int(display_df_career['Assists'].sum())
+            career_pm  = int(display_df_career['+/-'].sum())
+            st.info(
+                f"**Career Totals ({label}):** {career_gp} GP | {career_pts} Pts | "
+                f"{career_g} G | {career_a} A | {career_pm} +/-"
+            )
+        else:
+            career_w  = int(display_df_career['Wins'].sum())
+            career_so = int(display_df_career['Shutouts'].sum())
+            career_sv = int(display_df_career['Saves'].sum())
+            st.info(
+                f"**Career Totals ({label}):** {career_gp} GP | {career_w} W | "
+                f"{career_sv} Saves | {career_so} SO"
+            )
 
     # ── CASE 1: REAL DATA LINE CLICK ───────────────────────────────────
     if is_real:
+        if player_raw_df is None:
+            st.write("No player data available for this click.")
+            return
+
+        if game_id or game_date:
+            game_row = _resolve_real_game_row(
+                player_raw_df,
+                age=age,
+                s_type=s_type,
+                game_id=game_id,
+                game_date=game_date,
+                clicked_game_type=clicked_game_type,
+            )
+            if game_row is not None:
+                score_details = get_game_details(
+                    str(game_row.get('GameDate', '') or game_date or ''),
+                    int(game_row.get('GameId', 0) or game_id or 0),
+                )
+                matchup_context = _build_matchup_context(game_row, score_details)
+                st.markdown(_build_matchup_card_html(matchup_context), unsafe_allow_html=True)
+                st.markdown("**Player stat line**")
+                st.dataframe(
+                    _build_player_game_stat_frame(game_row, stat_category),
+                    hide_index=True,
+                    use_container_width=True,
+                )
+                return
+
         # Career subtotals up to clicked age (orange)
-        for df in raw_dfs_list:
-            if not df.empty and 'BaseName' in df.columns and df['BaseName'].iloc[0] == clean_name:
-                sub_df = df[df['Age'] <= age]
-                if s_type != "Both":
-                    sub_df = sub_df[sub_df['GameType'] == s_type]
-                if not sub_df.empty:
-                    s_gp = int(sub_df['GP'].sum())
-                    if stat_category == "Skater":
-                        s_pts = int(sub_df['Points'].sum())
-                        s_g   = int(sub_df['Goals'].sum())
-                        s_a   = int(sub_df['Assists'].sum())
-                        s_pm  = int(sub_df['+/-'].sum())
-                        st.warning(
-                            f"**Career Subtotals (to Age {age}):** {s_gp} GP | "
-                            f"{s_pts} Pts | {s_g} G | {s_a} A | {s_pm} +/-"
-                        )
-                    else:
-                        s_w  = int(sub_df['Wins'].sum())
-                        s_so = int(sub_df['Shutouts'].sum())
-                        s_sv = int(sub_df['Saves'].sum())
-                        st.warning(
-                            f"**Career Subtotals (to Age {age}):** {s_gp} GP | "
-                            f"{s_w} W | {s_sv} Saves | {s_so} SO"
-                        )
-                break
+        sub_df = player_raw_df[player_raw_df['Age'] <= age]
+        if s_type != "Both":
+            sub_df = sub_df[sub_df['GameType'] == s_type]
+        if not sub_df.empty:
+            s_gp = int(sub_df['GP'].sum())
+            if stat_category == "Skater":
+                s_pts = int(sub_df['Points'].sum())
+                s_g   = int(sub_df['Goals'].sum())
+                s_a   = int(sub_df['Assists'].sum())
+                s_pm  = int(sub_df['+/-'].sum())
+                st.warning(
+                    f"**Career Subtotals (to Age {age}):** {s_gp} GP | "
+                    f"{s_pts} Pts | {s_g} G | {s_a} A | {s_pm} +/-"
+                )
+            else:
+                s_w  = int(sub_df['Wins'].sum())
+                s_so = int(sub_df['Shutouts'].sum())
+                s_sv = int(sub_df['Saves'].sum())
+                st.warning(
+                    f"**Career Subtotals (to Age {age}):** {s_gp} GP | "
+                    f"{s_w} W | {s_sv} Saves | {s_so} SO"
+                )
 
         # Season detail table
-        for df in raw_dfs_list:
-            if not df.empty and 'BaseName' in df.columns and df['BaseName'].iloc[0] == clean_name:
-                season_data = df[df['Age'] == age]
-                if s_type != "Both":
-                    season_data = season_data[season_data['GameType'] == s_type]
-                if not season_data.empty:
-                    cols_to_show = (
-                        ['SeasonYear', 'GameType', 'GP', 'Points', 'Goals', 'Assists', '+/-']
-                        if stat_category == "Skater"
-                        else ['SeasonYear', 'GameType', 'GP', 'Wins', 'Saves', 'Shutouts']
-                    )
-                    display_df = season_data[cols_to_show].copy()
-                    for col in display_df.columns:
-                        if col not in ['SeasonYear', 'GameType']:
-                            display_df[col] = display_df[col].astype(int)
-                    st.dataframe(display_df, hide_index=True, use_container_width=True)
-                break
+        season_data = player_raw_df[player_raw_df['Age'] == age]
+        if s_type != "Both":
+            season_data = season_data[season_data['GameType'] == s_type]
+        if not season_data.empty:
+            cols_to_show = (
+                ['SeasonYear', 'GameType', 'GP', 'Points', 'Goals', 'Assists', '+/-']
+                if stat_category == "Skater"
+                else ['SeasonYear', 'GameType', 'GP', 'Wins', 'Saves', 'Shutouts']
+            )
+            display_df = season_data[cols_to_show].copy()
+            for col in display_df.columns:
+                if col not in ['SeasonYear', 'GameType']:
+                    display_df[col] = display_df[col].astype(int)
+            st.dataframe(display_df, hide_index=True, use_container_width=True)
         return  # End of real data click
 
     # ── CASE 2: PROJECTION LINE CLICK ──────────────────────────────────

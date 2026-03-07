@@ -709,6 +709,12 @@ def _normalize_player_game_log_rows(
         if not isinstance(row, dict):
             continue
 
+        def _payload_text(value: object) -> str:
+            """Return a clean string from plain or NHL nested-name payload values."""
+            if isinstance(value, dict):
+                return str(value.get('default', '') or '').strip()
+            return str(value or '').strip()
+
         toi_mins = _toi_to_minutes(row.get('toi', '0:00'))
         shots_against = float(row.get('shotsAgainst', 0) or 0)
         goals_against = float(row.get('goalsAgainst', 0) or 0)
@@ -743,6 +749,17 @@ def _normalize_player_game_log_rows(
             'NHLeMultiplier': 1.0,
             'GameDate': str(row.get('gameDate', '') or ''),
             'GameId': game_id,
+            'TeamAbbrev': str(row.get('teamAbbrev', '') or '').strip().upper(),
+            'OpponentAbbrev': str(row.get('opponentAbbrev', '') or '').strip().upper(),
+            'HomeRoadFlag': str(row.get('homeRoadFlag', '') or '').strip().upper(),
+            'TeamName': (
+                _payload_text(row.get('teamName'))
+                or _payload_text(row.get('commonName'))
+            ),
+            'OpponentName': (
+                _payload_text(row.get('opponentTeamName'))
+                or _payload_text(row.get('opponentCommonName'))
+            ),
         })
     return normalized_rows
 

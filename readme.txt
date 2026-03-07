@@ -149,7 +149,7 @@ SECTION 6 - DATA PIPELINE (PER PLAYER, PER RENDER)
 5. Filter to `Regular`, `Playoffs`, or `Both`.
 6. Apply era adjustment.
 7. Branch by chart mode.
-   - Selected-season mode: keep one row per real game, sort by `GameDate` + `GameId`, build `CumGP`, preserve `Age`/date metadata for clicks and peak copy.
+   - Selected-season mode: keep one row per real game, sort by `GameDate` + `GameId`, build `CumGP`, preserve `Age` plus exact game metadata (`GameId`, `GameDate`, teams, home/road) for clicks and peak copy.
    - Career Games Played mode: group by `SeasonYear`, build `CumGP`, keep `Age` for clicks.
    - Age mode: group by `Age`, preserve latest `SeasonYear`, compute rate stats.
 8. Detect peak before projection, cumsum, and smoothing.
@@ -253,7 +253,7 @@ Chart duties handled in `chart.py`:
 Games Played mode chart specifics:
 - x-axis uses `CumGP`
 - selected-season mode says `Game`; career GP mode says `Career Game`
-- `custom_data[2]` stores real `Age` for click details
+- single-season click payload stores `Age`, `GameId`, `GameDate`, and `GameType` so the dialog can resolve the exact game
 - selected-season mode keeps peak highlights anchored to the real game number, not age
 
 SECTION 10 - CACHING STRATEGY
@@ -281,6 +281,7 @@ Hourly cache (`ttl=3600`):
 Five-minute cache (`ttl=300`):
 - `get_live_or_recent_game()`
 - `get_upcoming_games()`
+- `get_game_details()`
 
 Not separately cached, but intentionally fan out from `get_player_landing()`:
 - `get_player_headshot()`
@@ -300,14 +301,14 @@ Behavior:
 - x-axis is `CumGP`
 - counting stats become cumulative totals by game count when cumulative mode is on
 - rate stats become rolling visible averages in games mode
-- `Age` is preserved for click dialogs
+- `Age` is preserved for click dialogs, but single-season clicks resolve by exact game identity instead of only age
 
 Normal app-flow restrictions:
 - no projection
 - no baseline
 - selected-season mode still allows cumulative display, but comparison cards must use the last visible cumulative value instead of summing cumulative rows again
 
-The pipeline still keeps the age metadata so the dialog can show the right season.
+The pipeline still keeps the age metadata, but the single-season dialog now keys off the exact clicked game and can show matchup, score, venue/time, and the player's one-game stat line.
 
 SECTION 12 - MODULAR PACKAGE STRUCTURE
 --------------------------------------

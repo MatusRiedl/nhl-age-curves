@@ -24,7 +24,7 @@ https://nhl-age-curves.streamlit.app/
 
 * **Cumulative Tracking:** Toggle a race chart view to see cumulative career stats rather than single-season values.
 
-* **Season Snapshot:** Click any data point to see that player's exact season stats at that age, projected all-time career rank, and nearest historical matches.
+* **Season Snapshot:** In single-season mode, click any game to see the exact matchup card with both teams, logos, final score, venue/time when available, and that player's one-game stat line. Age-mode and projection clicks still keep the broader season/career context.
 
 * **Live Games Quick-Add:** A dedicated comparison tab lists the next 4 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and can add both teams plus each club's current points leader and best Save% goalie in one click.
 

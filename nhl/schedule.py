@@ -89,6 +89,30 @@ def get_upcoming_games(limit: int = 4, days_ahead: int = 14) -> list[dict]:
         return []
 
 
+@st.cache_data(ttl=300)
+def get_game_details(game_date: str, game_id: int) -> dict:
+    """Return normalized score details for one exact NHL game.
+
+    Args:
+        game_date: Date string in ``YYYY-MM-DD`` form.
+        game_id: Exact NHL game identifier.
+
+    Returns:
+        Normalized game detail dict, or ``{}`` if lookup fails.
+    """
+    clean_date = str(game_date or '').strip()
+    if not clean_date or not game_id:
+        return {}
+
+    try:
+        resp = requests.get(_SCORE_DATE_URL.format(date=clean_date), timeout=5)
+        if resp.status_code != 200:
+            return {}
+        return _extract_game_details_from_payload(resp.json(), int(game_id), clean_date)
+    except Exception:
+        return {}
+
+
 @st.cache_data(ttl=3600)
 def get_featured_players(home_abbr: str, away_abbr: str) -> dict:
     """Return featured skaters, goalies, and team names for a matchup pair."""
@@ -180,6 +204,84 @@ def _find_game_from_url(url: str, reverse_dates: bool = False) -> tuple[str, str
                     return (home, away)
 
     return None
+
+
+def _extract_game_details_from_payload(payload: dict, game_id: int, fallback_date: str = '') -> dict:
+    """Normalize one exact game from an NHL score payload.
+
+    Args:
+        payload: Raw score endpoint JSON payload.
+        game_id: Exact NHL game identifier to match.
+        fallback_date: Date string to keep when the payload omits it.
+
+    Returns:
+        Normalized detail dict, or ``{}`` when the game is not found.
+    """
+    games = payload.get('games', []) if isinstance(payload, dict) else []
+    if not games and isinstance(payload, dict):
+        for day in payload.get('gamesByDate', []) or []:
+            games.extend(day.get('games', []))
+
+    for game in games:
+        try:
+            current_game_id = int(game.get('id', 0) or 0)
+        except Exception:
+            continue
+        if current_game_id != int(game_id):
+            continue
+
+        away_team = game.get('awayTeam', {})
+        home_team = game.get('homeTeam', {})
+        away_abbr = str(away_team.get('abbrev', '') or '').strip().upper()
+        home_abbr = str(home_team.get('abbrev', '') or '').strip().upper()
+        away_name = ACTIVE_TEAMS.get(away_abbr) or str(away_team.get('name', {}).get('default', away_abbr)).strip()
+        home_name = ACTIVE_TEAMS.get(home_abbr) or str(home_team.get('name', {}).get('default', home_abbr)).strip()
+        venue_name = str(game.get('venue', {}).get('default', '') or '').strip()
+        start_time_utc = str(game.get('startTimeUTC', '') or '')
+        game_state = str(game.get('gameState', '') or '').strip().upper()
+        period_type = str(game.get('periodDescriptor', {}).get('periodType', '') or '').strip().upper()
+
+        try:
+            away_score = int(away_team.get('score')) if away_team.get('score') is not None else None
+        except Exception:
+            away_score = None
+        try:
+            home_score = int(home_team.get('score')) if home_team.get('score') is not None else None
+        except Exception:
+            home_score = None
+
+        if game_state in _FINAL_STATES:
+            if period_type == 'SO':
+                status_label = 'Final/SO'
+            elif period_type == 'OT':
+                status_label = 'Final/OT'
+            else:
+                status_label = 'Final'
+        elif game_state in _LIVE_STATES:
+            status_label = 'Live'
+        elif game_state == 'FUT':
+            status_label = 'Scheduled'
+        else:
+            status_label = game_state.title() if game_state else ''
+
+        return {
+            'game_id': current_game_id,
+            'game_date': str(game.get('gameDate', '') or fallback_date),
+            'game_type': int(game.get('gameType', 0) or 0),
+            'away_abbr': away_abbr,
+            'away_name': away_name,
+            'away_score': away_score,
+            'home_abbr': home_abbr,
+            'home_name': home_name,
+            'home_score': home_score,
+            'matchup': f'{away_name} at {home_name}',
+            'venue': venue_name,
+            'start_time_utc': start_time_utc,
+            'start_label_cest': _format_game_time_cest(start_time_utc),
+            'status_label': status_label,
+        }
+
+    return {}
 
 
 def _parse_utc_timestamp(value: str | None) -> datetime | None:

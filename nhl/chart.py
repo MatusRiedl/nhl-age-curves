@@ -402,12 +402,23 @@ def render_chart(
     # ------------------------------------------------------------------
     # Determine x-axis column and custom_data columns
     # ------------------------------------------------------------------
+    is_single_season_player_games = (
+        games_mode and not team_mode and str(selected_season) != "All"
+    )
+    has_exact_game_custom_data = (
+        is_single_season_player_games
+        and all(col in final_df.columns for col in ["GameId", "GameDate", "GameType"])
+    )
+
     if team_mode and not games_mode:
         x_col       = "SeasonYear"
         custom_cols = ["BaseName", "Player", "SeasonLabel"]
     elif games_mode:
         x_col       = "CumGP"
-        custom_cols = ["BaseName", "Player", "Age"] if not team_mode else ["BaseName", "Player"]
+        if has_exact_game_custom_data:
+            custom_cols = ["BaseName", "Player", "Age", "GameId", "GameDate", "GameType"]
+        else:
+            custom_cols = ["BaseName", "Player", "Age"] if not team_mode else ["BaseName", "Player"]
     else:
         x_col       = "Age"
         custom_cols = ["BaseName", "Player"]
@@ -976,9 +987,23 @@ def render_chart(
     # Click handler: fire season-detail dialog on point selection
     # ------------------------------------------------------------------
     if not team_mode and event and event.selection.get("points"):
-        point          = event.selection["points"][0]
-        cd             = point.get("customdata", [])
+        point = event.selection["points"][0]
+        cd = point.get("customdata", [])
         age_for_detail = int(cd[2]) if games_mode else point["x"]
+        clicked_game_id = None
+        clicked_game_date = None
+        clicked_game_type = None
+        clicked_game_number = None
+
+        if has_exact_game_custom_data and len(cd) >= 6:
+            clicked_game_number = int(point["x"])
+            try:
+                clicked_game_id = int(cd[3]) if cd[3] not in (None, "") else None
+            except Exception:
+                clicked_game_id = None
+            clicked_game_date = str(cd[4] or "")
+            clicked_game_type = str(cd[5] or "")
+
         show_season_details(
             player_name          = cd[1],
             age                  = age_for_detail,
@@ -991,4 +1016,8 @@ def render_chart(
             ml_clones_dict       = ml_clones_dict,
             historical_baselines = historical_baselines,
             stat_category        = stat_category,
+            game_id              = clicked_game_id,
+            game_date            = clicked_game_date,
+            clicked_game_type    = clicked_game_type,
+            game_number          = clicked_game_number,
         )
