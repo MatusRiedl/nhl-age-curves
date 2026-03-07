@@ -90,6 +90,24 @@ def _season_span_label_from_id(season_id: int | None) -> str:
         return "?"
 
 
+def _format_chart_season_label(value: str | int) -> str:
+    """Format one chart-season selector value for the comparison panel.
+
+    Args:
+        value: Raw season selector value.
+
+    Returns:
+        Human-readable label such as ``All`` or ``2024-25``.
+    """
+    if str(value) == "All":
+        return "All"
+    try:
+        season_year = int(value)
+        return f"{season_year}-{str(season_year + 1)[2:]}"
+    except Exception:
+        return str(value)
+
+
 def _is_selected_season_mode(selected_season: str | int) -> bool:
     """Return whether the comparison panel is in single-season mode.
 
@@ -264,6 +282,7 @@ def render_comparison_area(
     season_type: str,
     team_mode: bool,
     selected_season: str | int = "All",
+    chart_season_options: list[str | int] | None = None,
     do_cumul: bool = False,
 ) -> None:
     """Render the tabbed comparison area for the active category."""
@@ -290,6 +309,15 @@ def render_comparison_area(
     else:
         default_tab = tab_lookup.get(default_tab_id, tab_lookup[_DEFAULT_PANEL_TAB])
     default_label = default_tab.label
+
+    if not team_mode and chart_season_options:
+        st.markdown("<div id='comparison-season-filter'></div>", unsafe_allow_html=True)
+        st.selectbox(
+            "Chart season",
+            options=chart_season_options,
+            key="chart_season",
+            format_func=_format_chart_season_label,
+        )
 
     st.markdown("<div id='comparison-tabs'></div>", unsafe_allow_html=True)
     tab_containers = st.tabs(

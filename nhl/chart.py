@@ -478,7 +478,6 @@ def render_chart(
     do_prime: bool = False,
     do_era: bool = False,
     selected_season: str | int = "All",
-    chart_season_options: list[str | int] | None = None,
     share_params: dict | None = None,
 ) -> None:
     """Build the Plotly chart, optional baseline overlays, and click handling."""
@@ -894,25 +893,10 @@ def render_chart(
 
     share_button_id = f"nhl-share-btn-{abs(hash(chart_key))}"
     toolbar_id = f"nhl-chart-toolbar-{abs(hash(chart_key))}"
-    if not team_mode and chart_season_options:
-        toolbar_col, season_col = st.columns([0.72, 0.28], gap="small")
-        with toolbar_col:
-            st.markdown(
-                _build_chart_toolbar_markup(chart_header, share_button_id, toolbar_id),
-                unsafe_allow_html=True,
-            )
-        with season_col:
-            st.selectbox(
-                "Chart season",
-                options=chart_season_options,
-                key="chart_season",
-                format_func=_format_chart_season_label,
-            )
-    else:
-        st.markdown(
-            _build_chart_toolbar_markup(chart_header, share_button_id, toolbar_id),
-            unsafe_allow_html=True,
-        )
+    st.markdown(
+        _build_chart_toolbar_markup(chart_header, share_button_id, toolbar_id),
+        unsafe_allow_html=True,
+    )
 
     plotly_config = {
         "displayModeBar": True,

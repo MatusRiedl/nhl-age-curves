@@ -369,7 +369,6 @@ with col_chart:
         do_prime             = do_prime,
         do_era               = st.session_state.do_era,
         selected_season      = st.session_state.chart_season,
-        chart_season_options = chart_season_options,
         share_params         = share_params,
     )
 
@@ -385,6 +384,7 @@ if col_stats is not None:
             season_type   = st.session_state.season_type,
             team_mode     = team_mode,
             selected_season = st.session_state.chart_season,
+            chart_season_options = chart_season_options,
             do_cumul      = do_cumul,
         )
 

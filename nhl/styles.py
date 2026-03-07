@@ -505,6 +505,16 @@ _CSS = """
             font-size: 12px;
         }
 
+        /* Chart season selector moved into the comparison panel */
+        div:has(> #comparison-season-filter) {
+            margin: 0 !important;
+            line-height: 0 !important;
+        }
+        div:has(> #comparison-season-filter) + div {
+            margin-top: -0.05rem !important;
+            margin-bottom: 0.3rem !important;
+        }
+
         /* Comparison tab row (native st.tabs) */
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] {
             margin-top: -0.38rem !important;
