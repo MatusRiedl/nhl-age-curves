@@ -103,22 +103,6 @@ def _format_chart_season_label(value: str | int) -> str:
         return str(value)
 
 
-def _get_chart_theme_colors(stat_category: str) -> dict[str, str]:
-    """Return the category-aware chart palette.
-
-    Args:
-        stat_category: Active chart category.
-
-    Returns:
-        Dict with paper, plot, and hover background colors.
-    """
-    palettes = {
-        "Goalie": {"paper": "#170e0e", "plot": "#211616", "hover": "#261b1b"},
-        "Team": {"paper": "#171717", "plot": "#202020", "hover": "#262626"},
-    }
-    return palettes.get(stat_category, {"paper": "#111111", "plot": "#111111", "hover": "#1E1E1E"})
-
-
 def _metric_is_era_adjusted(metric: str, stat_category: str, do_era: bool, team_mode: bool) -> bool:
     """Return whether the visible chart metric is actually era-adjusted.
 
@@ -483,7 +467,6 @@ def render_chart(
         team_mode=team_mode,
         games_mode=games_mode,
     )
-    chart_palette = _get_chart_theme_colors(stat_category)
 
     # ------------------------------------------------------------------
     # Build Plotly figure
@@ -573,11 +556,12 @@ def render_chart(
         margin      = dict(l=0, r=0, t=18, b=12),
         height      = 430,
         font        = dict(size=16),
-        hoverlabel  = dict(font_size=16, font_family="Arial", bgcolor=chart_palette["hover"]),
+        hoverlabel  = dict(font_size=16, font_family="Arial"),
+        modebar     = dict(bgcolor="rgba(0,0,0,0)"),
         annotations = chart_axis_cues,
         title       = dict(text=""),
-        paper_bgcolor = chart_palette["paper"],
-        plot_bgcolor  = chart_palette["plot"],
+        paper_bgcolor = "rgba(0,0,0,0)",
+        plot_bgcolor  = "rgba(0,0,0,0)",
         legend      = dict(
             title=None, orientation="h",
             yanchor="top", y=-0.20,
