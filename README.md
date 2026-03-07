@@ -18,13 +18,13 @@ https://nhl-age-curves.streamlit.app/
 
 * **Games Played X-Axis Mode:** Switch the X-axis from Age to career Games Played. Every player shares a common (0, 0) origin so you can compare players at the same point in career experience instead of pretending missed seasons never happened.
 
-* **Single-Season Game-Log Mode:** Use the chart-top `Chart season` selector next to the header to switch skaters or goalies from the default `All` career view into one real NHL season. Picking `2024-25`, `2023-24`, etc. forces the X-axis to individual games and plots actual game-log rows instead of season aggregates. Teams are deliberately excluded from v1.
+* **Single-Season Game-Log Mode:** Use the chart-top `Chart season` selector next to the header to switch skaters, goalies, or teams from the default `All` history view into one real NHL season. Picking `2024-25`, `2023-24`, etc. forces the X-axis to individual games and plots actual game-log rows instead of season aggregates.
 
 * **Triple Class Architecture:** Natively separates skaters, goaltenders and teams, rendering entirely different metric sets (Save Percentage vs. Points Per Game, etc.).
 
 * **Cumulative Tracking:** Toggle a race chart view to see cumulative career stats rather than single-season values.
 
-* **Season Snapshot:** In single-season mode, click any game to see the exact matchup card with both teams, logos, final score, venue/time when available, and that player's one-game stat line. Age-mode and projection clicks still keep the broader season/career context.
+* **Season Snapshot:** In single-season mode, click any game to see the exact matchup card with both teams, logos, final score, venue/time when available, plus the player or team one-game stat line. Age-mode and projection clicks still keep the broader season/career context.
 
 * **Live Games Quick-Add:** A dedicated comparison tab lists the next 4 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and can add both teams plus each club's current points leader and best Save% goalie in one click.
 

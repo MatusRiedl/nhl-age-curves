@@ -183,7 +183,7 @@ def process_teams(
             df[metric] = df[metric].rolling(window=3, min_periods=1).mean()
 
         # Games Played x-axis
-        if games_mode:
+        if games_mode and not season_mode:
             df["CumGP"] = df["GP"].cumsum()
 
         df["Player"]   = _name

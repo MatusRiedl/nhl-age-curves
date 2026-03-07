@@ -229,7 +229,7 @@ _show_panel = True
 st.markdown("<div id='main-chart-layout'></div>", unsafe_allow_html=True)
 
 if _show_panel:
-    col_chart, col_stats = st.columns([68, 32], gap="medium")
+    col_chart, col_stats = st.columns([62, 38], gap="medium")
 else:
     col_chart = st.container()
     col_stats = None
@@ -409,7 +409,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.86.0 -- 6303 lines of Python<br>"
+    "Created by Iksperial. v0.86.1 -- 6302 lines of Python<br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

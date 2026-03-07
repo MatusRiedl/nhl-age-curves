@@ -36,8 +36,7 @@ def _get_control_pill_groups(
     unavailable = set()
     hide_unavailable = False
     if team_mode and season_mode:
-        unavailable.update({"Smooth", "Proj", "Era", "Cumul", "Base", "Prime"})
-        hide_unavailable = True
+        unavailable.update({"Proj", "Era", "Cumul", "Base", "Prime"})
     elif team_mode:
         unavailable.update({"Proj", "Era", "Base", "Prime"})
     elif season_mode:
