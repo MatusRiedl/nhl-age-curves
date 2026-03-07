@@ -511,13 +511,17 @@ _CSS = """
             line-height: 0 !important;
         }
         div:has(> #comparison-season-filter) + div {
-            margin-top: -0.05rem !important;
-            margin-bottom: 0.3rem !important;
+            margin-top: -0.55rem !important;
+            margin-bottom: 0.2rem !important;
+        }
+        div:has(> #comparison-season-filter) + div .stSelectbox label {
+            margin-top: 0 !important;
+            padding-top: 0 !important;
         }
 
         /* Comparison tab row (native st.tabs) */
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] {
-            margin-top: -0.38rem !important;
+            margin-top: -0.6rem !important;
             padding-top: 0 !important;
         }
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-list"] {
@@ -559,7 +563,7 @@ _CSS = """
             }
         }
 
-        /* Main chart/stats split — give the chart more room and stack earlier on laptops */
+        /* Main content split — controls + chart on the left, comparison panel on the right */
         div:has(> #main-chart-layout) {
             margin: 0 !important;
             line-height: 0 !important;

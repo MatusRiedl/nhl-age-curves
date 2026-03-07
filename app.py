@@ -221,10 +221,23 @@ else:
 # Streamlit's widget registry before any st.rerun() call from the sidebar can
 # interrupt execution. Without this order, Streamlit orphan-cleans the key=
 # widget entries on player removal and the init block resets them to False.
+# The main content split is created before controls so the comparison panel can
+# start higher on desktop while still stacking below the chart on smaller widths.
 # Returns (metric, do_cumul): do_cumul is already resolved (False for rate stats,
 # False in games_mode) so pipelines and chart don't need to recompute it.
 # =============================================================================
-metric, do_cumul = render_controls()
+_show_panel = True
+
+st.markdown("<div id='main-chart-layout'></div>", unsafe_allow_html=True)
+
+if _show_panel:
+    col_chart, col_stats = st.columns([68, 32], gap="medium")
+else:
+    col_chart = st.container()
+    col_stats = None
+
+with col_chart:
+    metric, do_cumul = render_controls()
 
 # =============================================================================
 # Sidebar — renders player/team board and returns keys for chart cache-busting.
@@ -337,18 +350,9 @@ elif active_players:
 # Chart rendering (shared by both pipelines)
 # Keep the comparison panel visible even on an empty board so the Live games
 # tab can seed players and teams without forcing the user through the sidebar.
-# Desktop: 65/35 split (chart left, stats right). Mobile: stacked via CSS.
+# The main split already started above so the right panel can sit beside the
+# controls on desktop and stack below the chart on smaller widths.
 # =============================================================================
-_show_panel = True
-
-st.markdown("<div id='main-chart-layout'></div>", unsafe_allow_html=True)
-
-if _show_panel:
-    col_chart, col_stats = st.columns([68, 32], gap="medium")
-else:
-    col_chart = st.container()
-    col_stats = None
-
 with col_chart:
     render_chart(
         processed_dfs        = processed_dfs,
