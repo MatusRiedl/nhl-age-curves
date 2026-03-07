@@ -217,15 +217,18 @@ _CSS = """
 
         /* Tighten sidebar vertical spacing */
         [data-testid="stSidebar"] .stMarkdown hr {
-            margin-top: 6px !important;
-            margin-bottom: 6px !important;
+            margin-top: 4px !important;
+            margin-bottom: 4px !important;
         }
         [data-testid="stSidebar"] .element-container {
-            margin-bottom: 4px !important;
+            margin-bottom: 2px !important;
         }
         [data-testid="stSidebar"] h3 {
             margin-top: 4px !important;
             margin-bottom: 4px !important;
+        }
+        [data-testid="stSidebar"] label[data-testid="stWidgetLabel"] {
+            margin-bottom: 0.18rem !important;
         }
 
         /* Remove gap above Global Search to match Top 50 spacing */
@@ -512,7 +515,7 @@ _CSS = """
         }
         div:has(> #comparison-season-filter) + div {
             margin-top: -0.55rem !important;
-            margin-bottom: 0.2rem !important;
+            margin-bottom: 0.05rem !important;
         }
         div:has(> #comparison-season-filter) + div .stSelectbox label {
             margin-top: 0 !important;
@@ -520,8 +523,15 @@ _CSS = """
         }
 
         /* Comparison tab row (native st.tabs) */
+        div:has(> #comparison-tabs) {
+            margin: 0 !important;
+            line-height: 0 !important;
+        }
+        div:has(> #comparison-tabs) + div {
+            margin-top: -0.35rem !important;
+        }
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] {
-            margin-top: -0.6rem !important;
+            margin-top: 0 !important;
             padding-top: 0 !important;
         }
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-list"] {

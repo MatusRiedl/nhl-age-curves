@@ -267,7 +267,6 @@ def render_sidebar() -> dict:
             label_visibility="collapsed",
             width="stretch",
         )
-        st.markdown("---")
         if st.session_state.stat_category != "Team":
             return _render_player_sidebar()
         else:
@@ -393,8 +392,6 @@ def _render_player_sidebar() -> dict:
         )
     elif search_term:
         st.caption("No players found")
-
-    st.markdown("---")
 
     _is_goalie_mode = st.session_state.stat_category == "Goalie"
     if _is_goalie_mode:
