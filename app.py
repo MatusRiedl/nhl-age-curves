@@ -255,14 +255,19 @@ team_mode = st.session_state.stat_category == "Team"
 active_players = {} if team_mode else st.session_state.players
 
 chart_season_options: list[str | int] = ["All"]
+available_chart_seasons: set[int] = set()
 if active_players:
-    available_chart_seasons: set[int] = set()
     for _pid in active_players.keys():
         try:
             available_chart_seasons.update(get_player_available_nhl_seasons(int(_pid)))
         except Exception:
             continue
-    chart_season_options.extend(sorted(available_chart_seasons, reverse=True))
+if str(st.session_state.chart_season) != "All":
+    try:
+        available_chart_seasons.add(int(st.session_state.chart_season))
+    except Exception:
+        pass
+chart_season_options.extend(sorted(available_chart_seasons, reverse=True))
 
 if st.session_state.chart_season not in chart_season_options:
     st.session_state.chart_season = "All"
@@ -399,7 +404,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.83.1 -- 5545 lines of Python<br>"
+    "Created by Iksperial. v0.84.0 -- 5598 lines of Python<br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

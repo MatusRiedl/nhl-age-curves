@@ -217,6 +217,38 @@ def _get_category_tab_key(stat_category: str) -> str:
     return _CATEGORY_TAB_KEYS.get(stat_category, "panel_tab_skater")
 
 
+def _sync_chart_season_picker() -> None:
+    """Keep the chart-season widget and canonical state in sync.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    selected_season = st.session_state.get("_chart_season_picker", "All")
+    st.session_state["_chart_season_picker"] = selected_season
+    st.session_state["chart_season"] = selected_season
+
+
+def _prime_chart_season_picker(chart_season_options: list[str | int]) -> int:
+    """Seed the chart-season widget from canonical session state.
+
+    Args:
+        chart_season_options: Valid selectbox options for the current board.
+
+    Returns:
+        Index of the active chart-season option.
+    """
+    current_chart_season = st.session_state.get("chart_season", "All")
+    if current_chart_season not in chart_season_options:
+        current_chart_season = "All"
+        st.session_state["chart_season"] = current_chart_season
+    if st.session_state.get("_chart_season_picker") != current_chart_season:
+        st.session_state["_chart_season_picker"] = current_chart_season
+    return chart_season_options.index(current_chart_season)
+
+
 def get_panel_tab_ids() -> set[str]:
     """Return all registered panel tab IDs."""
     return {t.id for t in _PANEL_TABS}
@@ -312,10 +344,13 @@ def render_comparison_area(
 
     if not team_mode and chart_season_options:
         st.markdown("<div id='comparison-season-filter'></div>", unsafe_allow_html=True)
+        active_chart_season_index = _prime_chart_season_picker(chart_season_options)
         st.selectbox(
             "Chart season",
             options=chart_season_options,
-            key="chart_season",
+            index=active_chart_season_index,
+            key="_chart_season_picker",
+            on_change=_sync_chart_season_picker,
             format_func=_format_chart_season_label,
         )
 
