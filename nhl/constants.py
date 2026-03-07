@@ -24,6 +24,12 @@ STATS_URL     = "https://api-web.nhle.com/v1/player/{}/landing"
 PLAYER_GAME_LOG_URL = "https://api-web.nhle.com/v1/player/{}/game-log/{}/{}"
 """Per-player game-log endpoint; format with player_id, season_id, and gameTypeId."""
 
+SEASON_SKATER_SUMMARY_URL = "https://api.nhle.com/stats/rest/en/skater/summary"
+"""Season skater-summary endpoint; query with seasonId and gameTypeId filters."""
+
+SEASON_GOALIE_SUMMARY_URL = "https://api.nhle.com/stats/rest/en/goalie/summary"
+"""Season goalie-summary endpoint; query with seasonId and gameTypeId filters."""
+
 ROSTER_URL    = "https://api-web.nhle.com/v1/roster/{}/current"
 """Current-roster endpoint; format with team abbreviation (e.g. 'EDM')."""
 

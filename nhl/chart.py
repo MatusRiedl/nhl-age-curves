@@ -37,14 +37,11 @@ BASELINE_LINE_DASH = "14px,10px"
 BASELINE_LINE_COLOR = "rgba(190, 190, 190, 0.72)"
 BASELINE_MARKER_COLOR = "rgba(220, 220, 220, 0.92)"
 PLAYER_COLOR_STATE_KEY = "player_chart_colors"
-CHART_SELECTION_STATE_KEY = "chart_selected_point"
 SEASON_MARKER_SIZE = 13
 SEASON_MARKER_GLOW_SIZE = 24
 SEASON_MARKER_GLOW_OPACITY = 0.101
-SEASON_SELECTED_MARKER_SIZE = 17
 SEASON_STEM_WIDTH = 2
 SEASON_MARKER_OUTLINE = "rgba(255, 255, 255, 0.78)"
-SEASON_SELECTED_OUTLINE = "rgba(255, 255, 255, 0.98)"
 
 
 def _store_player_chart_colors(player_colors: dict[str, str | None]) -> None:
@@ -391,6 +388,32 @@ def _build_single_season_marker_glow_traces(
     return glow_traces
 
 
+def _disable_single_season_selection_dimming(fig: go.Figure) -> None:
+    """Keep single-season click selection from dimming every other point.
+
+    Args:
+        fig: Figure holding the visible player traces.
+
+    Returns:
+        None.
+    """
+    for trace in fig.data:
+        if trace.name.startswith("_") or "(Proj)" in trace.name or _is_baseline_trace(trace.name):
+            continue
+
+        base_marker = getattr(trace, "marker", None)
+        base_size = getattr(base_marker, "size", None)
+        base_color = getattr(base_marker, "color", None) or getattr(trace.line, "color", None)
+        selected_marker = {"opacity": 1.0}
+        if base_size is not None:
+            selected_marker["size"] = base_size
+        if base_color is not None:
+            selected_marker["color"] = _with_alpha(base_color, 1.0)
+
+        trace.selected = dict(marker=selected_marker)
+        trace.unselected = dict(marker=dict(opacity=1.0))
+
+
 def _build_single_season_lollipop_stem_traces(
     fig: go.Figure,
     player_colors: dict[str, str | None],
@@ -434,78 +457,6 @@ def _build_single_season_lollipop_stem_traces(
             )
         )
     return stem_traces
-
-
-def _build_chart_selection_payload(
-    chart_key: str,
-    point: dict,
-    has_exact_game_custom_data: bool,
-) -> dict | None:
-    """Normalize the clicked Plotly point into one persisted selection payload.
-
-    Args:
-        chart_key: Current chart cache-busting key.
-        point: Plotly event point payload.
-        has_exact_game_custom_data: Whether exact game ids are present in customdata.
-
-    Returns:
-        dict | None: Stored point identity, or None when the payload is unusable.
-    """
-    custom_data = point.get("customdata", [])
-    if len(custom_data) < 2:
-        return None
-
-    payload = {
-        "chart_key": chart_key,
-        "player_name": str(custom_data[1]),
-        "x": point.get("x"),
-    }
-    if has_exact_game_custom_data and len(custom_data) >= 4 and custom_data[3] not in (None, ""):
-        payload["game_id"] = str(custom_data[3])
-    return payload
-
-
-def _apply_single_season_point_selection(
-    fig: go.Figure,
-    selection: dict | None,
-    has_exact_game_custom_data: bool,
-) -> None:
-    """Apply persistent selected-point styling to single-season player traces.
-
-    Args:
-        fig: Figure holding the visible player traces.
-        selection: Persisted selection payload from session state.
-        has_exact_game_custom_data: Whether exact game ids are available.
-
-    Returns:
-        None.
-    """
-    for trace in fig.data:
-        if trace.name.startswith("_") or "(Proj)" in trace.name or _is_baseline_trace(trace.name):
-            continue
-
-        matched_indices: list[int] = []
-        if selection and trace.name == selection.get("player_name"):
-            for idx, (x_val, custom_row) in enumerate(
-                zip(trace.x if trace.x is not None else [], trace.customdata if trace.customdata is not None else [])
-            ):
-                if str(x_val) != str(selection.get("x")):
-                    continue
-                if has_exact_game_custom_data and selection.get("game_id") is not None:
-                    if len(custom_row) < 4 or str(custom_row[3]) != str(selection.get("game_id")):
-                        continue
-                matched_indices.append(idx)
-
-        base_color = getattr(trace.marker, "color", None) or getattr(trace.line, "color", None)
-        trace.selected = dict(
-            marker=dict(
-                size=SEASON_SELECTED_MARKER_SIZE,
-                color=_with_alpha(base_color, 1.0) if base_color else None,
-                opacity=1.0,
-            )
-        )
-        trace.unselected = dict(marker=dict(opacity=1.0))
-        trace.selectedpoints = matched_indices
 
 
 def render_chart(
@@ -655,14 +606,6 @@ def render_chart(
             f"_{st.session_state.x_axis_mode}"
             f"_{selected_season}"
         )
-
-    stored_chart_selection = getattr(st.session_state, CHART_SELECTION_STATE_KEY, None)
-    active_chart_selection = (
-        stored_chart_selection
-        if isinstance(stored_chart_selection, dict)
-        and stored_chart_selection.get("chart_key") == chart_key
-        else None
-    )
 
     # ------------------------------------------------------------------
     # Data bounds for axis range constraints and JS pan clamping
@@ -945,7 +888,7 @@ def render_chart(
         if is_single_season_lollipop_mode:
             helper_traces = _build_single_season_lollipop_stem_traces(fig, player_colors) + helper_traces
         _prepend_traces(fig, helper_traces)
-        _apply_single_season_point_selection(fig, active_chart_selection, has_exact_game_custom_data)
+        _disable_single_season_selection_dimming(fig)
 
     _apply_special_trace_styling(fig, player_colors)
 
@@ -1245,14 +1188,6 @@ def render_chart(
     if not team_mode and event and event.selection.get("points"):
         point = event.selection["points"][0]
         cd = point.get("customdata", [])
-        if is_single_season_player_games:
-            selection_payload = _build_chart_selection_payload(
-                chart_key=chart_key,
-                point=point,
-                has_exact_game_custom_data=has_exact_game_custom_data,
-            )
-            if selection_payload is not None:
-                setattr(st.session_state, CHART_SELECTION_STATE_KEY, selection_payload)
         age_for_detail = int(cd[2]) if games_mode else point["x"]
         clicked_game_id = None
         clicked_game_date = None

@@ -63,6 +63,12 @@ Player landing payload:
 Player game log payload:
 `https://api-web.nhle.com/v1/player/{player_id}/game-log/{season_id}/{game_type_id}`
 
+Season skater summary:
+`https://api.nhle.com/stats/rest/en/skater/summary`
+
+Season goalie summary:
+`https://api.nhle.com/stats/rest/en/goalie/summary`
+
 Roster:
 `https://api-web.nhle.com/v1/roster/{team_abbr}/current`
 
@@ -143,6 +149,7 @@ SECTION 6 - DATA PIPELINE (PER PLAYER, PER RENDER)
 1. Fetch raw player data.
    - Normal mode uses `get_player_raw_stats()`.
    - Selected-season mode uses `get_player_season_game_log()` and real NHL game logs.
+   - Overview cards can also call cached season-summary leaderboards for league rank text.
 2. Apply the skater/goalie gatekeeper.
 3. Filter to the selected leagues.
 4. If `Era` is on for skaters, apply NHLe to non-NHL `Points`, `Goals`, and `Assists`. If `Era` is off, keep league scoring raw.
@@ -272,6 +279,8 @@ Permanent cache:
 Hourly cache (`ttl=3600`):
 - `get_player_landing()`
 - `get_player_available_nhl_seasons()`
+- `get_season_leaderboard()`
+- `get_player_season_rank_map()`
 - `fetch_all_time_records()`
 - `get_id_to_name_map()`
 - `search_player()`
@@ -339,6 +348,7 @@ Module responsibilities:
 Key integration notes:
 - `schedule.py` only auto-seeds the board on first session load and only if a shared URL did not already populate players or teams
 - `comparison.py` stores tab memory per category via `panel_tab_skater`, `panel_tab_goalie`, and `panel_tab_team`
+- selected-season Overview cards prefer league-wide season rank text from the summary endpoints and fall back to the old game-log scope label if rank data is unavailable
 - `url_params.py` supports compact ID-only links, legacy `id|name` / `abbr|name` links, and the chart-top `chart_season` selector without redundantly encoding forced games mode
 
 That is the architecture. No magic, just disciplined pandas.

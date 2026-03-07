@@ -13,6 +13,7 @@ from nhl.data_loaders import (
     get_player_career_rank,
     get_player_current_team,
     get_player_hero_image,
+    get_player_season_rank_map,
     get_player_roster_info,
     get_team_all_time_stats,
     get_team_trophy_summary,
@@ -120,6 +121,32 @@ def _build_selected_season_scope_label(selected_season: str | int, season_type: 
         f"{_season_span_label_from_id(selected_season)}"
         f" · {season_scope_map.get(season_type, season_type)} game log"
     )
+
+
+def _build_selected_season_rank_label(
+    selected_season: str | int,
+    season_type: str,
+    metric: str,
+    rank: int,
+) -> str:
+    """Build the selected-season leaderboard copy for Overview cards.
+
+    Args:
+        selected_season: Selected chart-season value.
+        season_type: Regular, Playoffs, or Both.
+        metric: Active chart metric.
+        rank: 1-based league rank for the selected player.
+
+    Returns:
+        Compact leaderboard label such as ``#2 in 2024-25 Points``.
+    """
+    season_prefix_map = {
+        'Regular': '',
+        'Playoffs': 'Playoff ',
+        'Both': 'Combined ',
+    }
+    metric_label = f"{season_prefix_map.get(season_type, '')}{metric}".strip()
+    return f"#{rank} in {_season_span_label_from_id(selected_season)} {metric_label}"
 
 
 def _get_visible_stat_total(real_df: pd.DataFrame, column: str, use_last_visible: bool) -> int:
@@ -439,6 +466,11 @@ def _render_overview_players(
     season_mode = _is_selected_season_mode(selected_season)
     use_last_visible_total = season_mode and do_cumul
     player_colors = _get_player_chart_colors()
+    season_rank_map = (
+        get_player_season_rank_map(stat_category, int(selected_season), season_type, metric)
+        if season_mode
+        else {}
+    )
     rank_suffix_map = {"Goals": "Goals", "Assists": "Assists", "Points": "Points"}
     rank_suffix = "Wins" if is_goalie else rank_suffix_map.get(metric, "Points")
 
@@ -481,9 +513,16 @@ def _render_overview_players(
 
         scope_row = ""
         if season_mode:
+            scope_color = player_colors.get(name) or _DEFAULT_PLAYER_RANK_COLOR
+            season_rank = season_rank_map.get(int(pid))
+            season_label = (
+                _build_selected_season_rank_label(selected_season, season_type, metric, season_rank)
+                if season_rank is not None
+                else _build_selected_season_scope_label(selected_season, season_type)
+            )
             scope_row = (
-                "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
-                f"{_build_selected_season_scope_label(selected_season, season_type)}"
+                f"<br><span style='font-size:14px;color:{scope_color};font-weight:bold;'>"
+                f"{season_label}"
                 "</span>"
             )
 

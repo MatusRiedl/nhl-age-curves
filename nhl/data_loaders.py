@@ -15,6 +15,8 @@ from nhl.constants import (
     NHLE_DEFAULT_MULTIPLIER,
     NHLE_MULTIPLIERS,
     PLAYER_GAME_LOG_URL,
+    SEASON_GOALIE_SUMMARY_URL,
+    SEASON_SKATER_SUMMARY_URL,
     SEARCH_URL,
     STATS_URL,
     ROSTER_URL,
@@ -684,6 +686,237 @@ def _season_year_to_id(season_year: int) -> int | None:
     if year < 1900 or year > CURRENT_SEASON_YEAR:
         return None
     return int(f"{year}{year + 1}")
+
+
+def _seconds_to_minutes(raw_seconds: object) -> float:
+    """Convert NHL summary API seconds fields into decimal minutes.
+
+    Args:
+        raw_seconds: Numeric seconds value from the NHL stats API.
+
+    Returns:
+        Decimal minutes, or ``0.0`` when parsing fails.
+    """
+    try:
+        return float(raw_seconds or 0.0) / 60.0
+    except Exception:
+        return 0.0
+
+
+def _fetch_season_summary_rows(category: str, season_id: int, game_type_id: str) -> list[dict]:
+    """Fetch raw season-summary rows for one category and game type.
+
+    Args:
+        category: ``Skater`` or ``Goalie``.
+        season_id: Combined NHL seasonId such as ``20242025``.
+        game_type_id: NHL game-type ID string like ``'2'`` or ``'3'``.
+
+    Returns:
+        Raw summary rows, or an empty list on failure.
+    """
+    endpoint = SEASON_GOALIE_SUMMARY_URL if category == 'Goalie' else SEASON_SKATER_SUMMARY_URL
+    try:
+        payload = requests.get(
+            endpoint,
+            params={
+                'limit': -1,
+                'start': 0,
+                'sort': 'playerId',
+                'cayenneExp': f'seasonId={season_id} and gameTypeId={int(game_type_id)}',
+            },
+            timeout=10,
+        ).json()
+        rows = payload.get('data', []) if isinstance(payload, dict) else []
+        return [row for row in rows if isinstance(row, dict)]
+    except Exception:
+        return []
+
+
+def _build_skater_season_leaderboard(rows: list[dict]) -> pd.DataFrame:
+    """Normalize skater season-summary rows into app metric columns.
+
+    Args:
+        rows: Raw rows from the NHL skater summary endpoint.
+
+    Returns:
+        One row per player with merged counting and derived rate stats.
+    """
+    normalized_rows: list[dict] = []
+    for row in rows:
+        try:
+            player_id = int(row.get('playerId', 0) or 0)
+        except Exception:
+            player_id = 0
+        if player_id <= 0:
+            continue
+        gp = float(row.get('gamesPlayed', 0) or 0)
+        normalized_rows.append({
+            'playerId': player_id,
+            'playerName': str(row.get('skaterFullName', '') or row.get('lastName', '') or '').strip(),
+            'GP': gp,
+            'Points': float(row.get('points', 0) or 0),
+            'Goals': float(row.get('goals', 0) or 0),
+            'Assists': float(row.get('assists', 0) or 0),
+            'PIM': float(row.get('penaltyMinutes', 0) or 0),
+            '+/-': float(row.get('plusMinus', 0) or 0),
+            'Shots': float(row.get('shots', 0) or 0),
+            'TotalTOIMins': _seconds_to_minutes(row.get('timeOnIcePerGame', 0)) * gp,
+        })
+
+    if not normalized_rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(normalized_rows)
+    leaderboard = (
+        df.groupby('playerId', as_index=False)
+        .agg({
+            'playerName': 'first',
+            'GP': 'sum',
+            'Points': 'sum',
+            'Goals': 'sum',
+            'Assists': 'sum',
+            'PIM': 'sum',
+            '+/-': 'sum',
+            'Shots': 'sum',
+            'TotalTOIMins': 'sum',
+        })
+    )
+    gp_denom = leaderboard['GP'].where(leaderboard['GP'].ne(0))
+    shots_denom = leaderboard['Shots'].where(leaderboard['Shots'].ne(0))
+    leaderboard['PPG'] = leaderboard['Points'].div(gp_denom).fillna(0.0)
+    leaderboard['SH%'] = leaderboard['Goals'].mul(100.0).div(shots_denom).fillna(0.0)
+    leaderboard['TOI'] = leaderboard['TotalTOIMins'].div(gp_denom).fillna(0.0)
+    return leaderboard
+
+
+def _build_goalie_season_leaderboard(rows: list[dict]) -> pd.DataFrame:
+    """Normalize goalie season-summary rows into app metric columns.
+
+    Args:
+        rows: Raw rows from the NHL goalie summary endpoint.
+
+    Returns:
+        One row per goalie with merged counting and derived rate stats.
+    """
+    normalized_rows: list[dict] = []
+    for row in rows:
+        try:
+            player_id = int(row.get('playerId', 0) or 0)
+        except Exception:
+            player_id = 0
+        if player_id <= 0:
+            continue
+        normalized_rows.append({
+            'playerId': player_id,
+            'playerName': str(row.get('goalieFullName', '') or row.get('lastName', '') or '').strip(),
+            'GP': float(row.get('gamesPlayed', 0) or 0),
+            'Wins': float(row.get('wins', 0) or 0),
+            'Shutouts': float(row.get('shutouts', 0) or 0),
+            'Saves': float(row.get('saves', 0) or 0),
+            'GoalsAgainst': float(row.get('goalsAgainst', 0) or 0),
+            'ShotsAgainst': float(row.get('shotsAgainst', 0) or 0),
+            'TotalTOIMins': _seconds_to_minutes(row.get('timeOnIce', 0)),
+        })
+
+    if not normalized_rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(normalized_rows)
+    leaderboard = (
+        df.groupby('playerId', as_index=False)
+        .agg({
+            'playerName': 'first',
+            'GP': 'sum',
+            'Wins': 'sum',
+            'Shutouts': 'sum',
+            'Saves': 'sum',
+            'GoalsAgainst': 'sum',
+            'ShotsAgainst': 'sum',
+            'TotalTOIMins': 'sum',
+        })
+    )
+    shots_against_denom = leaderboard['ShotsAgainst'].where(leaderboard['ShotsAgainst'].ne(0))
+    toi_denom = leaderboard['TotalTOIMins'].where(leaderboard['TotalTOIMins'].ne(0))
+    leaderboard['Save %'] = leaderboard['Saves'].mul(100.0).div(shots_against_denom).fillna(0.0)
+    leaderboard['GAA'] = leaderboard['GoalsAgainst'].mul(60.0).div(toi_denom).fillna(0.0)
+    return leaderboard
+
+
+@st.cache_data(ttl=3600)
+def get_season_leaderboard(category: str, season_year: int, season_type: str) -> pd.DataFrame:
+    """Build a merged NHL season leaderboard for comparison-card rank text.
+
+    Args:
+        category: ``Skater`` or ``Goalie``.
+        season_year: Four-digit NHL season start year.
+        season_type: ``Regular``, ``Playoffs``, or ``Both``.
+
+    Returns:
+        Leaderboard DataFrame keyed by ``playerId``.
+    """
+    season_id = _season_year_to_id(season_year)
+    if season_id is None or category not in {'Skater', 'Goalie'}:
+        return pd.DataFrame()
+
+    game_type_ids = {
+        'Regular': ['2'],
+        'Playoffs': ['3'],
+        'Both': ['2', '3'],
+    }.get(season_type)
+    if not game_type_ids:
+        return pd.DataFrame()
+
+    rows: list[dict] = []
+    for game_type_id in game_type_ids:
+        rows.extend(_fetch_season_summary_rows(category, season_id, game_type_id))
+
+    if category == 'Goalie':
+        return _build_goalie_season_leaderboard(rows)
+    return _build_skater_season_leaderboard(rows)
+
+
+@st.cache_data(ttl=3600)
+def get_player_season_rank_map(
+    category: str,
+    season_year: int,
+    season_type: str,
+    metric: str,
+) -> dict[int, int]:
+    """Return playerId -> league rank for one selected season metric.
+
+    Args:
+        category: ``Skater`` or ``Goalie``.
+        season_year: Four-digit NHL season start year.
+        season_type: ``Regular``, ``Playoffs``, or ``Both``.
+        metric: Active chart metric.
+
+    Returns:
+        Dict mapping player IDs to 1-based league ranks.
+    """
+    leaderboard = get_season_leaderboard(category, season_year, season_type)
+    if leaderboard.empty or metric not in leaderboard.columns or 'playerId' not in leaderboard.columns:
+        return {}
+
+    ranked = leaderboard[['playerId', metric]].copy()
+    ranked[metric] = pd.to_numeric(ranked[metric], errors='coerce')
+    ranked['playerId'] = pd.to_numeric(ranked['playerId'], errors='coerce')
+    ranked = ranked.dropna(subset=['playerId', metric])
+    if ranked.empty:
+        return {}
+
+    ascending = metric == 'GAA'
+    ranked = ranked.sort_values([metric, 'playerId'], ascending=[ascending, True]).reset_index(drop=True)
+
+    rank_map: dict[int, int] = {}
+    previous_value = None
+    current_rank = 0
+    for index, (player_id, value) in enumerate(ranked[['playerId', metric]].itertuples(index=False, name=None), start=1):
+        value = float(value)
+        if previous_value is None or value != previous_value:
+            current_rank = index
+            previous_value = value
+        rank_map[int(player_id)] = current_rank
+    return rank_map
 
 
 def _normalize_player_game_log_rows(
