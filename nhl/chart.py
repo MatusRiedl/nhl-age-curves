@@ -37,6 +37,14 @@ BASELINE_LINE_DASH = "14px,10px"
 BASELINE_LINE_COLOR = "rgba(190, 190, 190, 0.72)"
 BASELINE_MARKER_COLOR = "rgba(220, 220, 220, 0.92)"
 PLAYER_COLOR_STATE_KEY = "player_chart_colors"
+CHART_SELECTION_STATE_KEY = "chart_selected_point"
+SEASON_MARKER_SIZE = 13
+SEASON_MARKER_GLOW_SIZE = 24
+SEASON_MARKER_GLOW_OPACITY = 0.101
+SEASON_SELECTED_MARKER_SIZE = 17
+SEASON_STEM_WIDTH = 2
+SEASON_MARKER_OUTLINE = "rgba(255, 255, 255, 0.78)"
+SEASON_SELECTED_OUTLINE = "rgba(255, 255, 255, 0.98)"
 
 
 def _store_player_chart_colors(player_colors: dict[str, str | None]) -> None:
@@ -298,6 +306,208 @@ def _apply_special_trace_styling(fig: go.Figure, player_colors: dict[str, str | 
             trace.marker.symbol = 'circle'
 
 
+def _with_alpha(color: str | None, alpha: float) -> str:
+    """Return one color string rewritten with a different alpha channel.
+
+    Args:
+        color: Plotly color string, usually hex or rgb/rgba.
+        alpha: Target opacity between 0 and 1.
+
+    Returns:
+        str: RGBA color string with the requested opacity.
+    """
+    if not color:
+        return f"rgba(255, 255, 255, {alpha:.3f})"
+
+    clean = str(color).strip()
+    if clean.startswith("#") and len(clean) == 7:
+        red = int(clean[1:3], 16)
+        green = int(clean[3:5], 16)
+        blue = int(clean[5:7], 16)
+        return f"rgba({red}, {green}, {blue}, {alpha:.3f})"
+
+    if clean.startswith("rgb(") and clean.endswith(")"):
+        rgb = [part.strip() for part in clean[4:-1].split(",")]
+        if len(rgb) == 3:
+            return f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {alpha:.3f})"
+
+    if clean.startswith("rgba(") and clean.endswith(")"):
+        rgba = [part.strip() for part in clean[5:-1].split(",")]
+        if len(rgba) >= 3:
+            return f"rgba({rgba[0]}, {rgba[1]}, {rgba[2]}, {alpha:.3f})"
+
+    return clean
+
+
+def _prepend_traces(fig: go.Figure, traces: list[go.Scatter]) -> None:
+    """Insert background helper traces ahead of the visible data traces.
+
+    Args:
+        fig: Plotly figure to mutate in place.
+        traces: Helper traces that should render behind the main series.
+
+    Returns:
+        None.
+    """
+    if not traces:
+        return
+    fig.add_traces(traces)
+    fig.data = fig.data[-len(traces):] + fig.data[:-len(traces)]
+
+
+def _build_single_season_marker_glow_traces(
+    fig: go.Figure,
+    player_colors: dict[str, str | None],
+) -> list[go.Scatter]:
+    """Build soft marker-glow traces for clickable single-season points.
+
+    Args:
+        fig: Figure holding the visible player traces.
+        player_colors: Mapping of player names to their assigned colors.
+
+    Returns:
+        list[go.Scatter]: Background glow-marker traces.
+    """
+    glow_traces: list[go.Scatter] = []
+    for trace in fig.data:
+        if trace.name.startswith("_") or "(Proj)" in trace.name or _is_baseline_trace(trace.name):
+            continue
+        player_color = player_colors.get(trace.name) or getattr(trace.marker, "color", None) or trace.line.color
+        glow_traces.append(
+            go.Scatter(
+                x=trace.x,
+                y=trace.y,
+                mode="markers",
+                marker=dict(
+                    size=SEASON_MARKER_GLOW_SIZE,
+                    color=_with_alpha(player_color, SEASON_MARKER_GLOW_OPACITY),
+                ),
+                showlegend=False,
+                legendgroup=trace.legendgroup or trace.name,
+                hoverinfo="skip",
+                name="_season_marker_glow",
+            )
+        )
+    return glow_traces
+
+
+def _build_single_season_lollipop_stem_traces(
+    fig: go.Figure,
+    player_colors: dict[str, str | None],
+) -> list[go.Scatter]:
+    """Build one vertical-stem trace per player for raw single-season mode.
+
+    Args:
+        fig: Figure holding the visible player traces.
+        player_colors: Mapping of player names to their assigned colors.
+
+    Returns:
+        list[go.Scatter]: Background lollipop stem traces.
+    """
+    stem_traces: list[go.Scatter] = []
+    for trace in fig.data:
+        if trace.name.startswith("_") or "(Proj)" in trace.name or _is_baseline_trace(trace.name):
+            continue
+
+        stem_x: list[float | int | None] = []
+        stem_y: list[float | int | None] = []
+        for x_val, y_val in zip(trace.x if trace.x is not None else [], trace.y if trace.y is not None else []):
+            if x_val is None or y_val is None or pd.isna(y_val):
+                continue
+            stem_x.extend([x_val, x_val, None])
+            stem_y.extend([0, y_val, None])
+
+        if not stem_x:
+            continue
+
+        player_color = player_colors.get(trace.name) or getattr(trace.marker, "color", None) or trace.line.color
+        stem_traces.append(
+            go.Scatter(
+                x=stem_x,
+                y=stem_y,
+                mode="lines",
+                line=dict(color=_with_alpha(player_color, 0.36), width=SEASON_STEM_WIDTH),
+                showlegend=False,
+                legendgroup=trace.legendgroup or trace.name,
+                hoverinfo="skip",
+                name="_season_lollipop_stems",
+            )
+        )
+    return stem_traces
+
+
+def _build_chart_selection_payload(
+    chart_key: str,
+    point: dict,
+    has_exact_game_custom_data: bool,
+) -> dict | None:
+    """Normalize the clicked Plotly point into one persisted selection payload.
+
+    Args:
+        chart_key: Current chart cache-busting key.
+        point: Plotly event point payload.
+        has_exact_game_custom_data: Whether exact game ids are present in customdata.
+
+    Returns:
+        dict | None: Stored point identity, or None when the payload is unusable.
+    """
+    custom_data = point.get("customdata", [])
+    if len(custom_data) < 2:
+        return None
+
+    payload = {
+        "chart_key": chart_key,
+        "player_name": str(custom_data[1]),
+        "x": point.get("x"),
+    }
+    if has_exact_game_custom_data and len(custom_data) >= 4 and custom_data[3] not in (None, ""):
+        payload["game_id"] = str(custom_data[3])
+    return payload
+
+
+def _apply_single_season_point_selection(
+    fig: go.Figure,
+    selection: dict | None,
+    has_exact_game_custom_data: bool,
+) -> None:
+    """Apply persistent selected-point styling to single-season player traces.
+
+    Args:
+        fig: Figure holding the visible player traces.
+        selection: Persisted selection payload from session state.
+        has_exact_game_custom_data: Whether exact game ids are available.
+
+    Returns:
+        None.
+    """
+    for trace in fig.data:
+        if trace.name.startswith("_") or "(Proj)" in trace.name or _is_baseline_trace(trace.name):
+            continue
+
+        matched_indices: list[int] = []
+        if selection and trace.name == selection.get("player_name"):
+            for idx, (x_val, custom_row) in enumerate(
+                zip(trace.x if trace.x is not None else [], trace.customdata if trace.customdata is not None else [])
+            ):
+                if str(x_val) != str(selection.get("x")):
+                    continue
+                if has_exact_game_custom_data and selection.get("game_id") is not None:
+                    if len(custom_row) < 4 or str(custom_row[3]) != str(selection.get("game_id")):
+                        continue
+                matched_indices.append(idx)
+
+        base_color = getattr(trace.marker, "color", None) or getattr(trace.line, "color", None)
+        trace.selected = dict(
+            marker=dict(
+                size=SEASON_SELECTED_MARKER_SIZE,
+                color=_with_alpha(base_color, 1.0) if base_color else None,
+                opacity=1.0,
+            )
+        )
+        trace.unselected = dict(marker=dict(opacity=1.0))
+        trace.selectedpoints = matched_indices
+
+
 def render_chart(
     processed_dfs: list,
     metric: str,
@@ -423,6 +633,37 @@ def render_chart(
         x_col       = "Age"
         custom_cols = ["BaseName", "Player"]
 
+    is_single_season_lollipop_mode = is_single_season_player_games and not do_cumul
+
+    # ------------------------------------------------------------------
+    # Chart widget key + persisted point selection
+    # ------------------------------------------------------------------
+    if team_mode:
+        chart_key = (
+            f"chart_team_{hash(str(st.session_state.teams))}"
+            f"_{metric}_{st.session_state.do_smooth}_{st.session_state.x_axis_mode}"
+        )
+    else:
+        player_names = [df['BaseName'].iloc[0] for df in processed_dfs if not df.empty]
+        chart_key = (
+            f"chart_{hash(str(player_names))}"
+            f"_{metric}_{st.session_state.do_predict}_{st.session_state.do_smooth}"
+            f"_{sidebar_keys.get('search_term', '')}"
+            f"_{sidebar_keys.get('top_selected', '')}"
+            f"_{sidebar_keys.get('team_abbr', '')}"
+            f"_{sidebar_keys.get('roster_player', '')}"
+            f"_{st.session_state.x_axis_mode}"
+            f"_{selected_season}"
+        )
+
+    stored_chart_selection = getattr(st.session_state, CHART_SELECTION_STATE_KEY, None)
+    active_chart_selection = (
+        stored_chart_selection
+        if isinstance(stored_chart_selection, dict)
+        and stored_chart_selection.get("chart_key") == chart_key
+        else None
+    )
+
     # ------------------------------------------------------------------
     # Data bounds for axis range constraints and JS pan clamping
     # ------------------------------------------------------------------
@@ -482,16 +723,26 @@ def render_chart(
     # ------------------------------------------------------------------
     # Build Plotly figure
     # ------------------------------------------------------------------
-    fig = px.line(
-        final_df,
-        x           = x_col,
-        y           = metric,
-        color       = "Player",
-        custom_data = custom_cols,
-        markers     = True,
-        template    = "plotly_dark",
-        line_shape  = "spline" if do_smooth else "linear",
-    )
+    if is_single_season_lollipop_mode:
+        fig = px.scatter(
+            final_df,
+            x           = x_col,
+            y           = metric,
+            color       = "Player",
+            custom_data = custom_cols,
+            template    = "plotly_dark",
+        )
+    else:
+        fig = px.line(
+            final_df,
+            x           = x_col,
+            y           = metric,
+            color       = "Player",
+            custom_data = custom_cols,
+            markers     = True,
+            template    = "plotly_dark",
+            line_shape  = "spline" if do_smooth else "linear",
+        )
 
     # Apply visual conventions per trace
     player_colors = {}  # Map player name -> color
@@ -501,7 +752,7 @@ def render_chart(
     for trace in fig.data:
         if "(Proj)" not in trace.name and not _is_baseline_trace(trace.name):
             # This is a real player line - capture its color
-            player_colors[trace.name] = trace.line.color if trace.line.color else None
+            player_colors[trace.name] = trace.line.color or getattr(trace.marker, "color", None)
             trace.legendgroup = trace.name
         elif _is_baseline_trace(trace.name):
             trace.legendgroup = trace.name
@@ -612,16 +863,34 @@ def render_chart(
         )
     elif games_mode:
         games_hover_label = "Game" if str(selected_season) != "All" else "Career Game"
-        fig.update_traces(
-            connectgaps    = True,
-            line           = dict(width=4, shape='spline', smoothing=0.6),
-            marker         = dict(size=8),
-            hovertemplate  = (
-                f"<b>%{{customdata[1]}}</b><br>"
-                f"{games_hover_label if not team_mode else 'Season GP'} %{{x}}<br>"
-                f"Value: %{{y:{_val_fmt}}}<extra></extra>"
-            ),
-        )
+        if is_single_season_player_games:
+            fig.update_traces(
+                connectgaps   = not is_single_season_lollipop_mode,
+                line          = dict(width=0 if is_single_season_lollipop_mode else 4, shape='spline', smoothing=0.6),
+                marker        = dict(
+                    size=SEASON_MARKER_SIZE,
+                    line=dict(width=1.6, color=SEASON_MARKER_OUTLINE),
+                ),
+                hovertemplate = (
+                    f"<b>Click for details</b><br>"
+                    f"<b>%{{customdata[1]}}</b><br>"
+                    f"{games_hover_label if not team_mode else 'Season GP'} %{{x}}<br>"
+                    f"Value: %{{y:{_val_fmt}}}<extra></extra>"
+                ),
+            )
+            if is_single_season_lollipop_mode:
+                fig.update_traces(mode="markers")
+        else:
+            fig.update_traces(
+                connectgaps    = True,
+                line           = dict(width=4, shape='spline', smoothing=0.6),
+                marker         = dict(size=8),
+                hovertemplate  = (
+                    f"<b>%{{customdata[1]}}</b><br>"
+                    f"{games_hover_label if not team_mode else 'Season GP'} %{{x}}<br>"
+                    f"Value: %{{y:{_val_fmt}}}<extra></extra>"
+                ),
+            )
         fig.update_xaxes(
             title_text  = "",
             tickangle   = 0,
@@ -663,33 +932,22 @@ def render_chart(
             x_label = "Game" if games_mode and str(selected_season) != "All" else "Career Game" if games_mode else "Age"
             fig.update_traces(
                 hovertemplate=(
-                    f"<b>%{{customdata[1]}}</b><br>{x_label} %{{x}}<br>%{{y:.1f}}%<extra></extra>"
+                    (
+                        f"<b>Click for details</b><br><b>%{{customdata[1]}}</b><br>{x_label} %{{x}}<br>%{{y:.1f}}%<extra></extra>"
+                        if is_single_season_player_games
+                        else f"<b>%{{customdata[1]}}</b><br>{x_label} %{{x}}<br>%{{y:.1f}}%<extra></extra>"
+                    )
                 )
             )
 
-    _apply_special_trace_styling(fig, player_colors)
+    if is_single_season_player_games:
+        helper_traces = _build_single_season_marker_glow_traces(fig, player_colors)
+        if is_single_season_lollipop_mode:
+            helper_traces = _build_single_season_lollipop_stem_traces(fig, player_colors) + helper_traces
+        _prepend_traces(fig, helper_traces)
+        _apply_single_season_point_selection(fig, active_chart_selection, has_exact_game_custom_data)
 
-    # ------------------------------------------------------------------
-    # Chart widget key (cache-busting)
-    # ------------------------------------------------------------------
-    if team_mode:
-        chart_key = (
-            f"chart_team_{hash(str(st.session_state.teams))}"
-            f"_{metric}_{st.session_state.do_smooth}_{st.session_state.x_axis_mode}"
-        )
-    else:
-        # Use processed_dfs for player names instead of session state for better testability
-        player_names = [df['BaseName'].iloc[0] for df in processed_dfs if not df.empty]
-        chart_key = (
-            f"chart_{hash(str(player_names))}"
-            f"_{metric}_{st.session_state.do_predict}_{st.session_state.do_smooth}"
-            f"_{sidebar_keys.get('search_term', '')}"
-            f"_{sidebar_keys.get('top_selected', '')}"
-            f"_{sidebar_keys.get('team_abbr', '')}"
-            f"_{sidebar_keys.get('roster_player', '')}"
-            f"_{st.session_state.x_axis_mode}"
-            f"_{selected_season}"
-        )
+    _apply_special_trace_styling(fig, player_colors)
 
     share_button_id = f"nhl-share-btn-{abs(hash(chart_key))}"
     toolbar_id = f"nhl-chart-toolbar-{abs(hash(chart_key))}"
@@ -989,6 +1247,14 @@ def render_chart(
     if not team_mode and event and event.selection.get("points"):
         point = event.selection["points"][0]
         cd = point.get("customdata", [])
+        if is_single_season_player_games:
+            selection_payload = _build_chart_selection_payload(
+                chart_key=chart_key,
+                point=point,
+                has_exact_game_custom_data=has_exact_game_custom_data,
+            )
+            if selection_payload is not None:
+                setattr(st.session_state, CHART_SELECTION_STATE_KEY, selection_payload)
         age_for_detail = int(cd[2]) if games_mode else point["x"]
         clicked_game_id = None
         clicked_game_date = None
