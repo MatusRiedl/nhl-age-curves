@@ -21,6 +21,9 @@ SEARCH_URL    = "https://search.d3.nhle.com/api/v1/search/player"
 STATS_URL     = "https://api-web.nhle.com/v1/player/{}/landing"
 """Per-player stats endpoint; format with player_id to get seasonTotals."""
 
+PLAYER_GAME_LOG_URL = "https://api-web.nhle.com/v1/player/{}/game-log/{}/{}"
+"""Per-player game-log endpoint; format with player_id, season_id, and gameTypeId."""
+
 ROSTER_URL    = "https://api-web.nhle.com/v1/roster/{}/current"
 """Current-roster endpoint; format with team abbreviation (e.g. 'EDM')."""
 

@@ -16,6 +16,7 @@ from nhl.comparison import render_comparison_area
 from nhl.data_loaders import (
     get_clone_details_map,
     get_id_to_name_map,
+    get_player_available_nhl_seasons,
     load_all_team_seasons,
     load_historical_data,
 )
@@ -73,6 +74,7 @@ def _resolve_shared_team_names(teams: dict[str, str]) -> dict[str, str]:
         resolved_teams[clean_team_abbr] = ACTIVE_TEAMS.get(clean_team_abbr, clean_team_abbr)
     return resolved_teams
 
+
 # =============================================================================
 # Page configuration — must be the first Streamlit call
 # =============================================================================
@@ -108,12 +110,15 @@ if 'do_cumul_toggle'   not in st.session_state: st.session_state.do_cumul_toggle
 if 'do_base'           not in st.session_state: st.session_state.do_base           = True
 if 'do_prime'         not in st.session_state: st.session_state.do_prime         = True
 if 'x_axis_mode'       not in st.session_state: st.session_state.x_axis_mode       = "Age"
+if 'chart_season'      not in st.session_state: st.session_state.chart_season      = "All"
 if 'league_filter'     not in st.session_state: st.session_state.league_filter     = ['NHL']
 if 'team_sel_abbr'     not in st.session_state:
     st.session_state.team_sel_abbr = list(ACTIVE_TEAMS.keys())[0]
 if 'panel_tab_skater'  not in st.session_state: st.session_state.panel_tab_skater  = "overview"
 if 'panel_tab_goalie'  not in st.session_state: st.session_state.panel_tab_goalie  = "overview"
 if 'panel_tab_team'    not in st.session_state: st.session_state.panel_tab_team    = "overview"
+if '_pre_season_chart_x_axis_mode' not in st.session_state:
+    st.session_state._pre_season_chart_x_axis_mode = None
 
 if st.session_state.stat_category not in {"Skater", "Goalie", "Team"}:
     st.session_state.stat_category = "Skater"
@@ -177,6 +182,20 @@ if _tm and st.session_state.x_axis_mode == "Age":
 elif not _tm and st.session_state.x_axis_mode == "Season Year":
     st.session_state.x_axis_mode = "Age"
 
+if _tm and st.session_state.chart_season != "All":
+    st.session_state.chart_season = "All"
+
+_season_mode_requested = (not _tm) and st.session_state.chart_season != "All"
+if _season_mode_requested:
+    if st.session_state.x_axis_mode != "Games Played":
+        st.session_state._pre_season_chart_x_axis_mode = st.session_state.x_axis_mode
+        st.session_state.x_axis_mode = "Games Played"
+else:
+    _saved_x_axis = st.session_state.get("_pre_season_chart_x_axis_mode")
+    if _saved_x_axis in {"Age", "Games Played"} and st.session_state.x_axis_mode == "Games Played":
+        st.session_state.x_axis_mode = _saved_x_axis
+    st.session_state._pre_season_chart_x_axis_mode = None
+
 # =============================================================================
 # Controls — Category/Metric and View Options expanders.
 # MUST render before render_sidebar() so control widget keys are registered in
@@ -197,14 +216,33 @@ sidebar_keys = render_sidebar()
 # =============================================================================
 # Derived flags (read after controls have written to session state)
 # =============================================================================
-team_mode  = st.session_state.stat_category == "Team"
-games_mode = st.session_state.x_axis_mode == "Games Played"
-do_base    = st.session_state.do_base and not team_mode
-share_params = encode_state_to_params(st.session_state)
+team_mode = st.session_state.stat_category == "Team"
 
 # Active player board — shared across Skater and Goalie categories.
 # The pipeline's is_goalie gatekeeper filters per category at render time.
 active_players = {} if team_mode else st.session_state.players
+
+chart_season_options: list[str | int] = ["All"]
+if active_players:
+    available_chart_seasons: set[int] = set()
+    for _pid in active_players.keys():
+        try:
+            available_chart_seasons.update(get_player_available_nhl_seasons(int(_pid)))
+        except Exception:
+            continue
+    chart_season_options.extend(sorted(available_chart_seasons, reverse=True))
+
+if st.session_state.chart_season not in chart_season_options:
+    st.session_state.chart_season = "All"
+    _saved_x_axis = st.session_state.get("_pre_season_chart_x_axis_mode")
+    if _saved_x_axis in {"Age", "Games Played"} and st.session_state.x_axis_mode == "Games Played":
+        st.session_state.x_axis_mode = _saved_x_axis
+    st.session_state._pre_season_chart_x_axis_mode = None
+
+season_mode = (not team_mode) and st.session_state.chart_season != "All"
+games_mode = st.session_state.x_axis_mode == "Games Played"
+do_base = st.session_state.do_base and not team_mode and not season_mode
+share_params = encode_state_to_params(st.session_state)
 
 # =============================================================================
 # Shared data: historical parquet + baselines
@@ -267,6 +305,7 @@ elif active_players:
         do_smooth         = st.session_state.do_smooth,
         do_cumul          = do_cumul,
         games_mode        = games_mode,
+        selected_season   = st.session_state.chart_season,
         league_filter     = st.session_state.league_filter,
     )
 
@@ -305,6 +344,8 @@ with col_chart:
         peak_info            = peak_info,
         do_prime             = st.session_state.do_prime,
         do_era               = st.session_state.do_era,
+        selected_season      = st.session_state.chart_season,
+        chart_season_options = chart_season_options,
         share_params         = share_params,
     )
 
@@ -319,6 +360,8 @@ if col_stats is not None:
             stat_category = st.session_state.stat_category,
             season_type   = st.session_state.season_type,
             team_mode     = team_mode,
+            selected_season = st.session_state.chart_season,
+            do_cumul      = do_cumul,
         )
 
 # =============================================================================
@@ -328,7 +371,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.82.6 -- 4479 lines of Python<br>"
+    "Created by Iksperial. v0.82.7 -- 4838 lines of Python<br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

@@ -16,7 +16,9 @@ https://nhl-age-curves.streamlit.app/
 
 * **Multi-League NHLe Support:** Include non-NHL seasons (KHL, SHL, AHL, NCAA, OHL, WHL, and more) with automatic NHLe conversion factors applied to Points, Goals, and Assists before entering the pipeline.
 
-* **Games Played X-Axis Mode:** Switch the X-axis from Age to career Games Played. Every player shares a common (0, 0) origin so you can directly compare players at the same point in career experience, normalizing for injuries and missed time.
+* **Games Played X-Axis Mode:** Switch the X-axis from Age to career Games Played. Every player shares a common (0, 0) origin so you can compare players at the same point in career experience instead of pretending missed seasons never happened.
+
+* **Single-Season Game-Log Mode:** Use the chart-top `Chart season` selector next to the header to switch skaters or goalies from the default `All` career view into one real NHL season. Picking `2024-25`, `2023-24`, etc. forces the X-axis to individual games and plots actual game-log rows instead of season aggregates. Teams are deliberately excluded from v1.
 
 * **Triple Class Architecture:** Natively separates skaters, goaltenders and teams, rendering entirely different metric sets (Save Percentage vs. Points Per Game, etc.).
 
@@ -43,8 +45,8 @@ https://nhl-age-curves.streamlit.app/
 
 ## Code Structure
 
-The app is organized as a Python package under `nhl/`. `app.py` is a thin
-~200-line orchestrator; all logic lives in the package modules.
+The app is organized as a Python package under `nhl/`. `app.py` is the
+session-state orchestrator and render pass; most logic lives in the package modules.
 
 ```
 app.py                   entry point and session-state orchestrator
@@ -52,17 +54,17 @@ nhl/
     constants.py         URLs, team list, stat caps, NHLe multipliers
     styles.py            CSS injection
     era.py               era-adjustment math (no Streamlit dependency)
-    data_loaders.py      cached API fetch and parquet load functions
+    data_loaders.py      cached API fetch, season discovery, game-log, and parquet loaders
     baselines.py         aggregate historical baseline builders
     knn_engine.py        hybrid KNN projection engine
-    player_pipeline.py   full per-player data pipeline and clone wiring
+    player_pipeline.py   full per-player pipeline, including single-season game-log mode
     team_pipeline.py     team comparison pipeline
     controls.py          Category/Metric and View Options expanders
     sidebar.py           player and team sidebar UI
     dialog.py            season-detail popup dialog
-    chart.py             Plotly chart rendering, baseline overlay, and JS pan-clamp
-    comparison.py        tabbed comparison panel with Overview, Trophies, and Live games
-    url_params.py        URL query param encode/decode for shareable links
+    chart.py             Plotly chart rendering, chart-top season selector, share link, and JS pan-clamp
+    comparison.py        tabbed comparison panel with season-aware Overview, Trophies, and Live games
+    url_params.py        URL query param encode/decode for shareable links and chart season state
     schedule.py          live defaults, upcoming games, and featured-player helpers
     async_preloader.py   background cache warming for Goalie/Team categories
 scraper.py               standalone script to refresh the parquet file

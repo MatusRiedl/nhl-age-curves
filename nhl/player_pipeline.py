@@ -10,7 +10,7 @@ from nhl.constants import (
     RATE_STATS,
     normalize_league_abbrev,
 )
-from nhl.data_loaders import get_player_raw_stats
+from nhl.data_loaders import get_player_raw_stats, get_player_season_game_log
 from nhl.era import apply_era_to_hist, get_era_multiplier, get_goalie_era_sv_offset
 from nhl.knn_engine import run_knn_projection, run_linear_fallback
 
@@ -33,6 +33,7 @@ def process_players(
     do_smooth: bool,
     do_cumul: bool,
     games_mode: bool,
+    selected_season: str | int,
     league_filter: list,
 ) -> tuple:
     """Run the player pipeline and return chart data, raw caches, clones, and peaks."""
@@ -42,6 +43,7 @@ def process_players(
     peak_info      = {}
 
     _league_filter = [] if league_filter is None else league_filter
+    season_mode = str(selected_season) != "All"
 
     # Era-adjust historical data once per category before the player loop.
     # This avoids per-player era adjustment inside the projection path and keeps
@@ -54,7 +56,14 @@ def process_players(
         hist_df_goalie = hist_df
 
     for pid, name in players.items():
-        raw_df, base_name, pos_code = get_player_raw_stats(pid, name)
+        if season_mode:
+            try:
+                season_year = int(selected_season)
+            except Exception:
+                continue
+            raw_df, base_name, pos_code = get_player_season_game_log(int(pid), name, season_year)
+        else:
+            raw_df, base_name, pos_code = get_player_raw_stats(pid, name)
         if raw_df.empty:
             continue
 
@@ -69,14 +78,19 @@ def process_players(
         raw_dfs_cache.append(raw_df.copy())
 
         # --- Step 3: League filter + optional NHLe conversion ---
-        _selected_norm = {
-            normalize_league_abbrev(_lg)
-            for _lg in _league_filter
-            if normalize_league_abbrev(_lg)
-        }
-        raw_df = raw_df[
-            raw_df['League'].apply(normalize_league_abbrev).isin(_selected_norm)
-        ].copy()
+        if season_mode:
+            raw_df = raw_df[
+                raw_df['League'].apply(normalize_league_abbrev) == 'NHL'
+            ].copy()
+        else:
+            _selected_norm = {
+                normalize_league_abbrev(_lg)
+                for _lg in _league_filter
+                if normalize_league_abbrev(_lg)
+            }
+            raw_df = raw_df[
+                raw_df['League'].apply(normalize_league_abbrev).isin(_selected_norm)
+            ].copy()
         if raw_df.empty:
             continue
         # When Era is on, translate skater scoring from other leagues into a rough
@@ -133,7 +147,49 @@ def process_players(
                 )
 
         # --- Step 6a: Games Played mode branch ---
-        if games_mode:
+        if season_mode:
+            df = raw_df.sort_values(['GameDate', 'GameId']).reset_index(drop=True)
+            df['CumGP'] = range(1, len(df) + 1)
+
+            if do_cumul:
+                cum_gp = df['CumGP'].astype(float)
+                cum_points = df['Points'].cumsum()
+                cum_goals = df['Goals'].cumsum()
+                cum_assists = df['Assists'].cumsum()
+                cum_wins = df['Wins'].cumsum()
+                cum_shutouts = df['Shutouts'].cumsum()
+                cum_pim = df['PIM'].cumsum()
+                cum_saves = df['Saves'].cumsum()
+                cum_pm = df['+/-'].cumsum()
+                cum_toi = df['TotalTOIMins'].cumsum()
+                cum_wsv = df['WeightedSV'].cumsum()
+                cum_wgaa = df['WeightedGAA'].cumsum()
+                cum_shots = df['Shots'].cumsum()
+
+                df['Points'] = cum_points
+                df['Goals'] = cum_goals
+                df['Assists'] = cum_assists
+                df['Wins'] = cum_wins
+                df['Shutouts'] = cum_shutouts
+                df['PIM'] = cum_pim
+                df['Saves'] = cum_saves
+                df['+/-'] = cum_pm
+                df['GP'] = cum_gp
+
+                df['PPG'] = cum_points / cum_gp
+                df['TOI'] = cum_toi / cum_gp
+                df['SH%'] = (cum_goals / cum_shots.replace(0, float('nan')) * 100).fillna(0)
+                df['Save %'] = cum_wsv / cum_gp
+                df['GAA'] = cum_wgaa / cum_gp
+            else:
+                game_gp = df['GP'].replace(0, 1)
+                df['PPG'] = df['Points'] / game_gp
+                df['TOI'] = df['TotalTOIMins'] / game_gp
+                df['SH%'] = (df['Goals'] / df['Shots'].replace(0, float('nan')) * 100).fillna(0)
+                df['Save %'] = df['WeightedSV'] / game_gp
+                df['GAA'] = df['WeightedGAA'] / game_gp
+
+        elif games_mode:
             # Group by SeasonYear first to collapse Regular+Playoffs into one row
             age_per_season = raw_df.groupby('SeasonYear')['Age'].max()
             df = raw_df.groupby('SeasonYear').sum(numeric_only=True).reset_index()
@@ -210,16 +266,23 @@ def process_players(
             _zero.update({
                 'CumGP': 0, 'GP': 0,
                 'Age':   int(df['Age'].iloc[0]) if not df.empty else 18,
+                'SeasonYear': int(df['SeasonYear'].iloc[0]) if 'SeasonYear' in df.columns and not df.empty else 0,
                 'Player': base_name, 'BaseName': base_name,
             })
             # Rate stats have no meaningful value at game 0 — leave as NaN
             for _rs in ('PPG', 'TOI', 'SH%', 'Save %', 'GAA'):
                 if _rs in _zero:
                     _zero[_rs] = float('nan')
+            if 'GameDate' in df.columns:
+                _zero['GameDate'] = None
+            if 'GameId' in df.columns:
+                _zero['GameId'] = 0
             df = pd.concat([pd.DataFrame([_zero]), df], ignore_index=True)
 
         # --- Step 8: Peak detection (pre-smoothing, pre-cumsum) ---
-        _peak_x = _peak_age = _peak_sy = None
+        _peak_x = _peak_age = _peak_sy = _peak_game_number = None
+        _peak_game_date = None
+        _peak_raw_val = None
         try:
             if metric in df.columns and not df[metric].dropna().empty:
                 if games_mode and do_cumul and metric not in RATE_STATS:
@@ -238,6 +301,14 @@ def process_players(
                     _peak_age = int(_pr['Age'])
                     _peak_sy  = int(_pr['SeasonYear']) if 'SeasonYear' in df.columns else None
                     _peak_x   = float(_pr['CumGP']) if games_mode else float(_peak_age)
+                    _peak_game_number = int(_pr['CumGP']) if 'CumGP' in df.columns else None
+                    _peak_game_date = _pr.get('GameDate') if hasattr(_pr, 'get') else None
+                    if games_mode and do_cumul and metric not in RATE_STATS:
+                        peak_raw = _incremental.loc[_pidx]
+                        _peak_raw_val = float(peak_raw) if pd.notna(peak_raw) else None
+                    else:
+                        peak_raw = _pr.get(metric) if hasattr(_pr, 'get') else None
+                        _peak_raw_val = float(peak_raw) if pd.notna(peak_raw) else None
         except Exception:
             pass
 
@@ -322,14 +393,14 @@ def process_players(
             ]
             match = real_only[real_only[x_col_lk] == _peak_x]
             if not match.empty and metric in match.columns:
-                raw_pk       = df[df['Age'] == _peak_age][metric]
-                raw_peak_val = float(raw_pk.iloc[0]) if not raw_pk.empty else float(match[metric].iloc[0])
                 peak_info[base_name] = {
                     'x':            _peak_x,
                     'y':            float(match[metric].iloc[0]),
-                    'raw_peak_val': raw_peak_val,
+                    'raw_peak_val': _peak_raw_val if _peak_raw_val is not None else float(match[metric].iloc[0]),
                     'age':          _peak_age,
                     'season_year':  _peak_sy,
+                    'game_number':  _peak_game_number,
+                    'game_date':    _peak_game_date,
                     'pid':          pid,
                 }
 

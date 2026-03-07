@@ -85,6 +85,40 @@ def _get_chart_season_label(season_type: str) -> str:
     return season_labels.get(season_type, season_type)
 
 
+def _format_chart_season_label(value: str | int) -> str:
+    """Format one chart-season selector value.
+
+    Args:
+        value: Raw season selector value.
+
+    Returns:
+        Human-readable label such as ``All`` or ``2024-25``.
+    """
+    if str(value) == "All":
+        return "All"
+    try:
+        season_year = int(value)
+        return f"{season_year}-{str(season_year + 1)[2:]}"
+    except Exception:
+        return str(value)
+
+
+def _get_chart_theme_colors(stat_category: str) -> dict[str, str]:
+    """Return the category-aware chart palette.
+
+    Args:
+        stat_category: Active chart category.
+
+    Returns:
+        Dict with paper, plot, and hover background colors.
+    """
+    palettes = {
+        "Goalie": {"paper": "#170e0e", "plot": "#211616", "hover": "#261b1b"},
+        "Team": {"paper": "#171717", "plot": "#202020", "hover": "#262626"},
+    }
+    return palettes.get(stat_category, {"paper": "#111111", "plot": "#111111", "hover": "#1E1E1E"})
+
+
 def _metric_is_era_adjusted(metric: str, stat_category: str, do_era: bool, team_mode: bool) -> bool:
     """Return whether the visible chart metric is actually era-adjusted.
 
@@ -134,6 +168,7 @@ def _build_chart_header(
     season_type: str,
     stat_category: str,
     do_era: bool,
+    selected_season: str | int = "All",
 ) -> str:
     """Build the chart toolbar title shown above the plot area.
 
@@ -144,6 +179,7 @@ def _build_chart_header(
         season_type: Selected season scope string from the UI.
         stat_category: Current category (`Skater`, `Goalie`, or `Team`).
         do_era: Whether the era toggle is enabled.
+        selected_season: Selected chart-season value.
 
     Returns:
         str: Title text such as ``Points by Age · Regular season · Era adjusted``.
@@ -152,6 +188,8 @@ def _build_chart_header(
     season_label = _get_chart_season_label(season_type)
     era_label = _get_chart_era_label(metric, stat_category, do_era, team_mode)
     header_parts = [f"{metric} by {x_label}", season_label]
+    if not team_mode and str(selected_season) != "All":
+        header_parts.insert(1, _format_chart_season_label(selected_season))
     if era_label:
         header_parts.append(era_label)
     return " · ".join(header_parts)
@@ -294,6 +332,8 @@ def render_chart(
     peak_info: dict = None,
     do_prime: bool = False,
     do_era: bool = False,
+    selected_season: str | int = "All",
+    chart_season_options: list[str | int] | None = None,
     share_params: dict | None = None,
 ) -> None:
     """Build the Plotly chart, optional baseline overlays, and click handling."""
@@ -436,12 +476,14 @@ def render_chart(
         season_type=season_type,
         stat_category=stat_category,
         do_era=do_era,
+        selected_season=selected_season,
     )
     chart_axis_cues = _build_chart_axis_cue_annotations(
         metric=metric,
         team_mode=team_mode,
         games_mode=games_mode,
     )
+    chart_palette = _get_chart_theme_colors(stat_category)
 
     # ------------------------------------------------------------------
     # Build Plotly figure
@@ -514,11 +556,11 @@ def render_chart(
     if do_prime and not team_mode:
         for player_name, peak_data in peak_info.items():
             player_color = player_colors.get(player_name)
-            if player_color and peak_data.get('age'):
-                peak_age = peak_data['age']
+            peak_x = peak_data.get('x') if games_mode else peak_data.get('age')
+            if player_color and peak_x is not None:
                 fig.add_vrect(
-                    x0=peak_age - 1.5,
-                    x1=peak_age + 1.5,
+                    x0=peak_x - 1.5,
+                    x1=peak_x + 1.5,
                     fillcolor=player_color,
                     opacity=0.10,
                     layer="below",
@@ -531,9 +573,11 @@ def render_chart(
         margin      = dict(l=0, r=0, t=18, b=12),
         height      = 430,
         font        = dict(size=16),
-        hoverlabel  = dict(font_size=16, font_family="Arial", bgcolor="#1E1E1E"),
+        hoverlabel  = dict(font_size=16, font_family="Arial", bgcolor=chart_palette["hover"]),
         annotations = chart_axis_cues,
         title       = dict(text=""),
+        paper_bgcolor = chart_palette["paper"],
+        plot_bgcolor  = chart_palette["plot"],
         legend      = dict(
             title=None, orientation="h",
             yanchor="top", y=-0.20,
@@ -572,13 +616,14 @@ def render_chart(
             range       = _team_initial_range,
         )
     elif games_mode:
+        games_hover_label = "Game" if str(selected_season) != "All" else "Career Game"
         fig.update_traces(
             connectgaps    = True,
             line           = dict(width=4, shape='spline', smoothing=0.6),
             marker         = dict(size=8),
             hovertemplate  = (
                 f"<b>%{{customdata[1]}}</b><br>"
-                f"{'Career Game' if not team_mode else 'Season GP'} %{{x}}<br>"
+                f"{games_hover_label if not team_mode else 'Season GP'} %{{x}}<br>"
                 f"Value: %{{y:{_val_fmt}}}<extra></extra>"
             ),
         )
@@ -620,7 +665,7 @@ def render_chart(
                 )
             )
         else:
-            x_label = "Career Game" if games_mode else "Age"
+            x_label = "Game" if games_mode and str(selected_season) != "All" else "Career Game" if games_mode else "Age"
             fig.update_traces(
                 hovertemplate=(
                     f"<b>%{{customdata[1]}}</b><br>{x_label} %{{x}}<br>%{{y:.1f}}%<extra></extra>"
@@ -648,14 +693,32 @@ def render_chart(
             f"_{sidebar_keys.get('team_abbr', '')}"
             f"_{sidebar_keys.get('roster_player', '')}"
             f"_{st.session_state.x_axis_mode}"
+            f"_{selected_season}"
         )
 
     share_button_id = f"nhl-share-btn-{abs(hash(chart_key))}"
     toolbar_id = f"nhl-chart-toolbar-{abs(hash(chart_key))}"
-    st.markdown(
-        _build_chart_toolbar_markup(chart_header, share_button_id, toolbar_id),
-        unsafe_allow_html=True,
-    )
+    if not team_mode and chart_season_options:
+        toolbar_col, season_col = st.columns([0.72, 0.28], gap="small")
+        with toolbar_col:
+            st.markdown(
+                _build_chart_toolbar_markup(chart_header, share_button_id, toolbar_id),
+                unsafe_allow_html=True,
+            )
+        with season_col:
+            st.selectbox(
+                "Chart season",
+                options=chart_season_options,
+                key="chart_season",
+                format_func=_format_chart_season_label,
+            )
+        if str(selected_season) != "All":
+            st.caption("Single-season mode uses real NHL game logs and forces the x-axis to individual games.")
+    else:
+        st.markdown(
+            _build_chart_toolbar_markup(chart_header, share_button_id, toolbar_id),
+            unsafe_allow_html=True,
+        )
 
     plotly_config = {
         "displayModeBar": True,
@@ -701,6 +764,7 @@ def render_chart(
     var Y_MAX = {_y_max:.4f};
     var IS_AGE_MODE   = {'true' if _is_age_mode else 'false'};
     var IS_GAMES_MODE = {'true' if _is_games_mode else 'false'};
+    var IS_SINGLE_SEASON_MODE = {'true' if str(selected_season) != 'All' else 'false'};
     var SHARE_PARAMS = {_share_params_json};
     var SHARE_BUTTON_ID = {_share_button_id_json};
     var TOOLBAR_ID = {_toolbar_id_json};
@@ -715,6 +779,14 @@ def render_chart(
             return 10;
         }}
         if (IS_GAMES_MODE) {{
+            if (IS_SINGLE_SEASON_MODE) {{
+                var seasonTargetTicks = width >= 900 ? 9 : width >= 480 ? 6 : 4;
+                var seasonDtick = xRange / seasonTargetTicks;
+                if (seasonDtick <= 5) return 5;
+                if (seasonDtick <= 10) return 10;
+                if (seasonDtick <= 20) return 20;
+                return 25;
+            }}
             var targetTicks = width >= 900 ? 8 : width >= 480 ? 5 : 3;
             var rawDtick = xRange / targetTicks;
             if (rawDtick <= 100)  return 100;

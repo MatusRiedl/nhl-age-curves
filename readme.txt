@@ -17,7 +17,7 @@ The app has two data sources:
 The parquet file powers KNN projection and historical baselines. Without it, the app still
 renders real data, but projection and baseline features degrade.
 
-`app.py` is intentionally thin. It:
+`app.py` is the session-state coordinator and render pass. It:
 - loads URL params once
 - seeds session state
 - auto-loads a live or recent game once per session when appropriate
@@ -28,7 +28,7 @@ renders real data, but projection and baseline features degrade.
 SECTION 2 - FILE STRUCTURE
 --------------------------
 Top level:
-- `app.py` - thin orchestrator
+- `app.py` - session-state orchestrator and render pass
 - `scraper.py` - manual historical parquet refresh
 - `nhl_historical_seasons.parquet` - historical seasons used by baselines and KNN
 - `requirements.txt`
@@ -60,6 +60,9 @@ Search:
 Player landing payload:
 `https://api-web.nhle.com/v1/player/{player_id}/landing`
 
+Player game log payload:
+`https://api-web.nhle.com/v1/player/{player_id}/game-log/{season_id}/{game_type_id}`
+
 Roster:
 `https://api-web.nhle.com/v1/roster/{team_abbr}/current`
 
@@ -90,6 +93,7 @@ Core state:
 - `stat_category`
 - `season_type`
 - `x_axis_mode`
+- `chart_season`
 - `league_filter`
 - `team_sel_abbr`
 
@@ -110,6 +114,9 @@ One-shot guards:
 - `_url_loaded`
 - `_default_loaded`
 - `_preloaded`
+
+Season-mode memory:
+- `_pre_season_chart_x_axis_mode`
 
 Notes:
 - URL params are applied once, before defaults settle.
@@ -133,15 +140,18 @@ SECTION 6 - DATA PIPELINE (PER PLAYER, PER RENDER)
 --------------------------------------------------
 `process_players()` runs this order:
 
-1. Fetch raw player data with `get_player_raw_stats()`.
+1. Fetch raw player data.
+   - Normal mode uses `get_player_raw_stats()`.
+   - Selected-season mode uses `get_player_season_game_log()` and real NHL game logs.
 2. Apply the skater/goalie gatekeeper.
 3. Filter to the selected leagues.
 4. If `Era` is on for skaters, apply NHLe to non-NHL `Points`, `Goals`, and `Assists`. If `Era` is off, keep league scoring raw.
 5. Filter to `Regular`, `Playoffs`, or `Both`.
 6. Apply era adjustment.
-7. Branch by x-axis mode.
+7. Branch by chart mode.
+   - Selected-season mode: keep one row per real game, sort by `GameDate` + `GameId`, build `CumGP`, preserve `Age`/date metadata for clicks and peak copy.
+   - Career Games Played mode: group by `SeasonYear`, build `CumGP`, keep `Age` for clicks.
    - Age mode: group by `Age`, preserve latest `SeasonYear`, compute rate stats.
-   - Games Played mode: group by `SeasonYear`, build `CumGP`, keep `Age` for clicks.
 8. Detect peak before projection, cumsum, and smoothing.
 9. If allowed, project to age 40.
    - KNN path uses `run_knn_projection()`.
@@ -153,6 +163,7 @@ SECTION 6 - DATA PIPELINE (PER PLAYER, PER RENDER)
 
 Projection gate:
 - not in Games Played mode
+- not in selected-season mode
 - `do_predict` is on
 - max age is below 40
 - metric is not in `NO_PROJECTION_METRICS`
@@ -234,15 +245,16 @@ Chart duties handled in `chart.py`:
 - concatenate processed frames
 - add baseline overlays when enabled
 - link each player's projected trace to the same legend toggle so one click hides or shows both
-- render compact chart header text
+- render compact chart header text and the chart-top single-season selector
 - inject JS pan / zoom clamping
 - dispatch click data into `show_season_details()`
 - offer a Copy link control using compact URL params
 
 Games Played mode chart specifics:
 - x-axis uses `CumGP`
-- hover uses career games language instead of age language
+- selected-season mode says `Game`; career GP mode says `Career Game`
 - `custom_data[2]` stores real `Age` for click details
+- selected-season mode keeps peak highlights anchored to the real game number, not age
 
 SECTION 10 - CACHING STRATEGY
 -----------------------------
@@ -255,9 +267,11 @@ Permanent cache:
 - `get_top_50_goalies()`
 - `get_team_roster()`
 - `get_player_raw_stats()`
+- `get_player_season_game_log()`
 
 Hourly cache (`ttl=3600`):
 - `get_player_landing()`
+- `get_player_available_nhl_seasons()`
 - `fetch_all_time_records()`
 - `get_id_to_name_map()`
 - `search_player()`
@@ -278,19 +292,20 @@ Not separately cached, but intentionally fan out from `get_player_landing()`:
 
 SECTION 11 - GAMES PLAYED MODE
 ------------------------------
-Purpose: compare careers by accumulated games instead of age.
+Purpose: compare careers by accumulated games instead of age, or one selected NHL season by real game number.
 
 Behavior:
-- group by `SeasonYear`, not `Age`
+- career mode groups by `SeasonYear`, not `Age`
+- selected-season mode keeps one row per game
 - x-axis is `CumGP`
-- counting stats become cumulative totals by game count
-- rate stats become career averages to that game count
+- counting stats become cumulative totals by game count when cumulative mode is on
+- rate stats become rolling visible averages in games mode
 - `Age` is preserved for click dialogs
 
 Normal app-flow restrictions:
 - no projection
 - no baseline
-- no cumulative toggle
+- selected-season mode still allows cumulative display, but comparison cards must use the last visible cumulative value instead of summing cumulative rows again
 
 The pipeline still keeps the age metadata so the dialog can show the right season.
 
@@ -323,6 +338,6 @@ Module responsibilities:
 Key integration notes:
 - `schedule.py` only auto-seeds the board on first session load and only if a shared URL did not already populate players or teams
 - `comparison.py` stores tab memory per category via `panel_tab_skater`, `panel_tab_goalie`, and `panel_tab_team`
-- `url_params.py` supports compact ID-only links and legacy `id|name` / `abbr|name` links
+- `url_params.py` supports compact ID-only links, legacy `id|name` / `abbr|name` links, and the chart-top `chart_season` selector without redundantly encoding forced games mode
 
 That is the architecture. No magic, just disciplined pandas.

@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from html import escape
 from typing import Callable
 
+import pandas as pd
 import streamlit as st
 
-from nhl.constants import ACTIVE_TEAMS, TEAM_FOUNDED
+from nhl.constants import ACTIVE_TEAMS, RATE_STATS, TEAM_FOUNDED
 from nhl.data_loaders import (
     get_player_awards,
     get_player_career_rank,
@@ -88,6 +89,77 @@ def _season_span_label_from_id(season_id: int | None) -> str:
         return "?"
 
 
+def _is_selected_season_mode(selected_season: str | int) -> bool:
+    """Return whether the comparison panel is in single-season mode.
+
+    Args:
+        selected_season: Selected chart-season value.
+
+    Returns:
+        True when one specific season is selected.
+    """
+    return str(selected_season) != "All"
+
+
+def _build_selected_season_scope_label(selected_season: str | int, season_type: str) -> str:
+    """Build the selected-season scope copy for Overview cards.
+
+    Args:
+        selected_season: Selected chart-season value.
+        season_type: Regular, Playoffs, or Both.
+
+    Returns:
+        Compact scope label such as ``2024-25 · Regular season game log``.
+    """
+    season_scope_map = {
+        "Regular": "Regular season",
+        "Playoffs": "Playoffs",
+        "Both": "Regular + playoffs",
+    }
+    return (
+        f"{_season_span_label_from_id(selected_season)}"
+        f" · {season_scope_map.get(season_type, season_type)} game log"
+    )
+
+
+def _get_visible_stat_total(real_df: pd.DataFrame, column: str, use_last_visible: bool) -> int:
+    """Return a visible stat total from the active comparison rows.
+
+    Args:
+        real_df: Non-projection rows for one player.
+        column: Stat column to total.
+        use_last_visible: Use the last visible cumulative value instead of a sum.
+
+    Returns:
+        Integer total for the requested stat column.
+    """
+    if column not in real_df.columns or real_df.empty:
+        return 0
+    values = pd.to_numeric(real_df[column], errors="coerce").dropna()
+    if values.empty:
+        return 0
+    total = values.iloc[-1] if use_last_visible else values.sum()
+    return int(round(float(total)))
+
+
+def _format_peak_metric_value(metric: str, value: float | int | None) -> str:
+    """Format one peak metric value for Overview copy.
+
+    Args:
+        metric: Active metric name.
+        value: Peak metric value.
+
+    Returns:
+        Readable formatted value or ``?``.
+    """
+    if value is None or pd.isna(value):
+        return "?"
+    numeric_value = float(value)
+    if metric in RATE_STATS or not numeric_value.is_integer():
+        return f"{numeric_value:.2f}"
+    return str(int(numeric_value))
+
+
 def _get_category_tab_key(stat_category: str) -> str:
     """Return the session-state key that stores the active panel tab.
 
@@ -164,6 +236,8 @@ def render_comparison_area(
     stat_category: str,
     season_type: str,
     team_mode: bool,
+    selected_season: str | int = "All",
+    do_cumul: bool = False,
 ) -> None:
     """Render the tabbed comparison area for the active category."""
     tab_lookup = {tab.id: tab for tab in _PANEL_TABS}
@@ -212,6 +286,8 @@ def render_comparison_area(
                     metric=metric,
                     stat_category=stat_category,
                     season_type=season_type,
+                    selected_season=selected_season,
+                    do_cumul=do_cumul,
                 )
 
 
@@ -314,6 +390,8 @@ def _render_live_games_players(
     metric: str,
     stat_category: str,
     season_type: str,
+    selected_season: str | int = "All",
+    do_cumul: bool = False,
 ) -> None:
     """Live games tab for skater and goalie modes.
 
@@ -328,7 +406,7 @@ def _render_live_games_players(
     Returns:
         None.
     """
-    del processed_dfs, players, peak_info, metric, stat_category, season_type
+    del processed_dfs, players, peak_info, metric, stat_category, season_type, selected_season, do_cumul
     _render_live_games_tab()
 
 
@@ -353,15 +431,22 @@ def _render_overview_players(
     metric: str,
     stat_category: str,
     season_type: str,
+    selected_season: str | int = "All",
+    do_cumul: bool = False,
 ) -> None:
     """Overview tab: existing right-column player comparison cards."""
     is_goalie = stat_category == "Goalie"
+    season_mode = _is_selected_season_mode(selected_season)
+    use_last_visible_total = season_mode and do_cumul
     player_colors = _get_player_chart_colors()
     rank_suffix_map = {"Goals": "Goals", "Assists": "Assists", "Points": "Points"}
     rank_suffix = "Wins" if is_goalie else rank_suffix_map.get(metric, "Points")
 
     for pid, name, proc_df in _iter_visible_players_for_category(processed_dfs, players):
         real = proc_df[~proc_df["Player"].str.contains(r"\(Proj\)", na=False)]
+        sort_cols = [col for col in ["CumGP", "Age", "SeasonYear"] if col in real.columns]
+        if sort_cols:
+            real = real.sort_values(sort_cols).reset_index(drop=True)
 
         hero_url = get_player_hero_image(int(pid))
         team_abbr = get_player_current_team(int(pid))
@@ -372,11 +457,11 @@ def _render_overview_players(
             else ""
         )
 
-        career_gp = int(real["GP"].sum()) if "GP" in real.columns else 0
+        career_gp = _get_visible_stat_total(real, "GP", use_last_visible_total)
         if is_goalie:
-            career_w = int(real["Wins"].sum()) if "Wins" in real.columns else 0
-            career_so = int(real["Shutouts"].sum()) if "Shutouts" in real.columns else 0
-            career_sv = int(real["Saves"].sum()) if "Saves" in real.columns else 0
+            career_w = _get_visible_stat_total(real, "Wins", use_last_visible_total)
+            career_so = _get_visible_stat_total(real, "Shutouts", use_last_visible_total)
+            career_sv = _get_visible_stat_total(real, "Saves", use_last_visible_total)
             stats_row = (
                 f"W:&nbsp;{career_w} &nbsp;|&nbsp; "
                 f"SO:&nbsp;{career_so} &nbsp;|&nbsp; "
@@ -384,9 +469,9 @@ def _render_overview_players(
                 f"GP:&nbsp;{career_gp}"
             )
         else:
-            career_g = int(real["Goals"].sum()) if "Goals" in real.columns else 0
-            career_a = int(real["Assists"].sum()) if "Assists" in real.columns else 0
-            career_pt = int(real["Points"].sum()) if "Points" in real.columns else 0
+            career_g = _get_visible_stat_total(real, "Goals", use_last_visible_total)
+            career_a = _get_visible_stat_total(real, "Assists", use_last_visible_total)
+            career_pt = _get_visible_stat_total(real, "Points", use_last_visible_total)
             stats_row = (
                 f"G:&nbsp;{career_g} &nbsp;|&nbsp; "
                 f"A:&nbsp;{career_a} &nbsp;|&nbsp; "
@@ -394,44 +479,58 @@ def _render_overview_players(
                 f"GP:&nbsp;{career_gp}"
             )
 
-        rank = get_player_career_rank(int(pid), stat_category, season_type, metric)
-        rank_row = ""
-        if rank is not None:
-            rank_color = player_colors.get(name) or _DEFAULT_PLAYER_RANK_COLOR
-            rank_row = (
-                f"<br><span style='font-size:14px;color:{rank_color};font-weight:bold;'>"
-                f"#{rank} all-time {rank_suffix}"
+        scope_row = ""
+        if season_mode:
+            scope_row = (
+                "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
+                f"{_build_selected_season_scope_label(selected_season, season_type)}"
                 "</span>"
             )
+
+        rank_row = ""
+        if not season_mode:
+            rank = get_player_career_rank(int(pid), stat_category, season_type, metric)
+            if rank is not None:
+                rank_color = player_colors.get(name) or _DEFAULT_PLAYER_RANK_COLOR
+                rank_row = (
+                    f"<br><span style='font-size:14px;color:{rank_color};font-weight:bold;'>"
+                    f"#{rank} all-time {rank_suffix}"
+                    "</span>"
+                )
 
         peak = peak_info.get(name)
         best_row = ""
         if peak:
-            age = peak.get("age", "?")
-            sy = peak.get("season_year")
-            val = peak.get("y")
-            peak_row_df = real[real["Age"] == age]
-            peak_gp = (
-                int(peak_row_df["GP"].iloc[0])
-                if not peak_row_df.empty and "GP" in peak_row_df.columns
-                else "?"
-            )
-            sy_str = f"{sy - 1}-{str(sy)[2:]}" if sy else "?"
-            if val is None:
-                val_str = "?"
-            elif isinstance(val, float) and val % 1 != 0:
-                val_str = f"{val:.2f}"
-            else:
-                val_str = str(int(val))
-
             metric_short_map = {"Points": "Pts", "Goals": "G", "Assists": "A"}
             metric_short = metric_short_map.get(metric, metric)
-            best_row = (
-                "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
-                f"Best: Age&nbsp;{age} ({sy_str})"
-                f" -- {val_str}&nbsp;{metric_short} in {peak_gp}&nbsp;GP"
-                "</span>"
-            )
+            if season_mode:
+                peak_game = peak.get("game_number") or peak.get("x") or "?"
+                peak_date = peak.get("game_date")
+                peak_value = peak.get("raw_peak_val", peak.get("y"))
+                peak_date_str = f" ({peak_date})" if peak_date else ""
+                best_row = (
+                    "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
+                    f"Best game:&nbsp;#{peak_game}{peak_date_str}"
+                    f" -- {_format_peak_metric_value(metric, peak_value)}&nbsp;{metric_short}"
+                    "</span>"
+                )
+            else:
+                age = peak.get("age", "?")
+                sy = peak.get("season_year")
+                val = peak.get("y")
+                peak_row_df = real[real["Age"] == age]
+                peak_gp = (
+                    int(peak_row_df["GP"].iloc[0])
+                    if not peak_row_df.empty and "GP" in peak_row_df.columns
+                    else "?"
+                )
+                sy_str = f"{sy - 1}-{str(sy)[2:]}" if sy else "?"
+                best_row = (
+                    "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
+                    f"Best: Age&nbsp;{age} ({sy_str})"
+                    f" -- {_format_peak_metric_value(metric, val)}&nbsp;{metric_short} in {peak_gp}&nbsp;GP"
+                    "</span>"
+                )
 
         with st.container():
             img_col, stat_col = st.columns([1, 2], gap="small")
@@ -456,6 +555,7 @@ def _render_overview_players(
                     "<div style='line-height:1.4;margin:0;padding:0;'>"
                     f"{name_html}{logo_html}<br>"
                     f"{stats_row}"
+                    f"{scope_row}"
                     f"{rank_row}"
                     f"{best_row}"
                     "</div>",
@@ -584,9 +684,11 @@ def _render_trophies_players(
     metric: str,
     stat_category: str,
     season_type: str,
+    selected_season: str | int = "All",
+    do_cumul: bool = False,
 ) -> None:
     """Trophies tab for skater/goalie categories."""
-    del peak_info, metric, stat_category, season_type
+    del peak_info, metric, stat_category, season_type, selected_season, do_cumul
 
     for pid, name, _ in _iter_visible_players_for_category(processed_dfs, players):
         hero_url = get_player_hero_image(int(pid))
@@ -737,6 +839,8 @@ def render_comparison_panel(
         metric=metric,
         stat_category=stat_category,
         season_type=season_type,
+        selected_season="All",
+        do_cumul=False,
     )
 
 

@@ -70,6 +70,28 @@ def _default_x_axis_mode(stat_category: str) -> str:
     return "Season Year" if stat_category == "Team" else "Age"
 
 
+def _sanitize_chart_season(value) -> str | int:
+    """Validate the chart-top season selector value from session or URL.
+
+    Args:
+        value: Raw selector value.
+
+    Returns:
+        ``"All"`` or a safe four-digit season start year.
+    """
+    if value is None:
+        return "All"
+    clean = str(value).strip()
+    if not clean or clean.lower() == "all":
+        return "All"
+    if not re.fullmatch(r"[0-9]{4}", clean):
+        return "All"
+    year = int(clean)
+    if year < 1900 or year > 2100:
+        return "All"
+    return year
+
+
 def _parse_player_params(raw_value: str) -> dict[str, str]:
     """Parse short or legacy player query params into session-state shape.
 
@@ -147,8 +169,17 @@ def encode_state_to_params(ss) -> dict:
     if season_type != "Regular":
         params["sp"] = season_type
 
+    chart_season = _sanitize_chart_season(ss.get("chart_season", "All"))
+    if chart_season != "All":
+        params["cs"] = str(chart_season)
+
     x_axis_mode = ss.get("x_axis_mode", _default_x_axis_mode(stat_category))
-    if x_axis_mode != _default_x_axis_mode(stat_category):
+    season_forces_games = (
+        chart_season != "All"
+        and stat_category != "Team"
+        and x_axis_mode == "Games Played"
+    )
+    if x_axis_mode != _default_x_axis_mode(stat_category) and not season_forces_games:
         params["xm"] = _XM_ENCODE.get(x_axis_mode, "A")
 
     league_filter = ss.get("league_filter") or ["NHL"]
@@ -201,6 +232,9 @@ def apply_params_to_state(params: dict, ss) -> None:
 
     if "sp" in params and params["sp"] in ("Regular", "Playoffs", "Both"):
         ss["season_type"] = params["sp"]
+
+    if "cs" in params:
+        ss["chart_season"] = _sanitize_chart_season(params["cs"])
 
     if "xm" in params:
         ss["x_axis_mode"] = _XM_DECODE.get(params["xm"], "Age")

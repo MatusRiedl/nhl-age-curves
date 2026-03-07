@@ -109,8 +109,9 @@ def _sync_control_bool_state(available_specs: list[dict[str, str]], selected_lab
 
 def render_controls() -> tuple:
     """Render the controls expander and return `(metric, do_cumul)`."""
-    team_mode   = st.session_state.stat_category == "Team"
-    games_mode  = st.session_state.x_axis_mode == "Games Played"
+    team_mode = st.session_state.stat_category == "Team"
+    season_mode = (not team_mode) and st.session_state.get("chart_season", "All") != "All"
+    games_mode = st.session_state.x_axis_mode == "Games Played" or season_mode
 
     with st.expander("📊 Category & Metric", expanded=False):
         # ------------------------------------------------------------------
@@ -163,10 +164,12 @@ def render_controls() -> tuple:
                 "X axis",
                 _x_opts,
                 key="x_axis_mode",
+                disabled=season_mode,
                 help=(
                     "Season Year: plot by NHL season (teams). "
                     "Age: plot by player age. "
-                    "Games Played: cumulative game number."
+                    "Games Played: cumulative game number. "
+                    "Single-season chart mode overrides this to individual games."
                 ),
             )
 
@@ -284,7 +287,11 @@ def render_controls() -> tuple:
             _gm_note = (
                 "ℹ️ Cumulative & Baseline unavailable in Games mode."
                 if team_mode
-                else "ℹ️ Projection & Baseline unavailable in Games mode."
+                else (
+                    "ℹ️ Single-season mode forces individual-game x-axis. Projection & Baseline unavailable."
+                    if season_mode
+                    else "ℹ️ Projection & Baseline unavailable in Games mode."
+                )
             )
             st.caption(_gm_note)
         _ERA_GOALIE_STATS = {'Save %', 'GAA', 'Shutouts'}

@@ -11,8 +11,10 @@ import requests
 import streamlit as st
 
 from nhl.constants import (
+    CURRENT_SEASON_YEAR,
     NHLE_DEFAULT_MULTIPLIER,
     NHLE_MULTIPLIERS,
+    PLAYER_GAME_LOG_URL,
     SEARCH_URL,
     STATS_URL,
     ROSTER_URL,
@@ -646,6 +648,184 @@ def get_player_league_abbrevs(player_id: int) -> list[str]:
         if isinstance(season, dict) and str(season.get('leagueAbbrev', '')).strip()
     }
     return sorted(leagues)
+
+
+def _toi_to_minutes(toi_str: str) -> float:
+    """Convert an ``MM:SS`` TOI string into decimal minutes.
+
+    Args:
+        toi_str: Time-on-ice string from the NHL APIs.
+
+    Returns:
+        Decimal minutes, or 0.0 when parsing fails.
+    """
+    try:
+        parts = str(toi_str or '0:00').split(':')
+        if len(parts) != 2:
+            return 0.0
+        return int(parts[0]) + int(parts[1]) / 60.0
+    except Exception:
+        return 0.0
+
+
+def _season_year_to_id(season_year: int) -> int | None:
+    """Convert a start year like 2024 into an NHL seasonId like 20242025.
+
+    Args:
+        season_year: Four-digit NHL season start year.
+
+    Returns:
+        Combined seasonId integer, or ``None`` if the year is invalid.
+    """
+    try:
+        year = int(season_year)
+    except Exception:
+        return None
+    if year < 1900 or year > CURRENT_SEASON_YEAR:
+        return None
+    return int(f"{year}{year + 1}")
+
+
+def _normalize_player_game_log_rows(
+    rows: list,
+    season_year: int,
+    birth_year: int,
+    game_type: str,
+) -> list[dict]:
+    """Normalize NHL player game-log rows into the app's raw-stats schema.
+
+    Args:
+        rows: Raw ``gameLog`` list from the NHL endpoint.
+        season_year: Start year of the selected NHL season.
+        birth_year: Player birth year from the landing payload.
+        game_type: ``Regular`` or ``Playoffs``.
+
+    Returns:
+        List of normalized per-game row dicts.
+    """
+    age = season_year - birth_year
+    normalized_rows: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        toi_mins = _toi_to_minutes(row.get('toi', '0:00'))
+        shots_against = float(row.get('shotsAgainst', 0) or 0)
+        goals_against = float(row.get('goalsAgainst', 0) or 0)
+        raw_save_pct = float(row.get('savePctg', 0.0) or 0.0)
+        save_pct = raw_save_pct / 100.0 if raw_save_pct > 1.5 else raw_save_pct
+        calc_saves = max(0.0, shots_against - goals_against) if shots_against > 0 else 0.0
+        game_gaa = (goals_against * 60.0 / toi_mins) if toi_mins > 0 else 0.0
+
+        try:
+            game_id = int(row.get('gameId', 0) or 0)
+        except Exception:
+            game_id = 0
+
+        normalized_rows.append({
+            'League': 'NHL',
+            'Age': age,
+            'SeasonYear': season_year,
+            'GameType': game_type,
+            'GP': 1,
+            'Points': float(row.get('points', 0) or 0),
+            'Goals': float(row.get('goals', 0) or 0),
+            'Assists': float(row.get('assists', 0) or 0),
+            'PIM': float(row.get('pim', 0) or 0),
+            '+/-': float(row.get('plusMinus', 0) or 0),
+            'Shots': float(row.get('shots', 0) or 0),
+            'TotalTOIMins': toi_mins,
+            'Wins': 1.0 if str(row.get('decision', '')).upper() == 'W' else 0.0,
+            'Shutouts': float(row.get('shutouts', 0) or 0),
+            'Saves': calc_saves,
+            'WeightedSV': save_pct * 100.0,
+            'WeightedGAA': game_gaa,
+            'NHLeMultiplier': 1.0,
+            'GameDate': str(row.get('gameDate', '') or ''),
+            'GameId': game_id,
+        })
+    return normalized_rows
+
+
+@st.cache_data(ttl=3600)
+def get_player_available_nhl_seasons(player_id: int) -> list[int]:
+    """Return the player's available NHL season start years.
+
+    Args:
+        player_id: Numeric NHL player ID.
+
+    Returns:
+        Descending list of NHL season start years seen in ``seasonTotals``.
+    """
+    season_totals = get_player_landing(player_id).get('seasonTotals', []) or []
+    seasons: set[int] = set()
+    for season in season_totals:
+        if not isinstance(season, dict):
+            continue
+        if normalize_league_abbrev(season.get('leagueAbbrev', '')) != 'NHL':
+            continue
+        if str(season.get('gameTypeId', '')) not in {'2', '3'}:
+            continue
+        season_str = str(season.get('season', '')).strip()
+        if len(season_str) < 4:
+            continue
+        try:
+            season_year = int(season_str[:4])
+        except Exception:
+            continue
+        if 1900 <= season_year <= CURRENT_SEASON_YEAR:
+            seasons.add(season_year)
+    return sorted(seasons, reverse=True)
+
+
+@st.cache_data
+def get_player_season_game_log(
+    player_id: int,
+    base_name: str,
+    season_year: int,
+) -> tuple:
+    """Fetch one NHL season of normalized per-game rows for a player.
+
+    Args:
+        player_id: Numeric NHL player ID.
+        base_name: Display name already selected in the UI.
+        season_year: Start year of the selected season.
+
+    Returns:
+        ``(DataFrame, base_name, position_code)`` matching ``get_player_raw_stats``.
+    """
+    try:
+        res = get_player_landing(player_id)
+        birth_date = str(res.get('birthDate', '2000'))
+        birth_year = int(birth_date[:4]) if len(birth_date) >= 4 else 2000
+        position = str(res.get('position', 'S') or 'S')
+        season_id = _season_year_to_id(season_year)
+        if season_id is None:
+            return pd.DataFrame(), base_name, position
+
+        data: list[dict] = []
+        for game_type_id, game_type_label in (('2', 'Regular'), ('3', 'Playoffs')):
+            payload = requests.get(
+                PLAYER_GAME_LOG_URL.format(int(player_id), season_id, game_type_id),
+                timeout=10,
+            ).json()
+            rows = payload.get('gameLog', []) if isinstance(payload, dict) else []
+            data.extend(
+                _normalize_player_game_log_rows(
+                    rows=rows,
+                    season_year=int(season_year),
+                    birth_year=birth_year,
+                    game_type=game_type_label,
+                )
+            )
+
+        if not data:
+            return pd.DataFrame(), base_name, position
+
+        df = pd.DataFrame(data).sort_values(['GameDate', 'GameId']).reset_index(drop=True)
+        return df, base_name, position
+    except Exception:
+        return pd.DataFrame(), base_name, 'S'
 
 
 @st.cache_data
