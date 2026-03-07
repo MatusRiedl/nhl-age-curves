@@ -18,24 +18,35 @@ _CONTROL_PILL_SPECS: tuple[dict[str, str], ...] = (
 )
 
 
-def _get_control_pill_groups(team_mode: bool, games_mode: bool) -> tuple[list[dict[str, str]], list[str]]:
+def _get_control_pill_groups(
+    team_mode: bool,
+    games_mode: bool,
+    season_mode: bool,
+) -> tuple[list[dict[str, str]], list[str]]:
     """Split toolbar pills into active and unavailable groups.
 
     Args:
         team_mode: Whether Team mode is active.
         games_mode: Whether Games Played mode is active.
+        season_mode: Whether single-season game-log mode is active.
 
     Returns:
         tuple[list[dict[str, str]], list[str]]: Active pill specs and muted labels.
     """
     unavailable = set()
+    hide_unavailable = False
     if team_mode:
         unavailable.update({"Proj", "Era", "Base", "Prime"})
+    elif season_mode:
+        unavailable.update({"Proj", "Era", "Base", "Prime"})
+        hide_unavailable = True
     elif games_mode:
         unavailable.update({"Proj", "Base"})
 
     available_specs = [spec for spec in _CONTROL_PILL_SPECS if spec["label"] not in unavailable]
-    unavailable_labels = [spec["label"] for spec in _CONTROL_PILL_SPECS if spec["label"] in unavailable]
+    unavailable_labels = [] if hide_unavailable else [
+        spec["label"] for spec in _CONTROL_PILL_SPECS if spec["label"] in unavailable
+    ]
     return available_specs, unavailable_labels
 
 
@@ -118,7 +129,11 @@ def render_controls() -> tuple:
         # Row 1: Compact pill toolbar
         # ------------------------------------------------------------------
         _cumul_rate_set = TEAM_RATE_STATS if team_mode else RATE_STATS
-        _available_pills, _unavailable_pills = _get_control_pill_groups(team_mode, games_mode)
+        _available_pills, _unavailable_pills = _get_control_pill_groups(
+            team_mode,
+            games_mode,
+            season_mode,
+        )
 
         st.markdown("<div id='controls-row1'></div>", unsafe_allow_html=True)
         _prepare_control_pills_widget_state(_available_pills)
@@ -211,7 +226,15 @@ def render_controls() -> tuple:
             st.selectbox("Season Type", ["Regular", "Playoffs", "Both"], key="season_type")
 
         with c_league:
-            if team_mode:
+            if season_mode:
+                st.multiselect(
+                    "Leagues",
+                    options=["NHL"],
+                    key="league_filter",
+                    disabled=True,
+                    help="Single-season mode uses NHL game logs only.",
+                )
+            elif team_mode:
                 st.multiselect(
                     "Leagues",
                     options=["NHL"],
@@ -283,15 +306,11 @@ def render_controls() -> tuple:
         # Captions for toggle context (rendered after metric is resolved)
         if st.session_state.do_cumul_toggle and metric in _cumul_rate_set:
             st.caption(f"⚠️ Cumulative disabled — {metric} is a rate stat.")
-        if games_mode:
+        if games_mode and not season_mode:
             _gm_note = (
                 "ℹ️ Cumulative & Baseline unavailable in Games mode."
                 if team_mode
-                else (
-                    "ℹ️ Single-season mode forces individual-game x-axis. Projection & Baseline unavailable."
-                    if season_mode
-                    else "ℹ️ Projection & Baseline unavailable in Games mode."
-                )
+                else "ℹ️ Projection & Baseline unavailable in Games mode."
             )
             st.caption(_gm_note)
         _ERA_GOALIE_STATS = {'Save %', 'GAA', 'Shutouts'}

@@ -119,6 +119,10 @@ if 'panel_tab_goalie'  not in st.session_state: st.session_state.panel_tab_goali
 if 'panel_tab_team'    not in st.session_state: st.session_state.panel_tab_team    = "overview"
 if '_pre_season_chart_x_axis_mode' not in st.session_state:
     st.session_state._pre_season_chart_x_axis_mode = None
+if '_pre_season_league_filter' not in st.session_state:
+    st.session_state._pre_season_league_filter = None
+if '_pre_season_do_era' not in st.session_state:
+    st.session_state._pre_season_do_era = None
 
 if st.session_state.stat_category not in {"Skater", "Goalie", "Team"}:
     st.session_state.stat_category = "Skater"
@@ -190,11 +194,26 @@ if _season_mode_requested:
     if st.session_state.x_axis_mode != "Games Played":
         st.session_state._pre_season_chart_x_axis_mode = st.session_state.x_axis_mode
         st.session_state.x_axis_mode = "Games Played"
+    if st.session_state.league_filter != ["NHL"]:
+        if st.session_state._pre_season_league_filter is None:
+            st.session_state._pre_season_league_filter = list(st.session_state.league_filter or ["NHL"])
+        st.session_state.league_filter = ["NHL"]
+    if st.session_state._pre_season_do_era is None:
+        st.session_state._pre_season_do_era = bool(st.session_state.do_era)
+    st.session_state.do_era = False
 else:
     _saved_x_axis = st.session_state.get("_pre_season_chart_x_axis_mode")
     if _saved_x_axis in {"Age", "Games Played"} and st.session_state.x_axis_mode == "Games Played":
         st.session_state.x_axis_mode = _saved_x_axis
     st.session_state._pre_season_chart_x_axis_mode = None
+    _saved_leagues = st.session_state.get("_pre_season_league_filter")
+    if isinstance(_saved_leagues, list):
+        st.session_state.league_filter = _saved_leagues or ["NHL"]
+    st.session_state._pre_season_league_filter = None
+    _saved_do_era = st.session_state.get("_pre_season_do_era")
+    if isinstance(_saved_do_era, bool):
+        st.session_state.do_era = _saved_do_era
+    st.session_state._pre_season_do_era = None
 
 # =============================================================================
 # Controls — Category/Metric and View Options expanders.
@@ -238,10 +257,15 @@ if st.session_state.chart_season not in chart_season_options:
     if _saved_x_axis in {"Age", "Games Played"} and st.session_state.x_axis_mode == "Games Played":
         st.session_state.x_axis_mode = _saved_x_axis
     st.session_state._pre_season_chart_x_axis_mode = None
+    _saved_leagues = st.session_state.get("_pre_season_league_filter")
+    if isinstance(_saved_leagues, list):
+        st.session_state.league_filter = _saved_leagues or ["NHL"]
+    st.session_state._pre_season_league_filter = None
 
 season_mode = (not team_mode) and st.session_state.chart_season != "All"
 games_mode = st.session_state.x_axis_mode == "Games Played"
 do_base = st.session_state.do_base and not team_mode and not season_mode
+do_prime = st.session_state.do_prime and not season_mode
 share_params = encode_state_to_params(st.session_state)
 
 # =============================================================================
@@ -342,7 +366,7 @@ with col_chart:
         season_type          = st.session_state.season_type,
         sidebar_keys         = sidebar_keys,
         peak_info            = peak_info,
-        do_prime             = st.session_state.do_prime,
+        do_prime             = do_prime,
         do_era               = st.session_state.do_era,
         selected_season      = st.session_state.chart_season,
         chart_season_options = chart_season_options,

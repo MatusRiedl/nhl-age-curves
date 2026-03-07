@@ -965,8 +965,6 @@ def render_chart(
                 key="chart_season",
                 format_func=_format_chart_season_label,
             )
-        if str(selected_season) != "All":
-            st.caption("Single-season mode uses real NHL game logs and forces the x-axis to individual games.")
     else:
         st.markdown(
             _build_chart_toolbar_markup(chart_header, share_button_id, toolbar_id),
