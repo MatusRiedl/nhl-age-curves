@@ -722,13 +722,18 @@ _CSS = """
             min-width: 0;
         }
         .comparison-card-stats {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 0.35rem 0.7rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 0.2rem 0.9rem;
             margin: 0.18rem 0 0 0;
         }
+        .comparison-card-context-row {
+            margin-top: 0.18rem;
+            line-height: 1.2;
+        }
         .comparison-card-stats__item {
-            display: flex;
+            display: inline-flex;
             align-items: baseline;
             min-width: 0;
             white-space: nowrap;
@@ -771,7 +776,7 @@ _CSS = """
             display: flex;
             flex-wrap: wrap;
             gap: 0.45rem;
-            margin: 0.5rem 0 0 0;
+            margin: 0.22rem 0 0 0;
         }
         .comparison-trace-toggle {
             display: inline-flex;

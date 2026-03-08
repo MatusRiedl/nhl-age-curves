@@ -529,8 +529,8 @@ def _build_card_context_row(label: str) -> str:
     """Return muted comparison-card copy for season and all-time labels."""
     safe_label = escape(str(label))
     return (
-        "<br><span style='font-size:14px;"
-        f"color:{_CARD_CONTEXT_TEXT_COLOR};font-weight:bold;'>{safe_label}</span>"
+        "<div class='comparison-card-context-row' style='font-size:14px;"
+        f"color:{_CARD_CONTEXT_TEXT_COLOR};font-weight:bold;'>{safe_label}</div>"
     )
 
 
@@ -585,8 +585,6 @@ def _build_player_trace_toggle_markup(
     player_name: str,
     player_color: str | None,
     label: str = _PLAYER_TRACE_TOGGLE_LABEL,
-    *,
-    leading_break: bool = True,
 ) -> str:
     """Return one card-level chart-toggle row for a comparison Overview card."""
     button_html = _build_player_trace_toggle_button(
@@ -596,8 +594,6 @@ def _build_player_trace_toggle_markup(
         compact=False,
     )
     return (
-        ("<br>" if leading_break else "")
-        +
         "<div class='comparison-trace-toggle-row'>"
         f"{button_html}"
         "</div>"
@@ -1083,11 +1079,9 @@ def _render_overview_player_card(
             peak_date = peak.get("game_date")
             peak_value = peak.get("raw_peak_val", peak.get("y"))
             peak_date_str = f" ({peak_date})" if peak_date else ""
-            best_row = (
-                "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
-                f"Best game:&nbsp;#{peak_game}{peak_date_str}"
-                f" -- {_format_peak_metric_value(metric, peak_value)}&nbsp;{metric_short}"
-                "</span>"
+            best_row = _build_card_context_row(
+                f"Best game: #{peak_game}{peak_date_str}"
+                f" -- {_format_peak_metric_value(metric, peak_value)} {metric_short}"
             )
         else:
             age = peak.get("age", "?")
@@ -1100,11 +1094,9 @@ def _render_overview_player_card(
                 else "?"
             )
             sy_str = f"{sy - 1}-{str(sy)[2:]}" if sy else "?"
-            best_row = (
-                "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
-                f"Best: Age&nbsp;{age} ({sy_str})"
-                f" -- {_format_peak_metric_value(metric, val)}&nbsp;{metric_short} in {peak_gp}&nbsp;GP"
-                "</span>"
+            best_row = _build_card_context_row(
+                f"Best: Age {age} ({sy_str})"
+                f" -- {_format_peak_metric_value(metric, val)} {metric_short} in {peak_gp} GP"
             )
 
     roster_info = get_player_roster_info(int(pid))
@@ -1279,11 +1271,7 @@ def _render_overview_teams(
                 extra_bits.append(f"Final {escape(metric)}: {metric_value}")
             best_row = ""
             if extra_bits:
-                best_row = (
-                    "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
-                    f"{' | '.join(extra_bits)}"
-                    "</span>"
-                )
+                best_row = _build_card_context_row(" | ".join(extra_bits))
             trace_toggle_row = _build_player_trace_toggle_markup(
                 player_name=full_name,
                 player_color=team_color,
@@ -1342,10 +1330,8 @@ def _render_overview_teams(
             best_row = ""
             if best_year and best_wins is not None:
                 sy_str = f"{best_year - 1}-{str(best_year)[2:]}"
-                best_row = (
-                    "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
-                    f"Best: {sy_str} -- {best_wins}&nbsp;W in {best_gp}&nbsp;GP"
-                    "</span>"
+                best_row = _build_card_context_row(
+                    f"Best: {sy_str} -- {best_wins} W in {best_gp} GP"
                 )
             trace_toggle_row = _build_player_trace_toggle_markup(
                 player_name=full_name,
