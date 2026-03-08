@@ -235,14 +235,14 @@ def _sync_chart_season_picker() -> None:
     st.session_state["chart_season"] = selected_season
 
 
-def _prime_chart_season_picker(chart_season_options: list[str | int]) -> int:
+def _prime_chart_season_picker(chart_season_options: list[str | int]) -> None:
     """Seed the chart-season widget from canonical session state.
 
     Args:
         chart_season_options: Valid selectbox options for the current board.
 
     Returns:
-        Index of the active chart-season option.
+        None.
     """
     current_chart_season = st.session_state.get("chart_season", "All")
     if current_chart_season not in chart_season_options:
@@ -250,7 +250,6 @@ def _prime_chart_season_picker(chart_season_options: list[str | int]) -> int:
         st.session_state["chart_season"] = current_chart_season
     if st.session_state.get("_chart_season_picker") != current_chart_season:
         st.session_state["_chart_season_picker"] = current_chart_season
-    return chart_season_options.index(current_chart_season)
 
 
 def render_chart_season_picker(chart_season_options: list[str | int] | None) -> None:
@@ -259,11 +258,10 @@ def render_chart_season_picker(chart_season_options: list[str | int] | None) -> 
         return
 
     st.markdown("<div id='comparison-season-filter'></div>", unsafe_allow_html=True)
-    active_chart_season_index = _prime_chart_season_picker(chart_season_options)
+    _prime_chart_season_picker(chart_season_options)
     st.selectbox(
         "Chart season",
         options=chart_season_options,
-        index=active_chart_season_index,
         key="_chart_season_picker",
         on_change=_sync_chart_season_picker,
         format_func=_format_chart_season_label,

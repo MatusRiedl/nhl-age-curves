@@ -162,23 +162,6 @@ if "_preloaded" not in st.session_state:
     st.session_state["_preloaded"] = True
     preload_all_categories(st.session_state.stat_category)
 
-# =============================================================================
-# Page header
-# =============================================================================
-st.markdown(
-    """
-    <div class='page-hero'>
-        <h1 class='page-header'>
-            <img src='https://assets.nhle.com/logos/nhl/svg/NHL_light.svg' class='nhl-logo'>
-            <span class='animated-title' style='font-size:0.9em;'>Age Analytics</span>
-        </h1>
-        <p class='page-subtitle'>Hockey like never before!</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-# =============================================================================
 # x_axis_mode guard: reset to a valid mode when switching between categories.
 # "Age" is not valid in Team mode; "Season Year" is not valid in Player mode.
 # =============================================================================

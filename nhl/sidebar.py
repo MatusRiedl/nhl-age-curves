@@ -30,6 +30,7 @@ from nhl.data_loaders import (
     search_player,
 )
 from nhl.dialog import show_app_guide
+from nhl.styles import get_header_logo_data_uri
 
 
 _VALID_STAT_CATEGORIES = ("Skater", "Goalie", "Team")
@@ -246,6 +247,17 @@ def render_sidebar() -> dict:
         st.session_state.stat_category = current_category
         if st.session_state.get("_stat_category_picker") != current_category:
             st.session_state._stat_category_picker = current_category
+
+        header_logo_data_uri = get_header_logo_data_uri()
+        if header_logo_data_uri:
+            st.markdown(
+                f"""
+                <div class='sidebar-brand'>
+                    <img src='{header_logo_data_uri}' class='sidebar-brand__image' alt='PuckPeak'>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
         st.markdown("<div class='faq-btn-anchor'></div>", unsafe_allow_html=True)
         if st.button(

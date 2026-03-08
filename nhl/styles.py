@@ -6,6 +6,7 @@ can keep page chrome configuration simple and robust across local and deployed
 environments.
 """
 
+import base64
 from pathlib import Path
 
 import streamlit as st
@@ -16,85 +17,37 @@ import streamlit as st
 
 _CSS = """
     <style>
-        .block-container { padding-top: 2rem !important; padding-bottom: 0rem !important; }
+        .block-container { padding-top: 0.65rem !important; padding-bottom: 0rem !important; }
 
-        .page-header {
+        [data-testid="stSidebar"] .sidebar-brand {
             display: flex;
-            align-items: center;
-            flex-wrap: nowrap;
-            gap: 0;
-            padding-bottom: 0;
-            margin-top: 0;
-            margin-bottom: 0;
-            white-space: nowrap;
+            justify-content: center;
+            margin: 0 0 0.35rem 0;
         }
 
-        .page-hero {
-            margin-bottom: 0 !important;
+        [data-testid="stSidebar"] .sidebar-brand__image {
+            display: block;
+            width: min(220px, 100%);
+            height: auto;
         }
 
-        .page-subtitle {
-            margin: -0.35rem 0 0.2rem 0;
-            color: #c0c0c0;
-            font-size: 1.02rem;
-        }
-
-        div.element-container:has(.page-hero) {
-            margin-bottom: 0.45rem !important;
+        div.element-container:has(.sidebar-brand) {
+            margin-bottom: 0.35rem !important;
         }
 
         [data-testid="stExpander"] {
             margin-top: 0 !important;
         }
 
-        .animated-title {
-            background: linear-gradient(to right, #c0c0c0, #2b71c7, #ff4b4b, #c0c0c0);
-            background-size: 300% auto;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: sweep 6s linear infinite;
-            white-space: nowrap;
-        }
-
-        @keyframes sweep {
-            to { background-position: 300% center; }
-        }
-
-        .nhl-logo {
-            height: 45px;
-            margin-right: 15px;
-            animation: spin-pulse 4s infinite ease-in-out;
-        }
-
         @media (max-width: 768px) {
             .block-container {
-                padding-top: 0.75rem !important;
+                padding-top: 0.35rem !important;
                 padding-left: 0.35rem !important;
                 padding-right: 0.35rem !important;
             }
-            .page-header {
-                margin-top: 0 !important;
-                margin-bottom: 0 !important;
+            [data-testid="stSidebar"] .sidebar-brand__image {
+                width: min(190px, 100%);
             }
-            .page-subtitle {
-                margin-top: -0.2rem;
-                margin-bottom: 0.15rem;
-                font-size: 0.92rem;
-            }
-            .page-header .animated-title {
-                font-size: 2.15rem !important;
-                line-height: 1 !important;
-            }
-            .nhl-logo {
-                height: 28px;
-                margin-right: 8px;
-            }
-        }
-
-        @keyframes spin-pulse {
-            0% { transform: rotateY(0deg) scale(1); }
-            50% { transform: rotateY(180deg) scale(1.15); }
-            100% { transform: rotateY(360deg) scale(1); }
         }
 
         .stButton button { width: 100%; }
@@ -763,6 +716,7 @@ _CSS = """
         div.element-container:has(#comparison-main-plotly) + div.element-container [data-testid="stPlotlyChart"] {
             margin-bottom: 0 !important;
             padding-bottom: 0 !important;
+            line-height: normal !important;
         }
         div.element-container:has(#comparison-detail-layout) {
             margin: -2.2rem 0 0 0 !important;
@@ -897,6 +851,11 @@ _CSS = """
             border-radius: 0 !important;
             box-shadow: none !important;
             padding: 0 !important;
+            min-height: 30px !important;
+            line-height: 1 !important;
+            overflow: visible !important;
+            display: flex !important;
+            align-items: center !important;
         }
         .js-plotly-plot .plotly .modebar-btn::before,
         .js-plotly-plot .plotly .modebar-btn::after {
@@ -906,10 +865,19 @@ _CSS = """
         .js-plotly-plot .plotly .modebar-group {
             flex-wrap: nowrap !important;
             overflow-x: auto !important;
+            overflow-y: visible !important;
             padding: 0 !important;
+            line-height: 1 !important;
+            display: flex !important;
+            align-items: center !important;
         }
         .js-plotly-plot .plotly .modebar-btn {
             padding: 6px 8px !important;
+            min-height: 30px !important;
+            line-height: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
         .js-plotly-plot .plotly .modebar-btn svg {
             width: 18px !important;
@@ -922,6 +890,7 @@ _CSS = """
             }
             .js-plotly-plot .plotly .modebar-btn {
                 padding: 3px 5px !important;
+                min-height: 22px !important;
             }
             .js-plotly-plot .plotly .modebar-btn svg {
                 width: 14px !important;
@@ -1003,10 +972,34 @@ def get_favicon_path() -> Path:
     return Path(__file__).resolve().parent.parent / "assets" / "favicon.svg"
 
 
+def get_header_logo_path() -> Path:
+    """Return the absolute path to the preferred brand logo PNG.
+
+    Returns:
+        Path: Absolute path to the PuckPeak logo file in the repository assets folder.
+    """
+    return Path(__file__).resolve().parent.parent / "assets" / "PuckPeak.png"
+
+
+def get_header_logo_data_uri() -> str:
+    """Return the brand logo PNG as an inline image data URI.
+
+    Returns:
+        str: Base64-encoded PNG data URI for embedding the local brand image,
+            or an empty string if the PNG asset is unavailable.
+    """
+    logo_path = get_header_logo_path()
+    if logo_path.exists():
+        logo_bytes = logo_path.read_bytes()
+        return f"data:image/png;base64,{base64.b64encode(logo_bytes).decode('ascii')}"
+
+    return ""
+
+
 def inject_css() -> None:
     """Inject the NHL Age Curves custom CSS into the Streamlit page.
 
-    Covers: animated gradient title, spinning NHL logo, sidebar compact layout,
+    Covers: sidebar brand logo styling, tighter top spacing, sidebar compact layout,
     blue Add-Legend button override, compact controls toolbar styling,
     compact mobile header sizing,
     a real chart toolbar row with copy-link button, responsive stacking of the
