@@ -63,6 +63,42 @@ ACTIVE_TEAMS = {
 }
 """32-team abbreviation -> full name mapping used across sidebar and pipeline."""
 
+TEAM_BRAND_COLORS: dict[str, tuple[str, str]] = {
+    "ANA": ("#F47A38", "#B9975B"),
+    "BOS": ("#FFB81C", "#111111"),
+    "BUF": ("#003087", "#FFB81C"),
+    "CGY": ("#C8102E", "#F1BE48"),
+    "CAR": ("#CC0000", "#111111"),
+    "CHI": ("#CF0A2C", "#111111"),
+    "COL": ("#6F263D", "#236192"),
+    "CBJ": ("#002654", "#CE1126"),
+    "DAL": ("#006847", "#8F8F8C"),
+    "DET": ("#CE1126", "#A2AAAD"),
+    "EDM": ("#041E42", "#FF4C00"),
+    "FLA": ("#041E42", "#C8102E"),
+    "LAK": ("#A2AAAD", "#111111"),
+    "MIN": ("#154734", "#A6192E"),
+    "MTL": ("#AF1E2D", "#192168"),
+    "NSH": ("#FFB81C", "#041E42"),
+    "NJD": ("#CE1126", "#111111"),
+    "NYI": ("#00539B", "#F47D30"),
+    "NYR": ("#0038A8", "#CE1126"),
+    "OTT": ("#C52032", "#C2912C"),
+    "PHI": ("#F74902", "#111111"),
+    "PIT": ("#FCB514", "#111111"),
+    "SJS": ("#006D75", "#EA7200"),
+    "SEA": ("#68A2B9", "#001628"),
+    "STL": ("#002F87", "#FCB514"),
+    "TBL": ("#0050A4", "#A2AAAD"),
+    "TOR": ("#0055B8", "#A2AAAD"),
+    "UTA": ("#6CA6D8", "#041E42"),
+    "VAN": ("#00843D", "#00205B"),
+    "VGK": ("#B4975A", "#333F48"),
+    "WSH": ("#041E42", "#C8102E"),
+    "WPG": ("#6CA6D8", "#041E42"),
+}
+"""Team abbreviation -> (gradient start, gradient end) colors for compact matchup UI."""
+
 TEAM_FOUNDED: dict[str, int] = {
     "ANA": 1993, "BOS": 1924, "BUF": 1970, "CGY": 1972,
     "CAR": 1979, "CHI": 1926, "COL": 1972, "CBJ": 2000,

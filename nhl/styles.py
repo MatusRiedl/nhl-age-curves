@@ -418,11 +418,22 @@ _CSS = """
             align-self: flex-start !important;
         }
         .live-games-probability {
+            position: relative;
+            overflow: hidden;
             border: 1px solid rgba(120, 120, 120, 0.16);
             border-radius: 10px;
-            background: rgba(255, 255, 255, 0.03);
+            background:
+                linear-gradient(
+                    90deg,
+                    var(--away-panel-tint, rgba(255, 255, 255, 0)) 0%,
+                    rgba(255, 255, 255, 0.028) 30%,
+                    rgba(255, 255, 255, 0.02) 50%,
+                    rgba(255, 255, 255, 0.028) 70%,
+                    var(--home-panel-tint, rgba(255, 255, 255, 0)) 100%
+                );
             padding: 0.42rem 0.55rem;
             margin: 0 0 0.35rem 0;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 10px 24px rgba(0, 0, 0, 0.14);
         }
         .live-games-probability--muted {
             color: #8c8c8c;
@@ -436,24 +447,90 @@ _CSS = """
             font-size: 0.93rem;
             margin-bottom: 0.28rem;
         }
+        .live-games-probability__label {
+            color: rgba(255, 255, 255, var(--label-opacity, 0.92));
+            text-shadow: 0 0 18px var(--label-glow, rgba(0, 0, 0, 0));
+            transition: color 120ms ease, text-shadow 120ms ease, opacity 120ms ease;
+        }
+        .live-games-probability__label strong {
+            font-size: 1.02rem;
+            letter-spacing: -0.01em;
+        }
+        .live-games-probability__label--leading {
+            color: rgba(255, 255, 255, 0.99);
+        }
+        .live-games-probability__label--trailing {
+            color: rgba(255, 255, 255, 0.8);
+        }
         .live-games-probability__bar {
             display: flex;
+            position: relative;
+            isolation: isolate;
             width: 100%;
             height: 8px;
             overflow: hidden;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.045);
             margin-bottom: 0.38rem;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), inset 0 8px 18px rgba(255, 255, 255, 0.03);
+        }
+        .live-games-probability__bar::before,
+        .live-games-probability__bar::after {
+            content: "";
+            position: absolute;
+            top: -10px;
+            bottom: -10px;
+            pointer-events: none;
+            filter: blur(10px);
+            opacity: 0.95;
+            z-index: 0;
+        }
+        .live-games-probability__bar::before {
+            left: 0;
+            width: var(--away-glow-width, 0%);
+            background: linear-gradient(90deg, var(--away-bar-glow, rgba(0, 0, 0, 0)), rgba(0, 0, 0, 0) 88%);
+        }
+        .live-games-probability__bar::after {
+            right: 0;
+            width: var(--home-glow-width, 0%);
+            background: linear-gradient(270deg, var(--home-bar-glow, rgba(0, 0, 0, 0)), rgba(0, 0, 0, 0) 88%);
         }
         .live-games-probability__segment {
             display: block;
+            position: relative;
+            z-index: 1;
             height: 100%;
+            min-width: 0;
+            background:
+                linear-gradient(
+                    180deg,
+                    rgba(255, 255, 255, var(--segment-sheen, 0.08)) 0%,
+                    var(--segment-color, rgba(255, 255, 255, 0.55)) 45%,
+                    var(--segment-color, rgba(255, 255, 255, 0.55)) 100%
+                );
+            opacity: var(--segment-opacity, 1);
+            filter: saturate(var(--segment-saturation, 1)) brightness(var(--segment-brightness, 1));
+            transition: opacity 120ms ease, filter 120ms ease, box-shadow 120ms ease;
         }
-        .live-games-probability__segment--away {
-            background: linear-gradient(90deg, rgba(79, 143, 255, 0.78), rgba(79, 143, 255, 0.54));
+        .live-games-probability__segment--leading {
+            box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.16), 0 0 14px var(--segment-glow, rgba(0, 0, 0, 0));
         }
-        .live-games-probability__segment--home {
-            background: linear-gradient(90deg, rgba(255, 92, 92, 0.7), rgba(255, 92, 92, 0.9));
+        .live-games-probability__segment--trailing {
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.16);
+        }
+        .live-games-probability__segment--tied {
+            box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.12);
+        }
+        .live-games-probability__divider {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 6px;
+            transform: translateX(-50%);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.4);
+            pointer-events: none;
+            z-index: 2;
         }
         .live-games-probability__meta {
             color: #9a9a9a;
@@ -664,7 +741,7 @@ _CSS = """
             box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 22px rgba(0, 0, 0, 0.18);
         }
         .comparison-panel-heading {
-            margin: 0.2rem 0 0.55rem 0;
+            margin: 0 0 0.42rem 0;
             color: #f4f6fb;
             font-size: 0.98rem;
             font-weight: 700;
@@ -748,11 +825,11 @@ _CSS = """
             margin-top: -0.2rem !important;
         }
         div:has(> #comparison-predictions-panel) {
-            margin: 0.65rem 0 0 0 !important;
+            margin: 0.18rem 0 0 0 !important;
             line-height: 0 !important;
         }
         div:has(> #comparison-predictions-panel) + div {
-            margin-top: -0.1rem !important;
+            margin-top: -0.18rem !important;
         }
         div.element-container:has(#comparison-main-plotly) {
             margin: 0 !important;

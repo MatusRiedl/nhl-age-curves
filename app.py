@@ -213,7 +213,7 @@ _show_panel = True
 st.markdown("<div id='main-chart-layout'></div>", unsafe_allow_html=True)
 
 if _show_panel:
-    col_chart, col_stats = st.columns([62, 38], gap="medium")
+    col_chart, col_stats = st.columns([62, 38], gap="small")
 else:
     col_chart = st.container()
     col_stats = None

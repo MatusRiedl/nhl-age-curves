@@ -1,5 +1,6 @@
 """Comparison panel rendering for chart details, trophies, and predictions."""
 
+import colorsys
 from dataclasses import dataclass
 from html import escape
 from typing import Callable
@@ -7,7 +8,7 @@ from typing import Callable
 import pandas as pd
 import streamlit as st
 
-from nhl.constants import ACTIVE_TEAMS, RATE_STATS, TEAM_FOUNDED, TEAM_RATE_STATS
+from nhl.constants import ACTIVE_TEAMS, RATE_STATS, TEAM_BRAND_COLORS, TEAM_FOUNDED, TEAM_RATE_STATS
 from nhl.data_loaders import (
     get_player_awards,
     get_player_career_rank,
@@ -61,11 +62,134 @@ _DEFAULT_PANEL_TAB = "overview"
 _DEFAULT_PLAYER_RANK_COLOR = "#4caf50"
 _CARD_CONTEXT_TEXT_COLOR = "#b3b3b3"
 _PLAYER_TRACE_TOGGLE_LABEL = "Chart line"
+_PROBABILITY_BAR_LIGHTNESS = 0.36
+_PROBABILITY_BAR_SATURATION = 0.68
 _CATEGORY_TAB_KEYS = {
     "Skater": "panel_tab_skater",
     "Goalie": "panel_tab_goalie",
     "Team": "panel_tab_team",
 }
+
+
+def _normalize_probability_color(hex_color: str) -> str:
+    """Normalize a bar color to the same muted intensity.
+
+    Args:
+        hex_color: Hex color string in #RRGGBB format.
+
+    Returns:
+        Muted hex color string with normalized lightness and saturation.
+    """
+    if len(hex_color) != 7 or not hex_color.startswith("#"):
+        return hex_color
+    try:
+        red = int(hex_color[1:3], 16) / 255
+        green = int(hex_color[3:5], 16) / 255
+        blue = int(hex_color[5:7], 16) / 255
+    except ValueError:
+        return hex_color
+    hue, _, _ = colorsys.rgb_to_hls(red, green, blue)
+    norm_red, norm_green, norm_blue = colorsys.hls_to_rgb(
+        hue,
+        _PROBABILITY_BAR_LIGHTNESS,
+        _PROBABILITY_BAR_SATURATION,
+    )
+    return "#{:02X}{:02X}{:02X}".format(
+        round(norm_red * 255),
+        round(norm_green * 255),
+        round(norm_blue * 255),
+    )
+
+
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """Convert a hex color to rgba() text for CSS custom properties."""
+    clamped_alpha = max(0.0, min(alpha, 1.0))
+    if len(hex_color) != 7 or not hex_color.startswith("#"):
+        return f"rgba(255, 255, 255, {clamped_alpha:.3f})"
+    try:
+        red = int(hex_color[1:3], 16)
+        green = int(hex_color[3:5], 16)
+        blue = int(hex_color[5:7], 16)
+    except ValueError:
+        return f"rgba(255, 255, 255, {clamped_alpha:.3f})"
+    return f"rgba({red}, {green}, {blue}, {clamped_alpha:.3f})"
+
+
+def _get_team_probability_background(team_abbr: str, fallback_color: str) -> str:
+    """Return a brand-matched solid color for one matchup bar segment.
+
+    Args:
+        team_abbr: Three-letter team abbreviation.
+        fallback_color: Hex color used if the team is unknown.
+
+    Returns:
+        CSS color text safe for an inline style attribute.
+    """
+    primary_color = TEAM_BRAND_COLORS.get(str(team_abbr or "").upper(), (fallback_color, fallback_color))[0]
+    return escape(_normalize_probability_color(primary_color), quote=True)
+
+
+def _build_probability_segment_style(
+    width_pct: int,
+    hex_color: str,
+    *,
+    is_leading: bool,
+    is_tied: bool,
+    edge_strength: float,
+) -> str:
+    """Build inline CSS vars for one probability bar segment."""
+    if is_tied:
+        opacity = 0.94
+        brightness = 1.03
+        saturation = 1.00
+        sheen_alpha = 0.11
+        glow_alpha = 0.10
+    elif is_leading:
+        opacity = 1.00
+        brightness = 1.10 + (edge_strength * 0.16)
+        saturation = 1.08 + (edge_strength * 0.18)
+        sheen_alpha = 0.18 + (edge_strength * 0.06)
+        glow_alpha = 0.16 + (edge_strength * 0.18)
+    else:
+        opacity = max(0.56, 0.82 - (edge_strength * 0.18))
+        brightness = max(0.78, 0.92 - (edge_strength * 0.10))
+        saturation = max(0.82, 0.96 - (edge_strength * 0.12))
+        sheen_alpha = 0.05
+        glow_alpha = 0.00
+    style = (
+        f"width:{width_pct}%;"
+        f"--segment-color:{hex_color};"
+        f"--segment-glow:{_hex_to_rgba(hex_color, glow_alpha)};"
+        f"--segment-opacity:{opacity:.3f};"
+        f"--segment-brightness:{brightness:.3f};"
+        f"--segment-saturation:{saturation:.3f};"
+        f"--segment-sheen:{sheen_alpha:.3f};"
+    )
+    return escape(style, quote=True)
+
+
+def _build_probability_label_style(
+    hex_color: str,
+    *,
+    is_leading: bool,
+    is_tied: bool,
+    edge_strength: float,
+) -> str:
+    """Build inline CSS vars for one probability label."""
+    if is_tied:
+        opacity = 0.95
+        glow_alpha = 0.08
+    elif is_leading:
+        opacity = 1.00
+        glow_alpha = 0.15 + (edge_strength * 0.10)
+    else:
+        opacity = max(0.62, 0.80 - (edge_strength * 0.12))
+        glow_alpha = 0.00
+    style = (
+        f"--label-opacity:{opacity:.3f};"
+        f"--label-glow:{_hex_to_rgba(hex_color, glow_alpha)};"
+    )
+    return escape(style, quote=True)
 
 
 @dataclass(frozen=True)
@@ -589,7 +713,10 @@ def render_detail_tabs(
 def render_predictions_panel() -> None:
     """Render the dedicated Predictions panel in the desktop right rail."""
     st.markdown("<div id='comparison-predictions-panel'></div>", unsafe_allow_html=True)
-    st.markdown("<div class='comparison-panel-heading'>Predictions</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='comparison-panel-heading'>Machine Learning predicts upcoming matches</div>",
+        unsafe_allow_html=True,
+    )
     _render_live_games_tab()
 
 
@@ -648,6 +775,76 @@ def _build_live_game_probability_html(game: dict) -> str:
 
     away_pct = min(max(away_pct, 0), 100)
     home_pct = min(max(home_pct, 0), 100)
+    away_background = _get_team_probability_background(game.get("away_abbr", ""), "#4F8FFF")
+    home_background = _get_team_probability_background(game.get("home_abbr", ""), "#FF5C5C")
+    edge_strength = min(abs(away_pct - home_pct) / 34.0, 1.0)
+    is_tied = away_pct == home_pct
+    away_leading = away_pct > home_pct
+    home_leading = home_pct > away_pct
+    panel_state = "tied"
+    if away_leading:
+        panel_state = "away-lead"
+    elif home_leading:
+        panel_state = "home-lead"
+
+    away_panel_tint = _hex_to_rgba(
+        away_background,
+        0.035 if is_tied else (0.07 + (edge_strength * 0.09) if away_leading else 0.0),
+    )
+    home_panel_tint = _hex_to_rgba(
+        home_background,
+        0.035 if is_tied else (0.07 + (edge_strength * 0.09) if home_leading else 0.0),
+    )
+    away_bar_glow = _hex_to_rgba(
+        away_background,
+        0.08 if is_tied else (0.16 + (edge_strength * 0.14) if away_leading else 0.0),
+    )
+    home_bar_glow = _hex_to_rgba(
+        home_background,
+        0.08 if is_tied else (0.16 + (edge_strength * 0.14) if home_leading else 0.0),
+    )
+    panel_style = escape(
+        f"--away-panel-tint:{away_panel_tint};"
+        f"--home-panel-tint:{home_panel_tint};",
+        quote=True,
+    )
+    bar_style = escape(
+        f"--away-glow-width:{away_pct}%;"
+        f"--home-glow-width:{home_pct}%;"
+        f"--away-bar-glow:{away_bar_glow};"
+        f"--home-bar-glow:{home_bar_glow};",
+        quote=True,
+    )
+    away_label_state = "tied" if is_tied else ("leading" if away_leading else "trailing")
+    home_label_state = "tied" if is_tied else ("leading" if home_leading else "trailing")
+    away_segment_state = "tied" if is_tied else ("leading" if away_leading else "trailing")
+    home_segment_state = "tied" if is_tied else ("leading" if home_leading else "trailing")
+    away_label_style = _build_probability_label_style(
+        away_background,
+        is_leading=away_leading,
+        is_tied=is_tied,
+        edge_strength=edge_strength,
+    )
+    home_label_style = _build_probability_label_style(
+        home_background,
+        is_leading=home_leading,
+        is_tied=is_tied,
+        edge_strength=edge_strength,
+    )
+    away_segment_style = _build_probability_segment_style(
+        away_pct,
+        away_background,
+        is_leading=away_leading,
+        is_tied=is_tied,
+        edge_strength=edge_strength,
+    )
+    home_segment_style = _build_probability_segment_style(
+        home_pct,
+        home_background,
+        is_leading=home_leading,
+        is_tied=is_tied,
+        edge_strength=edge_strength,
+    )
     away_short_name = escape(_get_team_short_name(game["away_abbr"], game["away_name"]))
     home_short_name = escape(_get_team_short_name(game["home_abbr"], game["home_name"]))
     model_label = escape(str(probability.get("model_label", "") or "").strip())
@@ -657,14 +854,15 @@ def _build_live_game_probability_html(game: dict) -> str:
         playoff_note = "<div class='live-games-probability__meta'>Regular-season calibrated model.</div>"
 
     return (
-        "<div class='live-games-probability'>"
+        f"<div class='live-games-probability live-games-probability--{panel_state}' style='{panel_style}'>"
         "<div class='live-games-probability__labels'>"
-        f"<span>{away_short_name} <strong>{away_pct}%</strong></span>"
-        f"<span><strong>{home_pct}%</strong> {home_short_name}</span>"
+        f"<span class='live-games-probability__label live-games-probability__label--away live-games-probability__label--{away_label_state}' style='{away_label_style}'>{away_short_name} <strong>{away_pct}%</strong></span>"
+        f"<span class='live-games-probability__label live-games-probability__label--home live-games-probability__label--{home_label_state}' style='{home_label_style}'><strong>{home_pct}%</strong> {home_short_name}</span>"
         "</div>"
-        "<div class='live-games-probability__bar'>"
-        f"<span class='live-games-probability__segment live-games-probability__segment--away' style='width:{away_pct}%'></span>"
-        f"<span class='live-games-probability__segment live-games-probability__segment--home' style='width:{home_pct}%'></span>"
+        f"<div class='live-games-probability__bar' style='{bar_style}'>"
+        f"<span class='live-games-probability__segment live-games-probability__segment--away live-games-probability__segment--{away_segment_state}' style='{away_segment_style}'></span>"
+        f"<span class='live-games-probability__segment live-games-probability__segment--home live-games-probability__segment--{home_segment_state}' style='{home_segment_style}'></span>"
+        f"<span class='live-games-probability__divider' style='left:{away_pct}%;'></span>"
         "</div>"
         f"<div class='live-games-probability__meta'>{model_label}</div>"
         f"<div class='live-games-probability__meta'>{goalie_label}</div>"
@@ -698,7 +896,6 @@ def _render_live_games_tab() -> None:
     Shows the next four upcoming NHL games and lets the user seed the
     comparison board with both teams plus each club's featured skater and goalie.
     """
-    st.caption("Machine Learning trained logistic model predicts each upcoming matchup.")
     upcoming_games = get_upcoming_games(limit=4)
     if not upcoming_games:
         st.info("No upcoming NHL games found right now.")
