@@ -36,6 +36,11 @@ Y_AXIS_CUE_COLOR = "rgba(255, 255, 255, 0.25)"
 BASELINE_LINE_DASH = "14px,10px"
 BASELINE_LINE_COLOR = "rgba(190, 190, 190, 0.72)"
 BASELINE_MARKER_COLOR = "rgba(220, 220, 220, 0.92)"
+PROJECTION_LINE_WIDTH = 2
+PROJECTION_GLOW_OUTER_WIDTH = 5
+PROJECTION_GLOW_OUTER_OPACITY = 0.16
+PROJECTION_GLOW_INNER_WIDTH = 2
+PROJECTION_GLOW_INNER_OPACITY = 0.26
 PLAYER_COLOR_STATE_KEY = "player_chart_colors"
 CLICKABLE_AGE_MARKER_SIZE = 9
 CLICKABLE_AGE_MARKER_GLOW_SIZE = 16
@@ -316,6 +321,7 @@ def _apply_special_trace_styling(fig: go.Figure, player_colors: dict[str, str | 
             trace.legendgroup = player_name
             trace.showlegend = False
             trace.line.dash = 'dot'
+            trace.line.width = PROJECTION_LINE_WIDTH
             trace.line.color = proj_color
             trace.marker.color = proj_color
             trace.marker.line.width = 0
@@ -855,7 +861,11 @@ def render_chart(
             fig.add_trace(go.Scatter(
                 x=proj['x'], y=proj['y'],
                 mode='lines',
-                line=dict(color=proj['color'], width=10, dash='dot'),
+                line=dict(
+                    color=_with_alpha(proj['color'], PROJECTION_GLOW_OUTER_OPACITY),
+                    width=PROJECTION_GLOW_OUTER_WIDTH,
+                    dash='dot',
+                ),
                 showlegend=False,
                 legendgroup=proj['legendgroup'],
                 hoverinfo='skip',
@@ -865,22 +875,26 @@ def render_chart(
             fig.add_trace(go.Scatter(
                 x=proj['x'], y=proj['y'],
                 mode='lines',
-                line=dict(color=proj['color'], width=4, dash='dot'),
+                line=dict(
+                    color=_with_alpha(proj['color'], PROJECTION_GLOW_INNER_OPACITY),
+                    width=PROJECTION_GLOW_INNER_WIDTH,
+                    dash='dot',
+                ),
                 showlegend=False,
                 legendgroup=proj['legendgroup'],
                 hoverinfo='skip',
                 name='_proj_glow_inner',
             ))
 
-    # Add peak age highlights (translucent vertical rectangles)
+    # Add exact peak-age/game highlights (single x-axis bucket only)
     if do_prime and not team_mode:
         for player_name, peak_data in peak_info.items():
             player_color = player_colors.get(player_name)
             peak_x = peak_data.get('x') if games_mode else peak_data.get('age')
             if player_color and peak_x is not None:
                 fig.add_vrect(
-                    x0=peak_x - 1.5,
-                    x1=peak_x + 1.5,
+                    x0=peak_x - 0.5,
+                    x1=peak_x + 0.5,
                     fillcolor=player_color,
                     opacity=0.10,
                     layer="below",
