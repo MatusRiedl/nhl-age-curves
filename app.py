@@ -10,9 +10,9 @@ import streamlit as st
 from nhl.async_preloader import preload_all_categories
 from nhl.baselines import get_historical_baselines, get_team_baselines
 from nhl.chart import render_chart
+from nhl.comparison import render_chart_season_picker, render_detail_tabs, render_predictions_panel
 from nhl.constants import ACTIVE_TEAMS
 from nhl.controls import render_controls
-from nhl.comparison import render_comparison_area
 from nhl.data_loaders import (
     get_clone_details_map,
     get_id_to_name_map,
@@ -235,8 +235,21 @@ else:
     col_chart = st.container()
     col_stats = None
 
-with col_chart:
-    metric, do_cumul = render_controls()
+season_slot = None
+predictions_slot = None
+
+if col_stats is not None:
+    with col_stats:
+        st.markdown("<div id='comparison-right-rail'></div>", unsafe_allow_html=True)
+        season_slot = st.container()
+        controls_slot = st.container()
+        predictions_slot = st.container()
+    with controls_slot:
+        st.markdown("<div id='comparison-controls-panel'></div>", unsafe_allow_html=True)
+        metric, do_cumul = render_controls()
+else:
+    with col_chart:
+        metric, do_cumul = render_controls()
 
 # =============================================================================
 # Sidebar — renders player/team board and returns keys for chart cache-busting.
@@ -360,11 +373,14 @@ elif active_players:
 
 # =============================================================================
 # Chart rendering (shared by both pipelines)
-# Keep the comparison panel visible even on an empty board so the Live games
-# tab can seed players and teams without forcing the user through the sidebar.
-# The main split already started above so the right panel can sit beside the
-# controls on desktop and stack below the chart on smaller widths.
+# Keep the predictions panel visible even on an empty board so live games can
+# seed players and teams without forcing the user through the sidebar.
+# Overview and Trophies render in a separate full-width detail row below.
 # =============================================================================
+if season_slot is not None:
+    with season_slot:
+        render_chart_season_picker(chart_season_options)
+
 with col_chart:
     render_chart(
         processed_dfs        = processed_dfs,
@@ -388,21 +404,23 @@ with col_chart:
         share_params         = share_params,
     )
 
-if col_stats is not None:
-    with col_stats:
-        render_comparison_area(
-            processed_dfs = processed_dfs,
-            players       = active_players,
-            teams         = st.session_state.teams,
-            peak_info     = peak_info,
-            metric        = metric,
-            stat_category = st.session_state.stat_category,
-            season_type   = st.session_state.season_type,
-            team_mode     = team_mode,
-            selected_season = st.session_state.chart_season,
-            chart_season_options = chart_season_options,
-            do_cumul      = do_cumul,
-        )
+if predictions_slot is not None:
+    with predictions_slot:
+        render_predictions_panel()
+
+st.markdown("<div id='comparison-detail-layout'></div>", unsafe_allow_html=True)
+render_detail_tabs(
+    processed_dfs = processed_dfs,
+    players       = active_players,
+    teams         = st.session_state.teams,
+    peak_info     = peak_info,
+    metric        = metric,
+    stat_category = st.session_state.stat_category,
+    season_type   = st.session_state.season_type,
+    team_mode     = team_mode,
+    selected_season = st.session_state.chart_season,
+    do_cumul      = do_cumul,
+)
 
 # =============================================================================
 # Footer

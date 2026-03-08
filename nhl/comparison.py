@@ -1,4 +1,4 @@
-"""Tabbed comparison panel for overview cards, trophies, and live games."""
+"""Comparison panel rendering for chart details, trophies, and predictions."""
 
 from dataclasses import dataclass
 from html import escape
@@ -251,9 +251,82 @@ def _prime_chart_season_picker(chart_season_options: list[str | int]) -> int:
     return chart_season_options.index(current_chart_season)
 
 
+def render_chart_season_picker(chart_season_options: list[str | int] | None) -> None:
+    """Render the chart-season picker in the dedicated right-rail slot."""
+    if not chart_season_options:
+        return
+
+    st.markdown("<div id='comparison-season-filter'></div>", unsafe_allow_html=True)
+    active_chart_season_index = _prime_chart_season_picker(chart_season_options)
+    st.selectbox(
+        "Chart season",
+        options=chart_season_options,
+        index=active_chart_season_index,
+        key="_chart_season_picker",
+        on_change=_sync_chart_season_picker,
+        format_func=_format_chart_season_label,
+    )
+
+
 def get_panel_tab_ids() -> set[str]:
-    """Return all registered panel tab IDs."""
-    return {t.id for t in _PANEL_TABS}
+    """Return all registered detail tab IDs."""
+    return {t.id for t in _DETAIL_PANEL_TABS}
+
+
+def _get_visible_player_entries(processed_dfs: list, players: dict) -> list[tuple]:
+    """Return visible player entries in stable board order."""
+    return list(_iter_visible_players_for_category(processed_dfs, players))
+
+
+def _render_player_media_card(hero_url: str | None, body_html: str) -> None:
+    """Render a player detail card with optional media."""
+    outer_classes = "comparison-player-card"
+    media_html = ""
+    if hero_url:
+        safe_hero_url = escape(hero_url, quote=True)
+        media_html = (
+            "<div class='comparison-player-card__media'>"
+            f"<img src='{safe_hero_url}' class='comparison-player-card__image' loading='lazy'>"
+            "</div>"
+        )
+    else:
+        outer_classes = "comparison-player-card comparison-player-card--no-image"
+
+    st.markdown(
+        f"<div class='{outer_classes}'>"
+        f"{media_html}"
+        "<div class='comparison-player-card__body'>"
+        f"{body_html or ''}"
+        "</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_player_card_grid(
+    visible_players: list[tuple],
+    render_card: Callable[..., None],
+    empty_message: str,
+) -> None:
+    """Render player detail cards in two columns, alternating by selection order."""
+    if not visible_players:
+        st.info(empty_message)
+        return
+
+    card_columns = st.columns(2, gap="medium")
+    for idx, entry in enumerate(visible_players):
+        with card_columns[idx % 2]:
+            render_card(*entry)
+
+
+def _get_empty_detail_message(entity_name: str, has_selection: bool, detail_label: str) -> str:
+    """Return a consistent empty-state message for detail sections."""
+    if has_selection:
+        return (
+            f"No selected {entity_name} match the current category and filters "
+            f"for {detail_label}."
+        )
+    return f"Add {entity_name} from the sidebar to see {detail_label} here."
 
 
 def _get_player_chart_colors() -> dict[str, str | None]:
@@ -334,13 +407,37 @@ def render_comparison_area(
     chart_season_options: list[str | int] | None = None,
     do_cumul: bool = False,
 ) -> None:
-    """Render the tabbed comparison area for the active category."""
-    tab_lookup = {tab.id: tab for tab in _PANEL_TABS}
-    tab_ids = list(tab_lookup.keys())
-    if not tab_ids:
-        st.info("No comparison tabs configured.")
-        return
+    """Render the comparison UI in the legacy single-column order."""
+    render_chart_season_picker(chart_season_options)
+    render_detail_tabs(
+        processed_dfs=processed_dfs,
+        players=players,
+        teams=teams,
+        peak_info=peak_info,
+        metric=metric,
+        stat_category=stat_category,
+        season_type=season_type,
+        team_mode=team_mode,
+        selected_season=selected_season,
+        do_cumul=do_cumul,
+    )
+    render_predictions_panel()
 
+
+def render_detail_tabs(
+    processed_dfs: list,
+    players: dict,
+    teams: dict,
+    peak_info: dict,
+    metric: str,
+    stat_category: str,
+    season_type: str,
+    team_mode: bool,
+    selected_season: str | int = "All",
+    do_cumul: bool = False,
+) -> None:
+    """Render the full-width Overview/Trophies detail tabs below the chart."""
+    tab_lookup = {tab.id: tab for tab in _DETAIL_PANEL_TABS}
     tab_key = _get_category_tab_key(stat_category)
     if tab_key not in st.session_state:
         st.session_state[tab_key] = _DEFAULT_PANEL_TAB
@@ -348,36 +445,15 @@ def render_comparison_area(
     if st.session_state[tab_key] not in tab_lookup:
         st.session_state[tab_key] = _DEFAULT_PANEL_TAB
 
-    default_tab_id = st.session_state.get(tab_key, _DEFAULT_PANEL_TAB)
-    has_visible_comparison = bool(teams) if team_mode else any(
-        True for _ in _iter_visible_players_for_category(processed_dfs, players)
-    )
-    # Empty boards should land on something useful instead of a blank Overview tab.
-    if not has_visible_comparison and "live_games" in tab_lookup:
-        default_tab = tab_lookup["live_games"]
-    else:
-        default_tab = tab_lookup.get(default_tab_id, tab_lookup[_DEFAULT_PANEL_TAB])
-    default_label = default_tab.label
-
-    if chart_season_options:
-        st.markdown("<div id='comparison-season-filter'></div>", unsafe_allow_html=True)
-        active_chart_season_index = _prime_chart_season_picker(chart_season_options)
-        st.selectbox(
-            "Chart season",
-            options=chart_season_options,
-            index=active_chart_season_index,
-            key="_chart_season_picker",
-            on_change=_sync_chart_season_picker,
-            format_func=_format_chart_season_label,
-        )
+    default_tab = tab_lookup.get(st.session_state.get(tab_key, _DEFAULT_PANEL_TAB), tab_lookup[_DEFAULT_PANEL_TAB])
 
     st.markdown("<div id='comparison-tabs'></div>", unsafe_allow_html=True)
     tab_containers = st.tabs(
-        [tab_lookup[tab_id].label for tab_id in tab_ids],
-        default=default_label,
+        [tab_lookup[tab_id].label for tab_id in tab_lookup],
+        default=default_tab.label,
     )
 
-    for tab_id, tab_container in zip(tab_ids, tab_containers):
+    for tab_id, tab_container in zip(tab_lookup, tab_containers):
         tab_spec = tab_lookup[tab_id]
         with tab_container:
             if team_mode:
@@ -400,6 +476,13 @@ def render_comparison_area(
                     selected_season=selected_season,
                     do_cumul=do_cumul,
                 )
+
+
+def render_predictions_panel() -> None:
+    """Render the dedicated Predictions panel in the desktop right rail."""
+    st.markdown("<div id='comparison-predictions-panel'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='comparison-panel-heading'>Predictions</div>", unsafe_allow_html=True)
+    _render_live_games_tab()
 
 
 def _add_live_game_to_comparison(game: dict) -> None:
@@ -587,17 +670,18 @@ def _render_live_games_teams(
     _render_live_games_tab()
 
 
-def _render_overview_players(
-    processed_dfs: list,
-    players: dict,
+def _render_overview_player_card(
+    pid,
+    name,
+    proc_df,
     peak_info: dict,
     metric: str,
     stat_category: str,
     season_type: str,
-    selected_season: str | int = "All",
-    do_cumul: bool = False,
+    selected_season: str | int,
+    do_cumul: bool,
 ) -> None:
-    """Overview tab: existing right-column player comparison cards."""
+    """Render one player Overview card."""
     is_goalie = stat_category == "Goalie"
     season_mode = _is_selected_season_mode(selected_season)
     use_last_visible_total = season_mode and do_cumul
@@ -610,137 +694,153 @@ def _render_overview_players(
     rank_suffix_map = {"Goals": "Goals", "Assists": "Assists", "Points": "Points"}
     rank_suffix = "Wins" if is_goalie else rank_suffix_map.get(metric, "Points")
 
-    for pid, name, proc_df in _iter_visible_players_for_category(processed_dfs, players):
-        real = proc_df[~proc_df["Player"].str.contains(r"\(Proj\)", na=False)]
-        sort_cols = [col for col in ["CumGP", "Age", "SeasonYear"] if col in real.columns]
-        if sort_cols:
-            real = real.sort_values(sort_cols).reset_index(drop=True)
+    real = proc_df[~proc_df["Player"].str.contains(r"\(Proj\)", na=False)]
+    sort_cols = [col for col in ["CumGP", "Age", "SeasonYear"] if col in real.columns]
+    if sort_cols:
+        real = real.sort_values(sort_cols).reset_index(drop=True)
 
-        hero_url = get_player_hero_image(int(pid))
-        team_abbr = get_player_current_team(int(pid))
-        logo_html = (
-            f"<img src='{_TEAM_LOGO_URL.format(abbr=team_abbr)}' "
-            f"height='18' style='vertical-align:middle;margin-left:6px;opacity:0.9;'>"
-            if team_abbr
-            else ""
+    hero_url = get_player_hero_image(int(pid))
+    team_abbr = get_player_current_team(int(pid))
+    logo_html = (
+        f"<img src='{_TEAM_LOGO_URL.format(abbr=team_abbr)}' "
+        f"height='18' style='vertical-align:middle;margin-left:6px;opacity:0.9;'>"
+        if team_abbr
+        else ""
+    )
+
+    career_gp = _get_visible_stat_total(real, "GP", use_last_visible_total)
+    if is_goalie:
+        career_w = _get_visible_stat_total(real, "Wins", use_last_visible_total)
+        career_so = _get_visible_stat_total(real, "Shutouts", use_last_visible_total)
+        career_sv = _get_visible_stat_total(real, "Saves", use_last_visible_total)
+        stats_row = (
+            f"W:&nbsp;{career_w} &nbsp;|&nbsp; "
+            f"SO:&nbsp;{career_so} &nbsp;|&nbsp; "
+            f"SV:&nbsp;{career_sv:,} &nbsp;|&nbsp; "
+            f"GP:&nbsp;{career_gp}"
+        )
+    else:
+        career_g = _get_visible_stat_total(real, "Goals", use_last_visible_total)
+        career_a = _get_visible_stat_total(real, "Assists", use_last_visible_total)
+        career_pt = _get_visible_stat_total(real, "Points", use_last_visible_total)
+        stats_row = (
+            f"G:&nbsp;{career_g} &nbsp;|&nbsp; "
+            f"A:&nbsp;{career_a} &nbsp;|&nbsp; "
+            f"Pts:&nbsp;{career_pt} &nbsp;|&nbsp; "
+            f"GP:&nbsp;{career_gp}"
         )
 
-        career_gp = _get_visible_stat_total(real, "GP", use_last_visible_total)
-        if is_goalie:
-            career_w = _get_visible_stat_total(real, "Wins", use_last_visible_total)
-            career_so = _get_visible_stat_total(real, "Shutouts", use_last_visible_total)
-            career_sv = _get_visible_stat_total(real, "Saves", use_last_visible_total)
-            stats_row = (
-                f"W:&nbsp;{career_w} &nbsp;|&nbsp; "
-                f"SO:&nbsp;{career_so} &nbsp;|&nbsp; "
-                f"SV:&nbsp;{career_sv:,} &nbsp;|&nbsp; "
-                f"GP:&nbsp;{career_gp}"
-            )
-        else:
-            career_g = _get_visible_stat_total(real, "Goals", use_last_visible_total)
-            career_a = _get_visible_stat_total(real, "Assists", use_last_visible_total)
-            career_pt = _get_visible_stat_total(real, "Points", use_last_visible_total)
-            stats_row = (
-                f"G:&nbsp;{career_g} &nbsp;|&nbsp; "
-                f"A:&nbsp;{career_a} &nbsp;|&nbsp; "
-                f"Pts:&nbsp;{career_pt} &nbsp;|&nbsp; "
-                f"GP:&nbsp;{career_gp}"
-            )
+    scope_row = ""
+    if season_mode:
+        scope_color = player_colors.get(name) or _DEFAULT_PLAYER_RANK_COLOR
+        season_rank = season_rank_map.get(int(pid))
+        season_label = (
+            _build_selected_season_rank_label(selected_season, season_type, metric, season_rank)
+            if season_rank is not None
+            else _build_selected_season_scope_label(selected_season, season_type)
+        )
+        scope_row = (
+            f"<br><span style='font-size:14px;color:{scope_color};font-weight:bold;'>"
+            f"{season_label}"
+            "</span>"
+        )
 
-        scope_row = ""
-        if season_mode:
-            scope_color = player_colors.get(name) or _DEFAULT_PLAYER_RANK_COLOR
-            season_rank = season_rank_map.get(int(pid))
-            season_label = (
-                _build_selected_season_rank_label(selected_season, season_type, metric, season_rank)
-                if season_rank is not None
-                else _build_selected_season_scope_label(selected_season, season_type)
-            )
-            scope_row = (
-                f"<br><span style='font-size:14px;color:{scope_color};font-weight:bold;'>"
-                f"{season_label}"
+    rank_row = ""
+    if not season_mode:
+        rank = get_player_career_rank(int(pid), stat_category, season_type, metric)
+        if rank is not None:
+            rank_color = player_colors.get(name) or _DEFAULT_PLAYER_RANK_COLOR
+            rank_row = (
+                f"<br><span style='font-size:14px;color:{rank_color};font-weight:bold;'>"
+                f"#{rank} all-time {rank_suffix}"
                 "</span>"
             )
 
-        rank_row = ""
-        if not season_mode:
-            rank = get_player_career_rank(int(pid), stat_category, season_type, metric)
-            if rank is not None:
-                rank_color = player_colors.get(name) or _DEFAULT_PLAYER_RANK_COLOR
-                rank_row = (
-                    f"<br><span style='font-size:14px;color:{rank_color};font-weight:bold;'>"
-                    f"#{rank} all-time {rank_suffix}"
-                    "</span>"
-                )
+    peak = peak_info.get(name)
+    best_row = ""
+    if peak:
+        metric_short_map = {"Points": "Pts", "Goals": "G", "Assists": "A"}
+        metric_short = metric_short_map.get(metric, metric)
+        if season_mode:
+            peak_game = peak.get("game_number") or peak.get("x") or "?"
+            peak_date = peak.get("game_date")
+            peak_value = peak.get("raw_peak_val", peak.get("y"))
+            peak_date_str = f" ({peak_date})" if peak_date else ""
+            best_row = (
+                "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
+                f"Best game:&nbsp;#{peak_game}{peak_date_str}"
+                f" -- {_format_peak_metric_value(metric, peak_value)}&nbsp;{metric_short}"
+                "</span>"
+            )
+        else:
+            age = peak.get("age", "?")
+            sy = peak.get("season_year")
+            val = peak.get("y")
+            peak_row_df = real[real["Age"] == age]
+            peak_gp = (
+                int(peak_row_df["GP"].iloc[0])
+                if not peak_row_df.empty and "GP" in peak_row_df.columns
+                else "?"
+            )
+            sy_str = f"{sy - 1}-{str(sy)[2:]}" if sy else "?"
+            best_row = (
+                "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
+                f"Best: Age&nbsp;{age} ({sy_str})"
+                f" -- {_format_peak_metric_value(metric, val)}&nbsp;{metric_short} in {peak_gp}&nbsp;GP"
+                "</span>"
+            )
 
-        peak = peak_info.get(name)
-        best_row = ""
-        if peak:
-            metric_short_map = {"Points": "Pts", "Goals": "G", "Assists": "A"}
-            metric_short = metric_short_map.get(metric, metric)
-            if season_mode:
-                peak_game = peak.get("game_number") or peak.get("x") or "?"
-                peak_date = peak.get("game_date")
-                peak_value = peak.get("raw_peak_val", peak.get("y"))
-                peak_date_str = f" ({peak_date})" if peak_date else ""
-                best_row = (
-                    "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
-                    f"Best game:&nbsp;#{peak_game}{peak_date_str}"
-                    f" -- {_format_peak_metric_value(metric, peak_value)}&nbsp;{metric_short}"
-                    "</span>"
-                )
-            else:
-                age = peak.get("age", "?")
-                sy = peak.get("season_year")
-                val = peak.get("y")
-                peak_row_df = real[real["Age"] == age]
-                peak_gp = (
-                    int(peak_row_df["GP"].iloc[0])
-                    if not peak_row_df.empty and "GP" in peak_row_df.columns
-                    else "?"
-                )
-                sy_str = f"{sy - 1}-{str(sy)[2:]}" if sy else "?"
-                best_row = (
-                    "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
-                    f"Best: Age&nbsp;{age} ({sy_str})"
-                    f" -- {_format_peak_metric_value(metric, val)}&nbsp;{metric_short} in {peak_gp}&nbsp;GP"
-                    "</span>"
-                )
-
-        with st.container():
-            img_col, stat_col = st.columns([1, 2], gap="small")
-            with img_col:
-                if hero_url:
-                    st.image(hero_url, use_container_width=True)
-
-            with stat_col:
-                roster_info = get_player_roster_info(int(pid))
-                if roster_info:
-                    pos = roster_info["position"]
-                    num = roster_info["sweater_number"]
-                    name_html = (
-                        f"<span style='color:#aaa;font-size:13px;'>[{pos}]</span> "
-                        f"<strong>{name}</strong> "
-                        f"<span style='color:#aaa;font-size:13px;'>#{num}</span>"
-                    )
-                else:
-                    name_html = f"<strong>{name}</strong>"
-
-                st.markdown(
-                    "<div style='line-height:1.4;margin:0;padding:0;'>"
-                    f"{name_html}{logo_html}<br>"
-                    f"{stats_row}"
-                    f"{scope_row}"
-                    f"{rank_row}"
-                    f"{best_row}"
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
-
-        st.markdown(
-            "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
-            unsafe_allow_html=True,
+    roster_info = get_player_roster_info(int(pid))
+    if roster_info:
+        pos = roster_info["position"]
+        num = roster_info["sweater_number"]
+        name_html = (
+            f"<span style='color:#aaa;font-size:13px;'>[{pos}]</span> "
+            f"<strong>{name}</strong> "
+            f"<span style='color:#aaa;font-size:13px;'>#{num}</span>"
         )
+    else:
+        name_html = f"<strong>{name}</strong>"
+
+    _render_player_media_card(
+        hero_url,
+        "<div style='line-height:1.4;margin:0;padding:0;'>"
+        f"{name_html}{logo_html}<br>"
+        f"{stats_row}"
+        f"{scope_row}"
+        f"{rank_row}"
+        f"{best_row}"
+        "</div>",
+    )
+
+
+def _render_overview_players(
+    processed_dfs: list,
+    players: dict,
+    peak_info: dict,
+    metric: str,
+    stat_category: str,
+    season_type: str,
+    selected_season: str | int = "All",
+    do_cumul: bool = False,
+) -> None:
+    """Overview tab for player comparison cards."""
+    visible_players = _get_visible_player_entries(processed_dfs, players)
+    _render_player_card_grid(
+        visible_players=visible_players,
+        render_card=lambda pid, name, proc_df: _render_overview_player_card(
+            pid=pid,
+            name=name,
+            proc_df=proc_df,
+            peak_info=peak_info,
+            metric=metric,
+            stat_category=stat_category,
+            season_type=season_type,
+            selected_season=selected_season,
+            do_cumul=do_cumul,
+        ),
+        empty_message=_get_empty_detail_message("players", bool(players), "overview details"),
+    )
 
 
 def _build_team_record_label(row: pd.Series) -> str:
@@ -806,12 +906,18 @@ def _render_overview_teams(
         team_abbr: proc_df
         for team_abbr, _, proc_df in _iter_visible_teams(processed_dfs, active_teams)
     }
+    rendered_any = False
+
+    if not active_teams:
+        st.info(_get_empty_detail_message("teams", False, "overview details"))
+        return
 
     for abbr, full_name in active_teams.items():
         if season_mode:
             proc_df = team_proc_lookup.get(abbr)
             if proc_df is None or proc_df.empty:
                 continue
+            rendered_any = True
 
             real = proc_df.sort_values(["CumGP", "GameDate", "GameId"], na_position="last").reset_index(drop=True)
             latest = real.iloc[-1]
@@ -891,6 +997,7 @@ def _render_overview_teams(
         stats = team_stats.get(abbr)
         if not stats:
             continue
+        rendered_any = True
 
         founded = TEAM_FOUNDED.get(abbr, "")
         logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
@@ -945,6 +1052,9 @@ def _render_overview_teams(
             "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
             unsafe_allow_html=True,
         )
+
+    if not rendered_any:
+        st.info(_get_empty_detail_message("teams", True, "overview details"))
 
 
 def _summarize_player_awards(awards: list[dict]) -> list[dict]:
@@ -1005,7 +1115,9 @@ def _render_trophies_players(
     """Trophies tab for skater/goalie categories."""
     del peak_info, metric, stat_category, season_type, selected_season, do_cumul
 
-    for pid, name, _ in _iter_visible_players_for_category(processed_dfs, players):
+    visible_players = _get_visible_player_entries(processed_dfs, players)
+
+    def _render_trophy_card(pid, name, _proc_df) -> None:
         hero_url = get_player_hero_image(int(pid))
         team_abbr = get_player_current_team(int(pid))
         logo_html = (
@@ -1034,7 +1146,7 @@ def _render_trophies_players(
         for row in award_rows[:8]:
             latest = row["latest"]
             latest_str = (
-                f" (latest { _season_span_label_from_id(latest) })"
+                f" (latest {_season_span_label_from_id(latest)})"
                 if latest is not None
                 else ""
             )
@@ -1050,24 +1162,19 @@ def _render_trophies_players(
                 "</span>"
             )
 
-        lines_html = "<br>".join(lines)
-        with st.container():
-            img_col, stat_col = st.columns([1, 2], gap="small")
-            with img_col:
-                if hero_url:
-                    st.image(hero_url, use_container_width=True)
-            with stat_col:
-                st.markdown(
-                    "<div style='line-height:1.5;margin:0;padding:0;'>"
-                    f"{name_html}{logo_html}<br>"
-                    f"{lines_html}"
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
-        st.markdown(
-            "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
-            unsafe_allow_html=True,
+        _render_player_media_card(
+            hero_url,
+            "<div style='line-height:1.5;margin:0;padding:0;'>"
+            f"{name_html}{logo_html}<br>"
+            f"{'<br>'.join(lines)}"
+            "</div>",
         )
+
+    _render_player_card_grid(
+        visible_players=visible_players,
+        render_card=_render_trophy_card,
+        empty_message=_get_empty_detail_message("players", bool(players), "trophy details"),
+    )
 
 
 def _render_trophies_teams(
@@ -1081,6 +1188,11 @@ def _render_trophies_teams(
     """Trophies tab for team category (v1: Stanley Cups)."""
     del processed_dfs, metric, season_type, selected_season, do_cumul
     trophy_summary = get_team_trophy_summary()
+    rendered_any = False
+
+    if not active_teams:
+        st.info(_get_empty_detail_message("teams", False, "trophy details"))
+        return
 
     for abbr, full_name in active_teams.items():
         founded = TEAM_FOUNDED.get(abbr, "")
@@ -1117,13 +1229,17 @@ def _render_trophies_teams(
                 "</div>",
                 unsafe_allow_html=True,
             )
+        rendered_any = True
         st.markdown(
             "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
             unsafe_allow_html=True,
         )
 
+    if not rendered_any:
+        st.info(_get_empty_detail_message("teams", True, "trophy details"))
 
-_PANEL_TABS = (
+
+_DETAIL_PANEL_TABS = (
     PanelTabSpec(
         id="overview",
         label="Overview",
@@ -1135,12 +1251,6 @@ _PANEL_TABS = (
         label="Trophies",
         render_player=_render_trophies_players,
         render_team=_render_trophies_teams,
-    ),
-    PanelTabSpec(
-        id="live_games",
-        label="Predictions",
-        render_player=_render_live_games_players,
-        render_team=_render_live_games_teams,
     ),
 )
 

@@ -36,6 +36,8 @@ _METRIC_DEFAULTS = {
     "team_metric": "Points",
 }
 
+_VALID_PANEL_TABS = {"overview", "trophies"}
+
 
 def _sanitize_panel_tab(value: str) -> str:
     """Validate and normalize comparison-panel tab IDs from session/URL.
@@ -54,6 +56,8 @@ def _sanitize_panel_tab(value: str) -> str:
     if len(v) > 32:
         return "overview"
     if not re.fullmatch(r"[a-z0-9_-]+", v):
+        return "overview"
+    if v not in _VALID_PANEL_TABS:
         return "overview"
     return v
 

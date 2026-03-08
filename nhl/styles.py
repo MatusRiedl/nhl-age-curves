@@ -609,6 +609,42 @@ _CSS = """
             color: #aaa;
             font-size: 12px;
         }
+        .comparison-player-card {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.9rem;
+            margin: 0 0 0.85rem 0;
+            padding: 0.9rem;
+            border: 1px solid rgba(70, 84, 122, 0.5);
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(12, 18, 33, 0.92) 0%, rgba(9, 13, 24, 0.98) 100%);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
+        }
+        .comparison-player-card--no-image {
+            padding-left: 1rem;
+        }
+        .comparison-player-card__media {
+            flex: 0 0 38%;
+            max-width: 180px;
+        }
+        .comparison-player-card__image {
+            display: block;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            object-fit: cover;
+            border-radius: 14px;
+        }
+        .comparison-player-card__body {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+        .comparison-panel-heading {
+            margin: 0.2rem 0 0.55rem 0;
+            color: #f4f6fb;
+            font-size: 0.98rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+        }
 
         /* Chart season selector moved into the comparison panel */
         div:has(> #comparison-season-filter) {
@@ -617,11 +653,32 @@ _CSS = """
         }
         div:has(> #comparison-season-filter) + div {
             margin-top: -0.55rem !important;
-            margin-bottom: 0.05rem !important;
+            margin-bottom: 0.35rem !important;
         }
         div:has(> #comparison-season-filter) + div .stSelectbox label {
             margin-top: 0 !important;
             padding-top: 0 !important;
+        }
+        div:has(> #comparison-controls-panel) {
+            margin: 0 !important;
+            line-height: 0 !important;
+        }
+        div:has(> #comparison-controls-panel) + div {
+            margin-top: -0.2rem !important;
+        }
+        div:has(> #comparison-predictions-panel) {
+            margin: 0.65rem 0 0 0 !important;
+            line-height: 0 !important;
+        }
+        div:has(> #comparison-predictions-panel) + div {
+            margin-top: -0.1rem !important;
+        }
+        div:has(> #comparison-detail-layout) {
+            margin: 0.35rem 0 0 0 !important;
+            line-height: 0 !important;
+        }
+        div:has(> #comparison-detail-layout) + div {
+            margin-top: -0.1rem !important;
         }
 
         /* Comparison tab row (native st.tabs) */
@@ -709,6 +766,15 @@ _CSS = """
             .main [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
                 min-width: 100% !important;
                 width: 100% !important;
+            }
+            .comparison-player-card {
+                flex-direction: column;
+                gap: 0.7rem;
+                padding: 0.8rem;
+            }
+            .comparison-player-card__media {
+                flex-basis: auto;
+                max-width: 100%;
             }
         }
 
