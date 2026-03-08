@@ -721,6 +721,26 @@ _CSS = """
             flex: 1 1 auto;
             min-width: 0;
         }
+        .comparison-card-stats {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.35rem 0.7rem;
+            margin: 0.18rem 0 0 0;
+        }
+        .comparison-card-stats__item {
+            display: flex;
+            align-items: baseline;
+            min-width: 0;
+            white-space: nowrap;
+        }
+        .comparison-card-stats__label {
+            color: #f4f6fb;
+            font-weight: 700;
+        }
+        .comparison-card-stats__value {
+            color: #f4f6fb;
+            font-weight: 600;
+        }
         .comparison-player-card--team {
             align-items: center;
         }
@@ -947,6 +967,9 @@ _CSS = """
             .comparison-player-card__media {
                 flex-basis: auto;
                 max-width: 100%;
+            }
+            .comparison-card-stats {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
             .comparison-player-card__media--team {
                 flex-basis: auto;

@@ -534,6 +534,28 @@ def _build_card_context_row(label: str) -> str:
     )
 
 
+def _build_card_stat_row(stats: list[tuple[str, str | int | float]]) -> str:
+    """Return one fixed four-cell stat row for comparison cards.
+
+    Args:
+        stats: Ordered ``(label, value)`` pairs for the compact top stat row.
+
+    Returns:
+        HTML markup that keeps each stat in its own consistent grid cell.
+    """
+    stat_items: list[str] = []
+    for label, value in stats:
+        safe_label = escape(str(label))
+        safe_value = escape(str(value))
+        stat_items.append(
+            "<span class='comparison-card-stats__item'>"
+            f"<span class='comparison-card-stats__label'>{safe_label}:&nbsp;</span>"
+            f"<span class='comparison-card-stats__value'>{safe_value}</span>"
+            "</span>"
+        )
+    return f"<div class='comparison-card-stats'>{''.join(stat_items)}</div>"
+
+
 def _build_player_trace_toggle_button(
     player_name: str,
     player_color: str | None,
@@ -1019,21 +1041,15 @@ def _render_overview_player_card(
         career_w = _get_visible_stat_total(real, "Wins", use_last_visible_total)
         career_so = _get_visible_stat_total(real, "Shutouts", use_last_visible_total)
         career_sv = _get_visible_stat_total(real, "Saves", use_last_visible_total)
-        stats_row = (
-            f"W:&nbsp;{career_w} &nbsp;|&nbsp; "
-            f"SO:&nbsp;{career_so} &nbsp;|&nbsp; "
-            f"SV:&nbsp;{career_sv:,} &nbsp;|&nbsp; "
-            f"GP:&nbsp;{career_gp}"
+        stats_row = _build_card_stat_row(
+            [("W", career_w), ("SO", career_so), ("SV", f"{career_sv:,}"), ("GP", career_gp)]
         )
     else:
         career_g = _get_visible_stat_total(real, "Goals", use_last_visible_total)
         career_a = _get_visible_stat_total(real, "Assists", use_last_visible_total)
         career_pt = _get_visible_stat_total(real, "Points", use_last_visible_total)
-        stats_row = (
-            f"G:&nbsp;{career_g} &nbsp;|&nbsp; "
-            f"A:&nbsp;{career_a} &nbsp;|&nbsp; "
-            f"Pts:&nbsp;{career_pt} &nbsp;|&nbsp; "
-            f"GP:&nbsp;{career_gp}"
+        stats_row = _build_card_stat_row(
+            [("G", career_g), ("A", career_a), ("Pts", career_pt), ("GP", career_gp)]
         )
 
     scope_row = ""
