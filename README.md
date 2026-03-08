@@ -1,5 +1,5 @@
 # NHL Player Age Curves & Career Projections 🏒
-Hockey analytics like never before!
+Hockey analytics & projections
 
 ## Available online here
 https://nhl-age-curves.streamlit.app/

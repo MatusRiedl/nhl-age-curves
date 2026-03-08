@@ -81,7 +81,7 @@ def _resolve_shared_team_names(teams: dict[str, str]) -> dict[str, str]:
 # Page configuration — must be the first Streamlit call
 # =============================================================================
 st.set_page_config(
-    page_title="NHL Age Analytics",
+    page_title="Puck Peak",
     page_icon=get_favicon_path().as_posix(),
     layout="wide",
     initial_sidebar_state="expanded",
