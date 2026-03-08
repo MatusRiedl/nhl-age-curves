@@ -375,7 +375,7 @@ elif active_players:
 # Chart rendering (shared by both pipelines)
 # Keep the predictions panel visible even on an empty board so live games can
 # seed players and teams without forcing the user through the sidebar.
-# Overview and Trophies render in a separate full-width detail row below.
+# Overview and Trophies render directly under the chart inside the left column.
 # =============================================================================
 if season_slot is not None:
     with season_slot:
@@ -404,23 +404,23 @@ with col_chart:
         share_params         = share_params,
     )
 
+    st.markdown("<div id='comparison-detail-layout'></div>", unsafe_allow_html=True)
+    render_detail_tabs(
+        processed_dfs = processed_dfs,
+        players       = active_players,
+        teams         = st.session_state.teams,
+        peak_info     = peak_info,
+        metric        = metric,
+        stat_category = st.session_state.stat_category,
+        season_type   = st.session_state.season_type,
+        team_mode     = team_mode,
+        selected_season = st.session_state.chart_season,
+        do_cumul      = do_cumul,
+    )
+
 if predictions_slot is not None:
     with predictions_slot:
         render_predictions_panel()
-
-st.markdown("<div id='comparison-detail-layout'></div>", unsafe_allow_html=True)
-render_detail_tabs(
-    processed_dfs = processed_dfs,
-    players       = active_players,
-    teams         = st.session_state.teams,
-    peak_info     = peak_info,
-    metric        = metric,
-    stat_category = st.session_state.stat_category,
-    season_type   = st.session_state.season_type,
-    team_mode     = team_mode,
-    selected_season = st.session_state.chart_season,
-    do_cumul      = do_cumul,
-)
 
 # =============================================================================
 # Footer
