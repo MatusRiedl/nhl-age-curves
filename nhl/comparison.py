@@ -59,6 +59,7 @@ _TEAM_SHORT_NAMES = {
 }
 _DEFAULT_PANEL_TAB = "overview"
 _DEFAULT_PLAYER_RANK_COLOR = "#4caf50"
+_CARD_CONTEXT_TEXT_COLOR = "#b3b3b3"
 _PLAYER_TRACE_TOGGLE_LABEL = "Chart line"
 _CATEGORY_TAB_KEYS = {
     "Skater": "panel_tab_skater",
@@ -390,6 +391,27 @@ def _get_player_chart_colors() -> dict[str, str | None]:
     return player_colors if isinstance(player_colors, dict) else {}
 
 
+def _resolve_chart_accent_color(chart_color: str | None) -> str:
+    """Return a safe comparison-card accent color with fallback."""
+    return escape(str(chart_color or _DEFAULT_PLAYER_RANK_COLOR), quote=True)
+
+
+def _build_colored_card_name(name: str, chart_color: str | None) -> str:
+    """Return bold escaped name markup tinted to the active chart color."""
+    safe_name = escape(str(name))
+    safe_color = _resolve_chart_accent_color(chart_color)
+    return f"<strong style='color:{safe_color};'>{safe_name}</strong>"
+
+
+def _build_card_context_row(label: str) -> str:
+    """Return muted comparison-card copy for season and all-time labels."""
+    safe_label = escape(str(label))
+    return (
+        "<br><span style='font-size:14px;"
+        f"color:{_CARD_CONTEXT_TEXT_COLOR};font-weight:bold;'>{safe_label}</span>"
+    )
+
+
 def _build_player_trace_toggle_button(
     player_name: str,
     player_color: str | None,
@@ -400,7 +422,7 @@ def _build_player_trace_toggle_button(
     """Return one HTML toggle chip wired to a player legend group."""
     safe_player_name = escape(str(player_name), quote=True)
     safe_label = escape(str(label))
-    safe_color = escape(str(player_color or _DEFAULT_PLAYER_RANK_COLOR), quote=True)
+    safe_color = _resolve_chart_accent_color(player_color)
     safe_title = escape(f"Toggle {player_name} on chart", quote=True)
     compact_class = " comparison-trace-toggle--compact" if compact else ""
     return (
@@ -774,6 +796,7 @@ def _render_overview_player_card(
     season_mode = _is_selected_season_mode(selected_season)
     use_last_visible_total = season_mode and do_cumul
     player_colors = _get_player_chart_colors()
+    player_color = player_colors.get(name)
     season_rank_map = (
         get_player_season_rank_map(stat_category, int(selected_season), season_type, metric)
         if season_mode
@@ -820,33 +843,23 @@ def _render_overview_player_card(
 
     scope_row = ""
     if season_mode:
-        scope_color = player_colors.get(name) or _DEFAULT_PLAYER_RANK_COLOR
         season_rank = season_rank_map.get(int(pid))
         season_label = (
             _build_selected_season_rank_label(selected_season, season_type, metric, season_rank)
             if season_rank is not None
             else _build_selected_season_scope_label(selected_season, season_type)
         )
-        scope_row = (
-            f"<br><span style='font-size:14px;color:{scope_color};font-weight:bold;'>"
-            f"{season_label}"
-            "</span>"
-        )
+        scope_row = _build_card_context_row(season_label)
 
     rank_row = ""
     if not season_mode:
         rank = get_player_career_rank(int(pid), stat_category, season_type, metric)
         if rank is not None:
-            rank_color = player_colors.get(name) or _DEFAULT_PLAYER_RANK_COLOR
-            rank_row = (
-                f"<br><span style='font-size:14px;color:{rank_color};font-weight:bold;'>"
-                f"#{rank} all-time {rank_suffix}"
-                "</span>"
-            )
+            rank_row = _build_card_context_row(f"#{rank} all-time {rank_suffix}")
 
     trace_toggle_row = _build_player_trace_toggle_markup(
         player_name=name,
-        player_color=player_colors.get(name),
+        player_color=player_color,
     )
 
     peak = peak_info.get(name)
@@ -884,16 +897,17 @@ def _render_overview_player_card(
             )
 
     roster_info = get_player_roster_info(int(pid))
+    name_markup = _build_colored_card_name(name, player_color)
     if roster_info:
-        pos = roster_info["position"]
-        num = roster_info["sweater_number"]
+        pos = escape(str(roster_info["position"]))
+        num = escape(str(roster_info["sweater_number"]))
         name_html = (
             f"<span style='color:#aaa;font-size:13px;'>[{pos}]</span> "
-            f"<strong>{name}</strong> "
+            f"{name_markup} "
             f"<span style='color:#aaa;font-size:13px;'>#{num}</span>"
         )
     else:
-        name_html = f"<strong>{name}</strong>"
+        name_html = name_markup
 
     _render_player_media_card(
         hero_url,
@@ -1009,16 +1023,18 @@ def _render_overview_teams(
             summary_stats = season_summary_map.get(abbr, {})
             founded = escape(str(TEAM_FOUNDED.get(abbr, "")))
             logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
+            team_color = chart_colors.get(full_name)
             record_label = str(latest.get("RecordLabel") or _build_team_record_label(latest))
             gp = int(round(float(latest.get("GP", 0) or 0)))
             points = int(round(float(latest.get("Points", 0) or 0)))
             goals = int(round(float(latest.get("Goals", 0) or 0)))
             goals_against = int(round(float(latest.get("GoalsAgainst", 0) or 0)))
+            team_name_markup = _build_colored_card_name(full_name, team_color)
             team_name_html = (
-                f"<strong>{escape(full_name)}</strong>"
+                f"{team_name_markup}"
                 f" <span style='color:#aaa;font-size:13px;'>{founded}</span>"
                 if founded
-                else f"<strong>{escape(full_name)}</strong>"
+                else team_name_markup
             )
             stats_row = (
                 f"Rec:&nbsp;{record_label} &nbsp;|&nbsp; "
@@ -1033,12 +1049,7 @@ def _render_overview_teams(
                 if season_rank is not None
                 else _build_selected_season_scope_label(selected_season, season_type)
             )
-            scope_color = chart_colors.get(full_name) or _DEFAULT_PLAYER_RANK_COLOR
-            rank_row = (
-                f"<br><span style='font-size:14px;color:{scope_color};font-weight:bold;'>"
-                f"{scope_label}"
-                "</span>"
-            )
+            rank_row = _build_card_context_row(scope_label)
 
             extra_bits: list[str] = []
             if season_type == "Regular" and gp > 0:
@@ -1064,7 +1075,7 @@ def _render_overview_teams(
                 )
             trace_toggle_row = _build_player_trace_toggle_markup(
                 player_name=full_name,
-                player_color=chart_colors.get(full_name),
+                player_color=team_color,
             )
 
             _render_team_media_card(
@@ -1093,6 +1104,7 @@ def _render_overview_teams(
         def _render_all_time_team_card(abbr: str, full_name: str, stats: dict) -> None:
             founded = escape(str(TEAM_FOUNDED.get(abbr, "")))
             logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
+            team_color = chart_colors.get(full_name)
             total_w = stats["total_wins"]
             total_pts = stats["total_points"]
             total_gf = stats["total_goals"]
@@ -1102,11 +1114,12 @@ def _render_overview_teams(
             best_wins = stats["best_wins"]
             best_gp = stats["best_gp"]
 
+            team_name_markup = _build_colored_card_name(full_name, team_color)
             name_html = (
-                f"<strong>{escape(full_name)}</strong>"
+                f"{team_name_markup}"
                 f" <span style='color:#aaa;font-size:13px;'>{founded}</span>"
                 if founded
-                else f"<strong>{escape(full_name)}</strong>"
+                else team_name_markup
             )
             stats_row = (
                 f"W:&nbsp;{total_w:,} &nbsp;|&nbsp; "
@@ -1114,11 +1127,7 @@ def _render_overview_teams(
                 f"GF:&nbsp;{total_gf:,} &nbsp;|&nbsp; "
                 f"GP:&nbsp;{total_gp:,}"
             )
-            rank_row = (
-                f"<br><span style='font-size:14px;color:{chart_colors.get(full_name) or _DEFAULT_PLAYER_RANK_COLOR};font-weight:bold;'>"
-                f"#{wins_rank} all-time Wins"
-                "</span>"
-            )
+            rank_row = _build_card_context_row(f"#{wins_rank} all-time Wins")
             best_row = ""
             if best_year and best_wins is not None:
                 sy_str = f"{best_year - 1}-{str(best_year)[2:]}"
@@ -1129,7 +1138,7 @@ def _render_overview_teams(
                 )
             trace_toggle_row = _build_player_trace_toggle_markup(
                 player_name=full_name,
-                player_color=chart_colors.get(full_name),
+                player_color=team_color,
             )
 
             _render_team_media_card(
@@ -1209,10 +1218,12 @@ def _render_trophies_players(
     del peak_info, metric, stat_category, season_type, selected_season, do_cumul
 
     visible_players = _get_visible_player_entries(processed_dfs, players)
+    player_colors = _get_player_chart_colors()
 
     def _render_trophy_card(pid, name, _proc_df) -> None:
         hero_url = get_player_hero_image(int(pid))
         team_abbr = get_player_current_team(int(pid))
+        player_color = player_colors.get(name)
         logo_html = (
             f"<img src='{_TEAM_LOGO_URL.format(abbr=team_abbr)}' "
             f"height='18' style='vertical-align:middle;margin-left:6px;opacity:0.9;'>"
@@ -1221,16 +1232,17 @@ def _render_trophies_players(
         )
 
         roster_info = get_player_roster_info(int(pid))
+        name_markup = _build_colored_card_name(name, player_color)
         if roster_info:
-            pos = roster_info["position"]
-            num = roster_info["sweater_number"]
+            pos = escape(str(roster_info["position"]))
+            num = escape(str(roster_info["sweater_number"]))
             name_html = (
                 f"<span style='color:#aaa;font-size:13px;'>[{pos}]</span> "
-                f"<strong>{name}</strong> "
+                f"{name_markup} "
                 f"<span style='color:#aaa;font-size:13px;'>#{num}</span>"
             )
         else:
-            name_html = f"<strong>{name}</strong>"
+            name_html = name_markup
 
         awards = get_player_awards(int(pid))
         award_rows = _summarize_player_awards(awards)
@@ -1281,6 +1293,7 @@ def _render_trophies_teams(
     """Trophies tab for team category (v1: Stanley Cups)."""
     del processed_dfs, metric, season_type, selected_season, do_cumul
     trophy_summary = get_team_trophy_summary()
+    chart_colors = _get_player_chart_colors()
 
     if not active_teams:
         st.info(_get_empty_detail_message("teams", False, "trophy details"))
@@ -1291,6 +1304,7 @@ def _render_trophies_teams(
     def _render_team_trophy_card(abbr: str, full_name: str) -> None:
         founded = TEAM_FOUNDED.get(abbr, "")
         logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
+        team_name_markup = _build_colored_card_name(full_name, chart_colors.get(full_name))
         team_trophies = trophy_summary.get(abbr, {})
         cup_count = team_trophies.get("stanley_cups")
         latest_cup = team_trophies.get("latest_cup_season")
@@ -1312,10 +1326,10 @@ def _render_trophies_teams(
             )
 
         team_name_html = (
-            f"<strong>{escape(full_name)}</strong>"
+            f"{team_name_markup}"
             f" <span style='color:#aaa;font-size:13px;'>{escape(str(founded))}</span>"
             if founded
-            else f"<strong>{escape(full_name)}</strong>"
+            else team_name_markup
         )
         _render_team_media_card(
             logo_url,
