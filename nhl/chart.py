@@ -899,7 +899,7 @@ def render_chart(
         title       = dict(text=""),
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor  = "rgba(0,0,0,0)",
-        showlegend  = team_mode,
+        showlegend  = False,
         legend      = dict(
             title=None, orientation="h",
             yanchor="top", y=-0.20,
@@ -918,7 +918,6 @@ def render_chart(
     if team_mode and not games_mode:
         fig.update_layout(
             margin = dict(l=0, r=0, t=18, b=18),
-            legend = dict(y=-0.30),
         )
         fig.update_traces(
             connectgaps    = True,
@@ -1087,6 +1086,8 @@ def render_chart(
         "displaylogo": False,
     }
 
+    st.markdown("<div id='comparison-main-plotly'></div>", unsafe_allow_html=True)
+
     event = st.plotly_chart(
         fig,
         use_container_width = True,
@@ -1106,7 +1107,7 @@ def render_chart(
     _share_button_id_json = json.dumps(share_button_id)
     _toolbar_id_json = json.dumps(toolbar_id)
     _chart_instance_id_json = json.dumps(chart_key)
-    _enable_player_trace_toggles = "true" if not team_mode else "false"
+    _enable_player_trace_toggles = "true"
 
     components.html(f"""<script>
 (function() {{

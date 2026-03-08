@@ -279,15 +279,45 @@ def _get_visible_player_entries(processed_dfs: list, players: dict) -> list[tupl
     return list(_iter_visible_players_for_category(processed_dfs, players))
 
 
-def _render_player_media_card(hero_url: str | None, body_html: str) -> None:
-    """Render a player detail card with optional media."""
+def _render_card_grid(entries: list[tuple], render_card: Callable[..., None], empty_message: str) -> None:
+    """Render comparison detail cards in a two-column alternating grid."""
+    if not entries:
+        st.info(empty_message)
+        return
+
+    card_columns = st.columns(2, gap="medium")
+    for idx, entry in enumerate(entries):
+        with card_columns[idx % 2]:
+            render_card(*entry)
+
+
+def _render_comparison_media_card(
+    media_url: str | None,
+    body_html: str,
+    *,
+    card_modifier_class: str = "",
+    media_modifier_class: str = "",
+    image_modifier_class: str = "",
+) -> None:
+    """Render one comparison detail card with optional media and style modifiers."""
     outer_classes = "comparison-player-card"
+    if card_modifier_class:
+        outer_classes = f"{outer_classes} {card_modifier_class}"
+
+    media_classes = "comparison-player-card__media"
+    if media_modifier_class:
+        media_classes = f"{media_classes} {media_modifier_class}"
+
+    image_classes = "comparison-player-card__image"
+    if image_modifier_class:
+        image_classes = f"{image_classes} {image_modifier_class}"
+
     media_html = ""
-    if hero_url:
-        safe_hero_url = escape(hero_url, quote=True)
+    if media_url:
+        safe_media_url = escape(media_url, quote=True)
         media_html = (
-            "<div class='comparison-player-card__media'>"
-            f"<img src='{safe_hero_url}' class='comparison-player-card__image' loading='lazy'>"
+            f"<div class='{media_classes}'>"
+            f"<img src='{safe_media_url}' class='{image_classes}' loading='lazy'>"
             "</div>"
         )
     else:
@@ -304,20 +334,29 @@ def _render_player_media_card(hero_url: str | None, body_html: str) -> None:
     )
 
 
+def _render_player_media_card(hero_url: str | None, body_html: str) -> None:
+    """Render a player detail card with optional media."""
+    _render_comparison_media_card(hero_url, body_html)
+
+
+def _render_team_media_card(logo_url: str | None, body_html: str) -> None:
+    """Render a team detail card using the shared comparison card shell."""
+    _render_comparison_media_card(
+        logo_url,
+        body_html,
+        card_modifier_class="comparison-player-card--team",
+        media_modifier_class="comparison-player-card__media--team",
+        image_modifier_class="comparison-player-card__image--team-logo",
+    )
+
+
 def _render_player_card_grid(
     visible_players: list[tuple],
     render_card: Callable[..., None],
     empty_message: str,
 ) -> None:
     """Render player detail cards in two columns, alternating by selection order."""
-    if not visible_players:
-        st.info(empty_message)
-        return
-
-    card_columns = st.columns(2, gap="medium")
-    for idx, entry in enumerate(visible_players):
-        with card_columns[idx % 2]:
-            render_card(*entry)
+    _render_card_grid(visible_players, render_card, empty_message)
 
 
 def _get_empty_detail_message(entity_name: str, has_selection: bool, detail_label: str) -> str:
@@ -383,7 +422,7 @@ def _build_player_trace_toggle_markup(
     *,
     leading_break: bool = True,
 ) -> str:
-    """Return one card-level chart-toggle row for a player Overview card."""
+    """Return one card-level chart-toggle row for a comparison Overview card."""
     button_html = _build_player_trace_toggle_button(
         player_name=player_name,
         player_color=player_color,
@@ -957,34 +996,30 @@ def _render_overview_teams(
         if not season_summary_df.empty and "teamAbbrev" in season_summary_df.columns
         else {}
     )
-    team_proc_lookup = {
-        team_abbr: proc_df
-        for team_abbr, _, proc_df in _iter_visible_teams(processed_dfs, active_teams)
-    }
-    rendered_any = False
-
     if not active_teams:
         st.info(_get_empty_detail_message("teams", False, "overview details"))
         return
 
-    for abbr, full_name in active_teams.items():
-        if season_mode:
-            proc_df = team_proc_lookup.get(abbr)
-            if proc_df is None or proc_df.empty:
-                continue
-            rendered_any = True
+    if season_mode:
+        visible_teams = list(_iter_visible_teams(processed_dfs, active_teams))
 
+        def _render_season_team_card(abbr: str, full_name: str, proc_df: pd.DataFrame) -> None:
             real = proc_df.sort_values(["CumGP", "GameDate", "GameId"], na_position="last").reset_index(drop=True)
             latest = real.iloc[-1]
             summary_stats = season_summary_map.get(abbr, {})
+            founded = escape(str(TEAM_FOUNDED.get(abbr, "")))
             logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
             record_label = str(latest.get("RecordLabel") or _build_team_record_label(latest))
             gp = int(round(float(latest.get("GP", 0) or 0)))
             points = int(round(float(latest.get("Points", 0) or 0)))
-            wins = int(round(float(latest.get("Wins", 0) or 0)))
             goals = int(round(float(latest.get("Goals", 0) or 0)))
             goals_against = int(round(float(latest.get("GoalsAgainst", 0) or 0)))
-            name_html = f"<strong>{full_name}</strong>"
+            team_name_html = (
+                f"<strong>{escape(full_name)}</strong>"
+                f" <span style='color:#aaa;font-size:13px;'>{founded}</span>"
+                if founded
+                else f"<strong>{escape(full_name)}</strong>"
+            )
             stats_row = (
                 f"Rec:&nbsp;{record_label} &nbsp;|&nbsp; "
                 f"Pts:&nbsp;{points} &nbsp;|&nbsp; "
@@ -1007,20 +1042,19 @@ def _render_overview_teams(
 
             extra_bits: list[str] = []
             if season_type == "Regular" and gp > 0:
-                pace_points = int(round(points / gp * 82))
-                extra_bits.append(f"{pace_points}-pt pace")
+                extra_bits.append(f"{int(round(points / gp * 82))}-pt pace")
             streak_label = _build_team_streak_label(real)
             if streak_label:
                 extra_bits.append(streak_label)
             final_metric = summary_stats.get(metric)
             if final_metric is not None and pd.notna(final_metric):
-                if metric in {'Win%', 'PP%'}:
+                if metric in {"Win%", "PP%"}:
                     metric_value = f"{float(final_metric):.1f}%"
                 elif metric in TEAM_RATE_STATS:
                     metric_value = f"{float(final_metric):.3f}"
                 else:
                     metric_value = str(int(round(float(final_metric))))
-                extra_bits.append(f"Final {metric}: {metric_value}")
+                extra_bits.append(f"Final {escape(metric)}: {metric_value}")
             best_row = ""
             if extra_bits:
                 best_row = (
@@ -1028,88 +1062,92 @@ def _render_overview_teams(
                     f"{' | '.join(extra_bits)}"
                     "</span>"
                 )
-
-            with st.container():
-                st.markdown(
-                    "<div style='display:flex;align-items:flex-start;gap:14px;margin:4px 0;'>"
-                    f"<img src='{logo_url}' style='width:80px;flex-shrink:0;object-fit:contain;'>"
-                    "<div style='line-height:1.4;'>"
-                    f"{name_html}<br>"
-                    f"{stats_row}"
-                    f"{rank_row}"
-                    f"{best_row}"
-                    "</div>"
-                    "</div>",
-                    unsafe_allow_html=True,
-                )
-
-            st.markdown(
-                "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
-                unsafe_allow_html=True,
+            trace_toggle_row = _build_player_trace_toggle_markup(
+                player_name=full_name,
+                player_color=chart_colors.get(full_name),
             )
-            continue
 
-        stats = team_stats.get(abbr)
-        if not stats:
-            continue
-        rendered_any = True
+            _render_team_media_card(
+                logo_url,
+                "<div style='line-height:1.45;margin:0;padding:0;'>"
+                f"{team_name_html}<br>"
+                f"{stats_row}"
+                f"{rank_row}"
+                f"{best_row}"
+                f"{trace_toggle_row}"
+                "</div>",
+            )
 
-        founded = TEAM_FOUNDED.get(abbr, "")
-        logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
-        total_w = stats["total_wins"]
-        total_pts = stats["total_points"]
-        total_gf = stats["total_goals"]
-        total_gp = stats["total_gp"]
-        wins_rank = stats["wins_rank"]
-        best_year = stats["best_year"]
-        best_wins = stats["best_wins"]
-        best_gp = stats["best_gp"]
+        _render_card_grid(
+            visible_teams,
+            _render_season_team_card,
+            _get_empty_detail_message("teams", True, "overview details"),
+        )
+    else:
+        all_time_teams = [
+            (abbr, full_name, team_stats[abbr])
+            for abbr, full_name in active_teams.items()
+            if abbr in team_stats
+        ]
 
-        name_html = (
-            f"<strong>{full_name}</strong> "
-            f"<span style='color:#aaa;font-size:13px;'>{founded}</span>"
-        )
-        stats_row = (
-            f"W:&nbsp;{total_w:,} &nbsp;|&nbsp; "
-            f"Pts:&nbsp;{total_pts:,} &nbsp;|&nbsp; "
-            f"GF:&nbsp;{total_gf:,} &nbsp;|&nbsp; "
-            f"GP:&nbsp;{total_gp:,}"
-        )
-        rank_row = (
-            f"<br><span style='font-size:14px;color:{chart_colors.get(full_name) or _DEFAULT_PLAYER_RANK_COLOR};font-weight:bold;'>"
-            f"#{wins_rank} all-time Wins"
-            "</span>"
-        )
-        best_row = ""
-        if best_year and best_wins is not None:
-            sy_str = f"{best_year - 1}-{str(best_year)[2:]}"
-            best_row = (
-                "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
-                f"Best: {sy_str} -- {best_wins}&nbsp;W in {best_gp}&nbsp;GP"
+        def _render_all_time_team_card(abbr: str, full_name: str, stats: dict) -> None:
+            founded = escape(str(TEAM_FOUNDED.get(abbr, "")))
+            logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
+            total_w = stats["total_wins"]
+            total_pts = stats["total_points"]
+            total_gf = stats["total_goals"]
+            total_gp = stats["total_gp"]
+            wins_rank = stats["wins_rank"]
+            best_year = stats["best_year"]
+            best_wins = stats["best_wins"]
+            best_gp = stats["best_gp"]
+
+            name_html = (
+                f"<strong>{escape(full_name)}</strong>"
+                f" <span style='color:#aaa;font-size:13px;'>{founded}</span>"
+                if founded
+                else f"<strong>{escape(full_name)}</strong>"
+            )
+            stats_row = (
+                f"W:&nbsp;{total_w:,} &nbsp;|&nbsp; "
+                f"Pts:&nbsp;{total_pts:,} &nbsp;|&nbsp; "
+                f"GF:&nbsp;{total_gf:,} &nbsp;|&nbsp; "
+                f"GP:&nbsp;{total_gp:,}"
+            )
+            rank_row = (
+                f"<br><span style='font-size:14px;color:{chart_colors.get(full_name) or _DEFAULT_PLAYER_RANK_COLOR};font-weight:bold;'>"
+                f"#{wins_rank} all-time Wins"
                 "</span>"
             )
+            best_row = ""
+            if best_year and best_wins is not None:
+                sy_str = f"{best_year - 1}-{str(best_year)[2:]}"
+                best_row = (
+                    "<br><span style='font-size:14px;color:#999;font-weight:bold;'>"
+                    f"Best: {sy_str} -- {best_wins}&nbsp;W in {best_gp}&nbsp;GP"
+                    "</span>"
+                )
+            trace_toggle_row = _build_player_trace_toggle_markup(
+                player_name=full_name,
+                player_color=chart_colors.get(full_name),
+            )
 
-        with st.container():
-            st.markdown(
-                "<div style='display:flex;align-items:flex-start;gap:14px;margin:4px 0;'>"
-                f"<img src='{logo_url}' style='width:80px;flex-shrink:0;object-fit:contain;'>"
-                "<div style='line-height:1.4;'>"
+            _render_team_media_card(
+                logo_url,
+                "<div style='line-height:1.45;margin:0;padding:0;'>"
                 f"{name_html}<br>"
                 f"{stats_row}"
                 f"{rank_row}"
                 f"{best_row}"
-                "</div>"
+                f"{trace_toggle_row}"
                 "</div>",
-                unsafe_allow_html=True,
             )
 
-        st.markdown(
-            "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
-            unsafe_allow_html=True,
+        _render_card_grid(
+            all_time_teams,
+            _render_all_time_team_card,
+            _get_empty_detail_message("teams", True, "overview details"),
         )
-
-    if not rendered_any:
-        st.info(_get_empty_detail_message("teams", True, "overview details"))
 
 
 def _summarize_player_awards(awards: list[dict]) -> list[dict]:
@@ -1243,13 +1281,14 @@ def _render_trophies_teams(
     """Trophies tab for team category (v1: Stanley Cups)."""
     del processed_dfs, metric, season_type, selected_season, do_cumul
     trophy_summary = get_team_trophy_summary()
-    rendered_any = False
 
     if not active_teams:
         st.info(_get_empty_detail_message("teams", False, "trophy details"))
         return
 
-    for abbr, full_name in active_teams.items():
+    trophy_entries = list(active_teams.items())
+
+    def _render_team_trophy_card(abbr: str, full_name: str) -> None:
         founded = TEAM_FOUNDED.get(abbr, "")
         logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
         team_trophies = trophy_summary.get(abbr, {})
@@ -1272,26 +1311,25 @@ def _render_trophies_teams(
                 "</span>"
             )
 
-        with st.container():
-            st.markdown(
-                "<div style='display:flex;align-items:flex-start;gap:14px;margin:4px 0;'>"
-                f"<img src='{logo_url}' style='width:80px;flex-shrink:0;object-fit:contain;'>"
-                "<div style='line-height:1.5;'>"
-                f"<strong>{full_name}</strong> "
-                f"<span style='color:#aaa;font-size:13px;'>{founded}</span><br>"
-                f"{cups_row}"
-                "</div>"
-                "</div>",
-                unsafe_allow_html=True,
-            )
-        rendered_any = True
-        st.markdown(
-            "<hr style='margin:6px 0;border:none;border-top:1px solid #2a2a2a;'>",
-            unsafe_allow_html=True,
+        team_name_html = (
+            f"<strong>{escape(full_name)}</strong>"
+            f" <span style='color:#aaa;font-size:13px;'>{escape(str(founded))}</span>"
+            if founded
+            else f"<strong>{escape(full_name)}</strong>"
+        )
+        _render_team_media_card(
+            logo_url,
+            "<div style='line-height:1.5;margin:0;padding:0;'>"
+            f"{team_name_html}<br>"
+            f"{cups_row}"
+            "</div>",
         )
 
-    if not rendered_any:
-        st.info(_get_empty_detail_message("teams", True, "trophy details"))
+    _render_card_grid(
+        trophy_entries,
+        _render_team_trophy_card,
+        _get_empty_detail_message("teams", True, "trophy details"),
+    )
 
 
 _DETAIL_PANEL_TABS = (

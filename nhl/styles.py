@@ -641,6 +641,25 @@ _CSS = """
             flex: 1 1 auto;
             min-width: 0;
         }
+        .comparison-player-card--team {
+            align-items: center;
+        }
+        .comparison-player-card__media--team {
+            flex: 0 0 112px;
+            max-width: 112px;
+            align-items: center;
+            justify-content: center;
+        }
+        .comparison-player-card__image--team-logo {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            object-fit: contain;
+            padding: 0.8rem;
+            border-radius: 18px;
+            background: radial-gradient(circle at 50% 35%, rgba(31, 41, 68, 0.96) 0%, rgba(13, 18, 31, 0.94) 100%);
+            border: 1px solid rgba(102, 126, 234, 0.22);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 22px rgba(0, 0, 0, 0.18);
+        }
         .comparison-panel-heading {
             margin: 0.2rem 0 0.55rem 0;
             color: #f4f6fb;
@@ -732,27 +751,40 @@ _CSS = """
         div:has(> #comparison-predictions-panel) + div {
             margin-top: -0.1rem !important;
         }
-        div:has(> #comparison-detail-layout) {
-            margin: -0.12rem 0 0 0 !important;
-            line-height: 0 !important;
-        }
-        div:has(> #comparison-detail-layout) + div {
-            margin-top: -0.42rem !important;
-        }
-
-        /* Comparison tab row (native st.tabs) */
-        div:has(> #comparison-tabs) {
+        div.element-container:has(#comparison-main-plotly) {
             margin: 0 !important;
             line-height: 0 !important;
         }
-        div:has(> #comparison-tabs) + div {
-            margin-top: -0.36rem !important;
+        div.element-container:has(#comparison-main-plotly) + div.element-container {
+            margin-top: 0 !important;
+            margin-bottom: -2.15rem !important;
+            line-height: 0 !important;
         }
-        div:has(> #comparison-tabs) + div [data-testid="stTabs"] {
+        div.element-container:has(#comparison-main-plotly) + div.element-container [data-testid="stPlotlyChart"] {
+            margin-bottom: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        div.element-container:has(#comparison-detail-layout) {
+            margin: -2.2rem 0 0 0 !important;
+            line-height: 0 !important;
+        }
+        div.element-container:has(#comparison-detail-layout) + div.element-container {
+            margin-top: 0 !important;
+        }
+
+        /* Comparison tab row (native st.tabs) */
+        div.element-container:has(#comparison-tabs) {
+            margin: 0 !important;
+            line-height: 0 !important;
+        }
+        div.element-container:has(#comparison-tabs) + div.element-container {
+            margin-top: -0.2rem !important;
+        }
+        div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] {
             margin-top: 0 !important;
             padding-top: 0 !important;
         }
-        div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-list"] {
+        div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] [data-baseweb="tab-list"] {
             gap: 0.35rem !important;
             flex-wrap: wrap !important;
             margin-bottom: 0.22rem !important;
@@ -760,10 +792,10 @@ _CSS = """
             align-items: center !important;
             padding-top: 0 !important;
         }
-        div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-border"] {
+        div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] [data-baseweb="tab-border"] {
             display: none !important;
         }
-        div:has(> #comparison-tabs) + div [data-testid="stTabs"] button[role="tab"] {
+        div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] button[role="tab"] {
             margin: 0 !important;
             border: 1px solid #2a2a2a !important;
             border-radius: 999px !important;
@@ -772,21 +804,21 @@ _CSS = """
             min-height: 0 !important;
             height: auto !important;
         }
-        div:has(> #comparison-tabs) + div [data-testid="stTabs"] button[role="tab"] p {
+        div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] button[role="tab"] p {
             margin: 0 !important;
             font-size: 13px !important;
             font-weight: 600 !important;
             color: #d9d9d9 !important;
         }
-        div:has(> #comparison-tabs) + div [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+        div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
             border-color: #ff4b4b !important;
             background: rgba(255, 75, 75, 0.14) !important;
         }
-        div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-panel"] {
+        div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] [data-baseweb="tab-panel"] {
             padding-top: 0.1rem !important;
         }
         @media (max-width: 768px) {
-            div:has(> #comparison-tabs) + div [data-testid="stTabs"] button[role="tab"] {
+            div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] button[role="tab"] {
                 padding: 3px 8px !important;
             }
         }
@@ -834,6 +866,14 @@ _CSS = """
             .comparison-player-card__media {
                 flex-basis: auto;
                 max-width: 100%;
+            }
+            .comparison-player-card__media--team {
+                flex-basis: auto;
+                max-width: 124px;
+                margin: 0 auto;
+            }
+            .comparison-player-card__image--team-logo {
+                padding: 0.7rem;
             }
             .comparison-trace-toggle {
                 gap: 0.45rem;
