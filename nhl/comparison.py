@@ -59,6 +59,7 @@ _TEAM_SHORT_NAMES = {
 }
 _DEFAULT_PANEL_TAB = "overview"
 _DEFAULT_PLAYER_RANK_COLOR = "#4caf50"
+_PLAYER_TRACE_TOGGLE_LABEL = "Chart line"
 _CATEGORY_TAB_KEYS = {
     "Skater": "panel_tab_skater",
     "Goalie": "panel_tab_goalie",
@@ -348,6 +349,54 @@ def _get_player_chart_colors() -> dict[str, str | None]:
         player_colors = getattr(session_state, "player_chart_colors", {})
 
     return player_colors if isinstance(player_colors, dict) else {}
+
+
+def _build_player_trace_toggle_button(
+    player_name: str,
+    player_color: str | None,
+    label: str,
+    *,
+    compact: bool = False,
+) -> str:
+    """Return one HTML toggle chip wired to a player legend group."""
+    safe_player_name = escape(str(player_name), quote=True)
+    safe_label = escape(str(label))
+    safe_color = escape(str(player_color or _DEFAULT_PLAYER_RANK_COLOR), quote=True)
+    safe_title = escape(f"Toggle {player_name} on chart", quote=True)
+    compact_class = " comparison-trace-toggle--compact" if compact else ""
+    return (
+        f"<button type='button' class='comparison-trace-toggle{compact_class}' "
+        "data-nhl-trace-toggle='1' "
+        f"data-legendgroup='{safe_player_name}' "
+        f"title='{safe_title}' aria-label='{safe_title}' aria-pressed='true' "
+        f"style='--trace-toggle-color:{safe_color};'>"
+        "<span class='comparison-trace-toggle__line' aria-hidden='true'></span>"
+        f"<span class='comparison-trace-toggle__label'>{safe_label}</span>"
+        "</button>"
+    )
+
+
+def _build_player_trace_toggle_markup(
+    player_name: str,
+    player_color: str | None,
+    label: str = _PLAYER_TRACE_TOGGLE_LABEL,
+    *,
+    leading_break: bool = True,
+) -> str:
+    """Return one card-level chart-toggle row for a player Overview card."""
+    button_html = _build_player_trace_toggle_button(
+        player_name=player_name,
+        player_color=player_color,
+        label=label,
+        compact=False,
+    )
+    return (
+        ("<br>" if leading_break else "")
+        +
+        "<div class='comparison-trace-toggle-row'>"
+        f"{button_html}"
+        "</div>"
+    )
 
 
 def _iter_visible_players_for_category(processed_dfs: list, players: dict):
@@ -756,6 +805,11 @@ def _render_overview_player_card(
                 "</span>"
             )
 
+    trace_toggle_row = _build_player_trace_toggle_markup(
+        player_name=name,
+        player_color=player_colors.get(name),
+    )
+
     peak = peak_info.get(name)
     best_row = ""
     if peak:
@@ -810,6 +864,7 @@ def _render_overview_player_card(
         f"{scope_row}"
         f"{rank_row}"
         f"{best_row}"
+        f"{trace_toggle_row}"
         "</div>",
     )
 

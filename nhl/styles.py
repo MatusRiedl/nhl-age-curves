@@ -624,6 +624,9 @@ _CSS = """
             padding-left: 1rem;
         }
         .comparison-player-card__media {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
             flex: 0 0 38%;
             max-width: 180px;
         }
@@ -644,6 +647,62 @@ _CSS = """
             font-size: 0.98rem;
             font-weight: 700;
             letter-spacing: 0.01em;
+        }
+        .comparison-trace-toggle-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            margin: 0.5rem 0 0 0;
+        }
+        .comparison-trace-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.34rem 0.72rem;
+            border: 1px solid rgba(96, 165, 250, 0.20);
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.62);
+            color: #e5edf9;
+            font-size: 0.78rem;
+            font-weight: 600;
+            line-height: 1;
+            cursor: pointer;
+            transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+        }
+        .comparison-trace-toggle:hover {
+            border-color: rgba(148, 163, 184, 0.34);
+            background: rgba(30, 41, 59, 0.86);
+        }
+        .comparison-trace-toggle.is-inactive {
+            opacity: 0.56;
+            background: rgba(15, 23, 42, 0.28);
+        }
+        .comparison-trace-toggle__line {
+            position: relative;
+            width: 18px;
+            height: 0;
+            border-top: 3px solid var(--trace-toggle-color, #4caf50);
+            border-radius: 999px;
+            flex: 0 0 auto;
+        }
+        .comparison-trace-toggle__line::after {
+            content: "";
+            position: absolute;
+            top: -5px;
+            left: 50%;
+            width: 8px;
+            height: 8px;
+            transform: translateX(-50%);
+            border-radius: 999px;
+            background: var(--trace-toggle-color, #4caf50);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12);
+        }
+        .comparison-trace-toggle__label {
+            white-space: nowrap;
+        }
+        .comparison-trace-toggle--compact {
+            padding: 0.28rem 0.64rem;
+            font-size: 0.74rem;
         }
 
         /* Chart season selector moved into the comparison panel */
@@ -674,11 +733,11 @@ _CSS = """
             margin-top: -0.1rem !important;
         }
         div:has(> #comparison-detail-layout) {
-            margin: 0.35rem 0 0 0 !important;
+            margin: -0.12rem 0 0 0 !important;
             line-height: 0 !important;
         }
         div:has(> #comparison-detail-layout) + div {
-            margin-top: -0.1rem !important;
+            margin-top: -0.42rem !important;
         }
 
         /* Comparison tab row (native st.tabs) */
@@ -687,7 +746,7 @@ _CSS = """
             line-height: 0 !important;
         }
         div:has(> #comparison-tabs) + div {
-            margin-top: -0.38rem !important;
+            margin-top: -0.36rem !important;
         }
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] {
             margin-top: 0 !important;
@@ -696,7 +755,7 @@ _CSS = """
         div:has(> #comparison-tabs) + div [data-testid="stTabs"] [data-baseweb="tab-list"] {
             gap: 0.35rem !important;
             flex-wrap: wrap !important;
-            margin-bottom: 0.4rem !important;
+            margin-bottom: 0.22rem !important;
             min-height: 40px !important;
             align-items: center !important;
             padding-top: 0 !important;
@@ -775,6 +834,15 @@ _CSS = """
             .comparison-player-card__media {
                 flex-basis: auto;
                 max-width: 100%;
+            }
+            .comparison-trace-toggle {
+                gap: 0.45rem;
+                padding: 0.3rem 0.64rem;
+                font-size: 0.74rem;
+            }
+            .comparison-trace-toggle--compact {
+                padding: 0.26rem 0.56rem;
+                font-size: 0.7rem;
             }
         }
 

@@ -322,6 +322,7 @@ def _apply_special_trace_styling(fig: go.Figure, player_colors: dict[str, str | 
             trace.marker.symbol = 'circle'
         elif _is_baseline_trace(trace.name):
             trace.legendgroup = trace.name
+            trace.showlegend = False
             trace.line.dash = BASELINE_LINE_DASH
             trace.line.color = BASELINE_LINE_COLOR
             trace.line.width = 4
@@ -889,7 +890,7 @@ def render_chart(
 
     fig.update_layout(
         uirevision  = 'constant',
-        margin      = dict(l=0, r=0, t=18, b=12),
+        margin      = dict(l=0, r=0, t=18, b=0 if not team_mode else 12),
         height      = 430,
         font        = dict(size=16),
         hoverlabel  = dict(font_size=16, font_family="Arial"),
@@ -898,6 +899,7 @@ def render_chart(
         title       = dict(text=""),
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor  = "rgba(0,0,0,0)",
+        showlegend  = team_mode,
         legend      = dict(
             title=None, orientation="h",
             yanchor="top", y=-0.20,
@@ -1060,6 +1062,8 @@ def render_chart(
         _disable_click_selection_dimming(fig, include_projection_traces=True)
 
     _apply_special_trace_styling(fig, player_colors)
+    if not team_mode:
+        fig.update_traces(showlegend=False)
 
     share_button_id = f"nhl-share-btn-{abs(hash(chart_key))}"
     toolbar_id = f"nhl-chart-toolbar-{abs(hash(chart_key))}"
@@ -1101,6 +1105,8 @@ def render_chart(
     _share_params_json = json.dumps(share_params or {})
     _share_button_id_json = json.dumps(share_button_id)
     _toolbar_id_json = json.dumps(toolbar_id)
+    _chart_instance_id_json = json.dumps(chart_key)
+    _enable_player_trace_toggles = "true" if not team_mode else "false"
 
     components.html(f"""<script>
 (function() {{
@@ -1116,6 +1122,8 @@ def render_chart(
     var SHARE_PARAMS = {_share_params_json};
     var SHARE_BUTTON_ID = {_share_button_id_json};
     var TOOLBAR_ID = {_toolbar_id_json};
+    var CHART_INSTANCE_ID = {_chart_instance_id_json};
+    var ENABLE_PLAYER_TRACE_TOGGLES = {_enable_player_trace_toggles};
 
     function calcDtick(width, currentRange) {{
         var xRange = currentRange || (X_MAX - X_MIN);
@@ -1327,6 +1335,99 @@ def render_chart(
         }});
     }}
 
+    function getChartTraceToggleState(parent) {{
+        if (!parent.__nhlAgeChartTraceToggleState) {{
+            parent.__nhlAgeChartTraceToggleState = {{}};
+        }}
+        if (!parent.__nhlAgeChartTraceToggleState[CHART_INSTANCE_ID]) {{
+            parent.__nhlAgeChartTraceToggleState[CHART_INSTANCE_ID] = {{}};
+        }}
+        return parent.__nhlAgeChartTraceToggleState[CHART_INSTANCE_ID];
+    }}
+
+    function getLegendGroupTraceIndices(plot, legendgroup) {{
+        var indices = [];
+        if (!plot || !plot.data) return indices;
+        plot.data.forEach(function(trace, index) {{
+            if (!trace) return;
+            var traceGroup = String(trace.legendgroup || trace.name || '');
+            if (traceGroup !== legendgroup) return;
+            if (String(trace.name || '').toLowerCase().indexOf('baseline') !== -1) return;
+            indices.push(index);
+        }});
+        return indices;
+    }}
+
+    function isLegendGroupVisible(plot, legendgroup) {{
+        var indices = getLegendGroupTraceIndices(plot, legendgroup);
+        if (!indices.length) return true;
+        return indices.some(function(index) {{
+            var trace = plot.data[index];
+            return !trace || trace.visible === undefined || trace.visible === true;
+        }});
+    }}
+
+    function syncPlayerTraceToggleButtons(parent, plot) {{
+        var buttons = parent.document.querySelectorAll('[data-nhl-trace-toggle="1"]');
+        var state = getChartTraceToggleState(parent);
+        buttons.forEach(function(btn) {{
+            var legendgroup = btn.getAttribute('data-legendgroup') || '';
+            if (!legendgroup) return;
+            var isVisible = isLegendGroupVisible(plot, legendgroup);
+            if (state[legendgroup] === undefined) {{
+                state[legendgroup] = isVisible;
+            }}
+            btn.setAttribute('aria-pressed', isVisible ? 'true' : 'false');
+            btn.dataset.visible = isVisible ? 'true' : 'false';
+            btn.classList.toggle('is-inactive', !isVisible);
+        }});
+    }}
+
+    function setLegendGroupVisible(parent, Plotly, plot, legendgroup, isVisible) {{
+        if (!plot || String(legendgroup || '').toLowerCase().indexOf('baseline') !== -1) {{
+            return Promise.resolve();
+        }}
+        var indices = getLegendGroupTraceIndices(plot, legendgroup);
+        if (!indices.length) return Promise.resolve();
+        var state = getChartTraceToggleState(parent);
+        state[legendgroup] = !!isVisible;
+        return Plotly.restyle(plot, {{visible: isVisible ? true : 'legendonly'}}, indices).then(function() {{
+            syncPlayerTraceToggleButtons(parent, plot);
+        }});
+    }}
+
+    function applyStoredPlayerTraceVisibility(parent, Plotly, plot) {{
+        var state = getChartTraceToggleState(parent);
+        var updates = Object.keys(state).map(function(legendgroup) {{
+            var indices = getLegendGroupTraceIndices(plot, legendgroup);
+            if (!indices.length) return Promise.resolve();
+            return Plotly.restyle(plot, {{visible: state[legendgroup] ? true : 'legendonly'}}, indices);
+        }});
+        if (!updates.length) {{
+            syncPlayerTraceToggleButtons(parent, plot);
+            return Promise.resolve();
+        }}
+        return Promise.all(updates).then(function() {{
+            syncPlayerTraceToggleButtons(parent, plot);
+        }});
+    }}
+
+    function bindPlayerTraceToggleButtons(parent, Plotly, plot) {{
+        if (!ENABLE_PLAYER_TRACE_TOGGLES || !plot) return;
+        parent.document.querySelectorAll('[data-nhl-trace-toggle="1"]').forEach(function(btn) {{
+            if (btn.dataset.bound === '1') return;
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', function(evt) {{
+                evt.preventDefault();
+                var legendgroup = btn.getAttribute('data-legendgroup') || '';
+                if (!legendgroup) return;
+                var nextVisible = !isLegendGroupVisible(plot, legendgroup);
+                setLegendGroupVisible(parent, Plotly, plot, legendgroup, nextVisible);
+            }});
+        }});
+        syncPlayerTraceToggleButtons(parent, plot);
+    }}
+
     function init() {{
         var parent = window.parent;
         var Plotly = parent.Plotly;
@@ -1335,6 +1436,12 @@ def render_chart(
         if (!plots.length) {{ setTimeout(init, 200); return; }}
         plots.forEach(function(p) {{ applySettings(p, Plotly); }});
         bindShareButton(parent);
+        var targetPlot = plots[plots.length - 1];
+        if (ENABLE_PLAYER_TRACE_TOGGLES) {{
+            applyStoredPlayerTraceVisibility(parent, Plotly, targetPlot).then(function() {{
+                bindPlayerTraceToggleButtons(parent, Plotly, targetPlot);
+            }});
+        }}
 
         parent.addEventListener('resize', function() {{
             parent.document.querySelectorAll('.js-plotly-plot').forEach(function(p) {{
