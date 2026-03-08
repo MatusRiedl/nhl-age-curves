@@ -253,7 +253,9 @@ def render_sidebar() -> dict:
             st.markdown(
                 f"""
                 <div class='sidebar-brand'>
-                    <img src='{header_logo_data_uri}' class='sidebar-brand__image' alt='PuckPeak'>
+                    <img src='{header_logo_data_uri}' class='sidebar-brand__image' alt='Puck Peak'>
+                    <div class='sidebar-brand__title'>Puck Peak</div>
+                    <div class='sidebar-brand__subtitle'>Analytics &amp; Projections</div>
                 </div>
                 """,
                 unsafe_allow_html=True,

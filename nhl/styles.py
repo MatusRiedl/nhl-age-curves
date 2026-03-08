@@ -21,18 +21,61 @@ _CSS = """
 
         [data-testid="stSidebar"] .sidebar-brand {
             display: flex;
+            flex-direction: column;
+            align-items: center;
             justify-content: center;
-            margin: 0 0 0.35rem 0;
+            gap: 0.12rem;
+            margin: 0 0 0.5rem 0;
+            text-align: center;
         }
 
         [data-testid="stSidebar"] .sidebar-brand__image {
             display: block;
-            width: min(220px, 100%);
+            width: min(104px, 42%);
             height: auto;
+            margin-bottom: 0.08rem;
+            filter: drop-shadow(0 8px 18px rgba(43, 113, 199, 0.16));
+        }
+
+        [data-testid="stSidebar"] .sidebar-brand__title {
+            margin: 0;
+            font-size: 1.7rem;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: 0.03em;
+            background: linear-gradient(90deg, #ffffff 0%, #def7ff 22%, #72dcff 48%, #2b71c7 74%, #ffffff 100%);
+            background-size: 220% auto;
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            -webkit-text-fill-color: transparent;
+            animation: sidebar-brand-flow 5.8s linear infinite;
+        }
+
+        [data-testid="stSidebar"] .sidebar-brand__subtitle {
+            margin: 0.06rem 0 0;
+            font-size: 0.72rem;
+            font-weight: 600;
+            line-height: 1.15;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: rgba(226, 239, 255, 0.82);
+        }
+
+        @keyframes sidebar-brand-flow {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 220% 50%; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            [data-testid="stSidebar"] .sidebar-brand__title {
+                animation: none;
+                background-position: 50% 50%;
+            }
         }
 
         div.element-container:has(.sidebar-brand) {
-            margin-bottom: 0.35rem !important;
+            margin-bottom: 0.45rem !important;
         }
 
         [data-testid="stExpander"] {
@@ -46,7 +89,14 @@ _CSS = """
                 padding-right: 0.35rem !important;
             }
             [data-testid="stSidebar"] .sidebar-brand__image {
-                width: min(190px, 100%);
+                width: min(92px, 40%);
+            }
+            [data-testid="stSidebar"] .sidebar-brand__title {
+                font-size: 1.48rem;
+            }
+            [data-testid="stSidebar"] .sidebar-brand__subtitle {
+                font-size: 0.64rem;
+                letter-spacing: 0.14em;
             }
         }
 
@@ -978,7 +1028,7 @@ def get_header_logo_path() -> Path:
     Returns:
         Path: Absolute path to the PuckPeak logo file in the repository assets folder.
     """
-    return Path(__file__).resolve().parent.parent / "assets" / "PuckPeak.png"
+    return Path(__file__).resolve().parent.parent / "assets" / "PP.png"
 
 
 def get_header_logo_data_uri() -> str:
