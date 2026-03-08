@@ -443,6 +443,45 @@ def _build_live_game_matchup_html(game: dict) -> str:
     )
 
 
+def _build_live_game_probability_html(game: dict) -> str:
+    """Build the compact pregame win-probability strip for one live-games row."""
+    probability = game.get("pregame_win_prob")
+    if not isinstance(probability, dict):
+        return "<div class='live-games-probability live-games-probability--muted'>Estimate unavailable.</div>"
+
+    try:
+        away_pct = int(probability.get("away_pct", 0))
+        home_pct = int(probability.get("home_pct", 0))
+    except Exception:
+        return "<div class='live-games-probability live-games-probability--muted'>Estimate unavailable.</div>"
+
+    away_pct = min(max(away_pct, 0), 100)
+    home_pct = min(max(home_pct, 0), 100)
+    away_short_name = escape(_get_team_short_name(game["away_abbr"], game["away_name"]))
+    home_short_name = escape(_get_team_short_name(game["home_abbr"], game["home_name"]))
+    model_label = escape(str(probability.get("model_label", "") or "").strip())
+    goalie_label = escape(str(probability.get("goalie_label", "") or "").strip())
+    playoff_note = ""
+    if int(game.get("game_type", 0) or 0) == 3:
+        playoff_note = "<div class='live-games-probability__meta'>Regular-season calibrated model.</div>"
+
+    return (
+        "<div class='live-games-probability'>"
+        "<div class='live-games-probability__labels'>"
+        f"<span>{away_short_name} <strong>{away_pct}%</strong></span>"
+        f"<span><strong>{home_pct}%</strong> {home_short_name}</span>"
+        "</div>"
+        "<div class='live-games-probability__bar'>"
+        f"<span class='live-games-probability__segment live-games-probability__segment--away' style='width:{away_pct}%'></span>"
+        f"<span class='live-games-probability__segment live-games-probability__segment--home' style='width:{home_pct}%'></span>"
+        "</div>"
+        f"<div class='live-games-probability__meta'>{model_label}</div>"
+        f"<div class='live-games-probability__meta'>{goalie_label}</div>"
+        f"{playoff_note}"
+        "</div>"
+    )
+
+
 def _get_team_short_name(team_abbr: str, fallback_name: str) -> str:
     """Return the short display name for a team.
 
@@ -468,7 +507,7 @@ def _render_live_games_tab() -> None:
     Shows the next four upcoming NHL games and lets the user seed the
     comparison board with both teams plus each club's featured skater and goalie.
     """
-    st.caption("Adds both teams, each club's points leader, and the best Save% goalie.")
+    st.caption("Machine Learning trained logistic model predicts each upcoming matchup.")
     upcoming_games = get_upcoming_games(limit=4)
     if not upcoming_games:
         st.info("No upcoming NHL games found right now.")
@@ -481,12 +520,18 @@ def _render_live_games_tab() -> None:
         matchup_html = _build_live_game_matchup_html(game)
         detail_html = escape(" • ".join(detail_bits))
         button_key = f"add_live_game_{game['game_id']}_{game['away_abbr']}_{game['home_abbr']}"
+        probability_html = _build_live_game_probability_html(game)
 
-        st.markdown(matchup_html, unsafe_allow_html=True)
-        st.markdown(f"<div class='live-games-detail'>{detail_html}</div>", unsafe_allow_html=True)
-        if st.button("Compare", key=button_key):
-            _add_live_game_to_comparison(game)
-            st.rerun()
+        matchup_col, action_col = st.columns([0.76, 0.24], gap="small")
+        with matchup_col:
+            st.markdown(matchup_html, unsafe_allow_html=True)
+            st.markdown(f"<div class='live-games-detail'>{detail_html}</div>", unsafe_allow_html=True)
+        with action_col:
+            st.markdown("<div class='live-games-action-anchor live-games-action-anchor--tight'></div>", unsafe_allow_html=True)
+            if st.button("Compare", key=button_key):
+                _add_live_game_to_comparison(game)
+                st.rerun()
+        st.markdown(probability_html, unsafe_allow_html=True)
 
         st.markdown(
             "<hr style='margin:2px 0 6px 0;border:none;border-top:1px solid #2a2a2a;'>",
@@ -1093,7 +1138,7 @@ _PANEL_TABS = (
     ),
     PanelTabSpec(
         id="live_games",
-        label="Live games",
+        label="Predictions",
         render_player=_render_live_games_players,
         render_team=_render_live_games_teams,
     ),

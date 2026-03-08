@@ -10,12 +10,16 @@ There is no backend, no database, and no auth.
 Streamlit reruns `app.py` top-to-bottom on every interaction, so persistent state lives in
 `st.session_state` and heavy work lives behind `@st.cache_data`.
 
-The app has two data sources:
+The app has three data sources/artifacts:
 - LIVE: NHL public APIs
 - LOCAL: `nhl_historical_seasons.parquet`
+- LOCAL: `win_prob_weights.json`
 
 The parquet file powers KNN projection and historical baselines. Without it, the app still
 renders real data, but projection and baseline features degrade.
+
+The JSON weight artifact powers pregame win probability in the Live games tab. The Streamlit
+app never trains that model at runtime; it only loads frozen weights and scores current matchups.
 
 `app.py` is the session-state coordinator and render pass. It:
 - loads URL params once
@@ -30,7 +34,9 @@ SECTION 2 - FILE STRUCTURE
 Top level:
 - `app.py` - session-state orchestrator and render pass
 - `scraper.py` - manual historical parquet refresh
+- `train_win_prob.py` - offline trainer for pregame win-probability weights
 - `nhl_historical_seasons.parquet` - historical seasons used by baselines and KNN
+- `win_prob_weights.json` - offline-trained logistic-regression artifact used at runtime
 - `requirements.txt`
 
 `nhl/` modules:
@@ -41,6 +47,7 @@ Top level:
 - `data_loaders.py` - cached API fetchers and parquet loaders
 - `baselines.py` - historical and team baseline builders
 - `knn_engine.py` - KNN projection and fallback logic
+- `win_prob.py` - shared pregame feature engineering and runtime scoring math
 - `player_pipeline.py` - full player processing path
 - `team_pipeline.py` - team processing path
 - `controls.py` - top controls expander
@@ -49,7 +56,7 @@ Top level:
 - `chart.py` - Plotly render, baseline overlay, share link, click dispatch
 - `comparison.py` - Overview / Trophies / Live games tabs
 - `url_params.py` - compact share-link encode/decode
-- `schedule.py` - live defaults, upcoming games, featured players
+- `schedule.py` - live defaults, upcoming games, featured players, and runtime win-prob inference
 - `async_preloader.py` - background cache warming for non-active categories
 
 SECTION 3 - EXTERNAL API ENDPOINTS
@@ -80,6 +87,9 @@ Scores by date:
 
 Club stats:
 `https://api-web.nhle.com/v1/club-stats/{team_abbr}/now`
+
+Team summary:
+`https://api.nhle.com/stats/rest/en/team/summary`
 
 Records APIs:
 - `https://records.nhl.com/site/api/skater-career-scoring-regular-season`
@@ -267,6 +277,7 @@ SECTION 10 - CACHING STRATEGY
 -----------------------------
 Permanent cache:
 - `load_historical_data()`
+- `load_win_prob_weights()`
 - `get_historical_baselines()`
 - `load_all_team_seasons()`
 - `get_team_baselines()`
@@ -286,11 +297,44 @@ Hourly cache (`ttl=3600`):
 - `search_player()`
 - `get_clone_details_map()`
 - `get_featured_players()`
+- `_get_cached_club_stats()`
 
 Five-minute cache (`ttl=300`):
 - `get_live_or_recent_game()`
 - `get_upcoming_games()`
 - `get_game_details()`
+- `get_game_win_probabilities()`
+
+SECTION 10A - PREGAME WIN PROBABILITY
+-------------------------------------
+Architecture split:
+- offline training only: `train_win_prob.py`
+- runtime inference only: `nhl/win_prob.py` + `nhl/schedule.py`
+
+Offline trainer rules:
+- fetch the last 5 completed regular seasons of NHL team game rows from `team/summary`
+- build strict lagged pregame features with zero future leakage
+- train `StandardScaler + LogisticRegression` using `scikit-learn`
+- export coefficients, intercept, scaler means/scales, selected `C`, and metadata to `win_prob_weights.json`
+
+Runtime rules:
+- never retrain inside Streamlit
+- never fetch historical seasons at runtime for this feature
+- load frozen weights once through `load_win_prob_weights()`
+- fetch only the current season game logs for the two teams in the upcoming matchup
+- rebuild the same feature vector, score the base probability, then apply the capped goalie Save% proxy
+
+Current feature set:
+- season-to-date points %
+- season-to-date goal diff per game
+- last-10 points %
+- last-10 goal diff per game
+- season-to-date power-play %
+
+Guardrails:
+- no estimate before both teams have at least 5 completed regular-season games
+- goalie adjustment is capped at `+/- 0.04`
+- goalie text must stay honest: it is a proxy, not a confirmed starter model
 
 Not separately cached, but intentionally fan out from `get_player_landing()`:
 - `get_player_headshot()`
@@ -337,20 +381,22 @@ Module responsibilities:
 - `data_loaders.py` - all parquet and network I/O; keep silent fallbacks
 - `baselines.py` - cached historical and team baseline builders
 - `knn_engine.py` - clone matching, hybrid-delta projection, stat caps, fallback projection
+- `win_prob.py` - leak-safe pregame team features, artifact validation, and dot-product scoring
 - `player_pipeline.py` - end-to-end player pipeline and peak metadata
 - `team_pipeline.py` - end-to-end team pipeline, including selected-season team season-progress mode
 - `controls.py` - top control surface; returns `(metric, do_cumul)`
 - `sidebar.py` - player/team add flows plus sidebar status widgets
 - `dialog.py` - player clicks, team game snapshot clicks, projection, and baseline dialogs
 - `chart.py` - figure assembly, baseline overlay, share-link button, player/team click dispatch
-- `comparison.py` - tabbed comparison area with season-aware Overview, Trophies, and Live games
+- `comparison.py` - tabbed comparison area with season-aware Overview, Trophies, and Live games including pregame win probability
 - `url_params.py` - compact share-link encoder/decoder with legacy link support
-- `schedule.py` - live/recent matchup detection, upcoming games, featured players
+- `schedule.py` - live/recent matchup detection, upcoming games, featured players, and runtime pregame win-prob inference
 - `async_preloader.py` - background warming of non-active category caches
 
 Key integration notes:
 - `schedule.py` only auto-seeds the board on first session load and only if a shared URL did not already populate players or teams
 - `comparison.py` stores tab memory per category via `panel_tab_skater`, `panel_tab_goalie`, and `panel_tab_team`
+- `train_win_prob.py` is the only place that should import `scikit-learn` for this feature; runtime scoring must stay numpy/pandas only
 - selected-season Overview cards prefer league-wide season rank text from the summary endpoints and fall back to the old game-log scope label if rank data is unavailable
 - Team chart-season options now come from `load_all_team_seasons()` history for the selected franchises, not from player landing payloads.
 - Team selected-season share links now rely on the same forced-games-mode URL logic as skater and goalie season mode.

@@ -28,6 +28,8 @@ https://nhl-age-curves.streamlit.app/
 
 * **Live Games Quick-Add:** A dedicated comparison tab lists the next 4 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and can add both teams plus each club's current points leader and best Save% goalie in one click.
 
+* **Pregame Win Probability:** The Live games tab also shows a pregame away/home win estimate for each upcoming matchup. The base probability comes from an offline-trained logistic regression on the last 5 completed NHL regular seasons, then a capped goalie Save% proxy is layered on top at runtime.
+
 * **Shareable URLs:** Click the chart's **Copy link** control to copy a compact exact-state URL only when you want to share it. Player and team names are omitted from the query string, default values are skipped, and the browser URL stays clean while you explore.
 
 * **Dynamic Search:** Type a player's first or last name to get live results. Selecting a match immediately adds them to the chart, no separate button required.
@@ -38,10 +40,10 @@ https://nhl-age-curves.streamlit.app/
 
 ## Tech Stack
 * **Frontend/Framework:** Streamlit
-* **Data & ML:** Pandas, PyArrow, custom hybrid KNN implementation
+* **Data & ML:** Pandas, PyArrow, custom hybrid KNN implementation, offline scikit-learn logistic regression for pregame win probability
 * **Visualization:** Plotly
 * **Networking:** Requests (REST API)
-* **Local Database:** Parquet (`nhl_historical_seasons.parquet`)
+* **Local Artifacts:** Parquet (`nhl_historical_seasons.parquet`) and exported win-probability weights (`win_prob_weights.json`)
 
 ## Code Structure
 
@@ -57,6 +59,7 @@ nhl/
     data_loaders.py      cached API fetch, season discovery, game-log, and parquet loaders
     baselines.py         aggregate historical baseline builders
     knn_engine.py        hybrid KNN projection engine
+    win_prob.py          shared pregame win-probability feature engineering and runtime scoring
     player_pipeline.py   full per-player pipeline, including single-season game-log mode
     team_pipeline.py     team comparison pipeline
     controls.py          Category/Metric and View Options expanders
@@ -65,10 +68,12 @@ nhl/
     chart.py             Plotly chart rendering, chart-top season selector, share link, and JS pan-clamp
     comparison.py        tabbed comparison panel with season-aware Overview, Trophies, and Live games
     url_params.py        URL query param encode/decode for shareable links and chart season state
-    schedule.py          live defaults, upcoming games, and featured-player helpers
+    schedule.py          live defaults, upcoming games, featured-player helpers, and runtime matchup inference
     async_preloader.py   background cache warming for Goalie/Team categories
 scraper.py               standalone script to refresh the parquet file
+train_win_prob.py        standalone script to train and export pregame win-probability weights
 nhl_historical_seasons.parquet   ML backbone (generate with scraper.py)
+win_prob_weights.json    offline-trained logistic-regression weights used at runtime
 ```
 
 ## How to Run Locally
@@ -76,6 +81,8 @@ nhl_historical_seasons.parquet   ML backbone (generate with scraper.py)
 2. Download this repository https://github.com/MatusRiedl/nhl-age-curves/archive/refs/heads/main.zip and extract it somewhere
 3. Open the extracted folder, hold Shift and right click on empty space in the folder and click on "Open in Terminal"
 4. Type this into terminal and hit Enter: `pip install -r requirements.txt`
-5. Ensure `nhl_historical_seasons.parquet` is present in the root directory (required for ML projections and baseline)
-6. If you want to update the historical file, open terminal in the folder and write `python scraper.py` to generate it
-7. Launch the app by opening a terminal in the folder and write `streamlit run app.py`
+5. Ensure `nhl_historical_seasons.parquet` is present in the root directory (required for KNN projections and baselines)
+6. Ensure `win_prob_weights.json` is present in the root directory (required for pregame win probability in the Live games tab)
+7. If you want to refresh the historical parquet, run `python scraper.py`
+8. If you want to retrain the pregame win-probability model, run `python train_win_prob.py`
+9. Launch the app by opening a terminal in the folder and write `streamlit run app.py`

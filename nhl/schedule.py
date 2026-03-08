@@ -1,11 +1,20 @@
 """Live schedule helpers for defaults, upcoming games, and featured players."""
 
-import streamlit as st
+import pandas as pd
 import requests
+import streamlit as st
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from nhl.constants import ACTIVE_TEAMS
+from nhl.constants import ACTIVE_TEAMS, CURRENT_SEASON_YEAR
+from nhl.data_loaders import get_team_season_game_log, load_win_prob_weights
+from nhl.win_prob import (
+    MIN_GAMES_FOR_ESTIMATE,
+    WIN_PROB_FEATURE_LABELS,
+    build_matchup_snapshot,
+    get_top_feature_driver,
+    score_home_win_probability,
+)
 
 # ---------------------------------------------------------------------------
 # Internal constants
@@ -84,7 +93,13 @@ def get_upcoming_games(limit: int = 4, days_ahead: int = 14) -> list[dict]:
                 break
 
         upcoming_games.sort(key=lambda game: game["sort_ts"])
-        return upcoming_games[:limit]
+        trimmed_games = upcoming_games[:limit]
+        for game in trimmed_games:
+            game["pregame_win_prob"] = get_game_win_probabilities(
+                game["away_abbr"],
+                game["home_abbr"],
+            )
+        return trimmed_games
     except Exception:
         return []
 
@@ -124,7 +139,7 @@ def get_featured_players(home_abbr: str, away_abbr: str) -> dict:
             if abbr not in ACTIVE_TEAMS:
                 continue
 
-            stats = _fetch_club_stats(abbr)
+            stats = _get_cached_club_stats(abbr)
             if not stats:
                 continue
 
@@ -145,6 +160,70 @@ def get_featured_players(home_abbr: str, away_abbr: str) -> dict:
 
     except Exception:
         return {"players": {}, "teams": {}}
+
+
+@st.cache_data(ttl=300)
+def get_game_win_probabilities(away_abbr: str, home_abbr: str) -> dict | None:
+    """Return one runtime-only pregame win-probability estimate for a matchup."""
+    clean_away_abbr = str(away_abbr or "").strip().upper()
+    clean_home_abbr = str(home_abbr or "").strip().upper()
+    if not clean_away_abbr or not clean_home_abbr:
+        return None
+
+    artifact = load_win_prob_weights()
+    if not artifact:
+        return None
+
+    try:
+        away_games = get_team_season_game_log(clean_away_abbr, CURRENT_SEASON_YEAR)
+        home_games = get_team_season_game_log(clean_home_abbr, CURRENT_SEASON_YEAR)
+        away_regular = _filter_regular_season_games(away_games)
+        home_regular = _filter_regular_season_games(home_games)
+        matchup_snapshot = build_matchup_snapshot(
+            home_regular,
+            away_regular,
+            min_games=int(artifact.get("min_games", MIN_GAMES_FOR_ESTIMATE)),
+        )
+        if matchup_snapshot is None:
+            return None
+
+        scored_probability = score_home_win_probability(
+            matchup_snapshot["feature_values"],
+            artifact,
+        )
+        base_home_prob = float(scored_probability["home_win_prob"])
+        model_label = _build_model_label(
+            clean_away_abbr,
+            clean_home_abbr,
+            scored_probability,
+        )
+
+        away_club_stats = _get_cached_club_stats(clean_away_abbr) or {}
+        home_club_stats = _get_cached_club_stats(clean_home_abbr) or {}
+        goalie_adjustment, goalie_data_available = _compute_goalie_probability_adjustment(
+            home_goalies=home_club_stats.get("goalies", []),
+            away_goalies=away_club_stats.get("goalies", []),
+        )
+        final_home_prob = min(max(base_home_prob + goalie_adjustment, 0.0), 1.0)
+        home_pct = int(round(final_home_prob * 100.0))
+        home_pct = min(max(home_pct, 0), 100)
+        away_pct = 100 - home_pct
+
+        return {
+            "away_pct": away_pct,
+            "home_pct": home_pct,
+            "model_label": model_label,
+            "goalie_label": _build_goalie_label(
+                away_abbr=clean_away_abbr,
+                home_abbr=clean_home_abbr,
+                adjustment=goalie_adjustment,
+                goalie_data_available=goalie_data_available,
+            ),
+            "base_home_pct": int(round(base_home_prob * 100.0)),
+            "base_away_pct": 100 - int(round(base_home_prob * 100.0)),
+        }
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -359,6 +438,7 @@ def _extract_upcoming_games(games: list[dict], now_utc: datetime) -> list[dict]:
         upcoming_games.append(
             {
                 "game_id": int(game.get("id", 0) or 0),
+                "game_type": int(game.get("gameType", 0) or 0),
                 "away_abbr": away_abbr,
                 "away_name": away_name,
                 "home_abbr": home_abbr,
@@ -411,13 +491,121 @@ def _select_best_goalie(goalies: list[dict]) -> dict | None:
     return max(
         goalies,
         key=lambda goalie: (
-            float(goalie.get("savePercentage", 0.0)) > 0.0,
-            float(goalie.get("savePercentage", 0.0)),
+            _coerce_save_percentage(goalie.get("savePercentage", 0.0)) > 0.0,
+            _coerce_save_percentage(goalie.get("savePercentage", 0.0)),
             int(goalie.get("gamesPlayed", 0)),
             int(goalie.get("wins", 0)),
             int(goalie.get("playerId", 0)),
         ),
     )
+
+
+def _filter_regular_season_games(team_games: pd.DataFrame | None) -> pd.DataFrame:
+    """Return only regular-season rows from a team game-log DataFrame."""
+    if team_games is None or team_games.empty:
+        return pd.DataFrame()
+    d = team_games.copy()
+    if "GameType" in d.columns:
+        d = d[d["GameType"].astype(str).str.strip().eq("Regular")]
+    return d.reset_index(drop=True)
+
+
+def _build_model_label(away_abbr: str, home_abbr: str, scored_probability: dict) -> str:
+    """Build one short runtime label from the strongest model contribution."""
+    base_home_prob = float(scored_probability.get("home_win_prob", 0.5))
+    if abs(base_home_prob - 0.5) < 0.02:
+        return "Base model: near toss-up."
+
+    top_feature, contribution = get_top_feature_driver(scored_probability)
+    if not top_feature or abs(contribution) < 0.01:
+        return "Base model: modest edge from team form."
+
+    feature_label = WIN_PROB_FEATURE_LABELS.get(top_feature, top_feature.replace("_", " "))
+    edge_abbr = home_abbr if contribution >= 0 else away_abbr
+    return f"Base model: {edge_abbr} edge from {feature_label}."
+
+
+def _build_goalie_label(
+    away_abbr: str,
+    home_abbr: str,
+    adjustment: float,
+    goalie_data_available: bool,
+) -> str:
+    """Describe the goalie overlay in a short, honest label."""
+    if not goalie_data_available:
+        return "Goalie proxy unavailable."
+    if abs(float(adjustment)) < 0.005:
+        return "Goalie proxy: no material goalie edge."
+    edge_abbr = home_abbr if adjustment > 0 else away_abbr
+    return f"Goalie proxy: {edge_abbr} +{abs(adjustment) * 100.0:.1f} pts from save% edge."
+
+
+def _coerce_save_percentage(value: object) -> float:
+    """Normalize save percentage values to 0-1 scale."""
+    try:
+        numeric_value = float(value or 0.0)
+    except Exception:
+        return 0.0
+    if numeric_value > 1.5:
+        numeric_value = numeric_value / 100.0
+    return max(0.0, min(numeric_value, 1.0))
+
+
+def _aggregate_team_save_percentage(goalies: list[dict]) -> float | None:
+    """Return the aggregate team save percentage from club-stats goalie rows."""
+    if not goalies:
+        return None
+
+    total_saves = 0.0
+    total_shots_against = 0.0
+    weighted_total = 0.0
+    weighted_games = 0.0
+    for goalie in goalies:
+        saves = float(goalie.get("saves", 0.0) or 0.0)
+        shots_against = float(goalie.get("shotsAgainst", 0.0) or 0.0)
+        save_percentage = _coerce_save_percentage(goalie.get("savePercentage", 0.0))
+        games_played = float(goalie.get("gamesPlayed", 0.0) or 0.0)
+        if shots_against > 0 and saves >= 0:
+            total_saves += saves
+            total_shots_against += shots_against
+        elif save_percentage > 0 and games_played > 0:
+            weighted_total += save_percentage * games_played
+            weighted_games += games_played
+
+    if total_shots_against > 0:
+        return total_saves / total_shots_against
+    if weighted_games > 0:
+        return weighted_total / weighted_games
+    return None
+
+
+def _build_goalie_proxy_save_percentage(goalies: list[dict]) -> float | None:
+    """Shrink the selected goalie toward the team aggregate save percentage."""
+    selected_goalie = _select_best_goalie(goalies)
+    if selected_goalie is None:
+        return None
+
+    selected_save_pct = _coerce_save_percentage(selected_goalie.get("savePercentage", 0.0))
+    team_save_pct = _aggregate_team_save_percentage(goalies)
+    games_played = max(float(selected_goalie.get("gamesPlayed", 0.0) or 0.0), 0.0)
+    shrink_weight = min(games_played / 25.0, 1.0)
+    baseline = team_save_pct if team_save_pct is not None else selected_save_pct
+    return baseline + (selected_save_pct - baseline) * shrink_weight
+
+
+def _compute_goalie_probability_adjustment(home_goalies: list[dict], away_goalies: list[dict]) -> tuple[float, bool]:
+    """Convert goalie proxy save-percentage edge into a capped probability delta."""
+    home_proxy = _build_goalie_proxy_save_percentage(home_goalies)
+    away_proxy = _build_goalie_proxy_save_percentage(away_goalies)
+    if home_proxy is None or away_proxy is None:
+        return 0.0, False
+    return max(-0.04, min(0.04, (home_proxy - away_proxy) * 4.0)), True
+
+
+@st.cache_data(ttl=3600)
+def _get_cached_club_stats(abbr: str) -> dict | None:
+    """Cached wrapper around the current club-stats endpoint."""
+    return _fetch_club_stats(abbr)
 
 
 def _fetch_club_stats(abbr: str) -> dict | None:
@@ -468,7 +656,9 @@ def _fetch_club_stats(abbr: str) -> dict | None:
                 "name":        name,
                 "gamesPlayed": int(raw.get("gamesPlayed", 0)),
                 "wins":        int(raw.get("wins", 0)),
-                "savePercentage": float(raw.get("savePercentage", 0.0) or 0.0),
+                "savePercentage": _coerce_save_percentage(raw.get("savePercentage", 0.0)),
+                "saves":       float(raw.get("saves", 0.0) or 0.0),
+                "shotsAgainst": float(raw.get("shotsAgainst", 0.0) or 0.0),
             })
 
     return {"skaters": skaters, "goalies": goalies}

@@ -20,6 +20,7 @@ from nhl.data_loaders import (
     get_team_available_nhl_seasons,
     load_all_team_seasons,
     load_historical_data,
+    load_win_prob_weights,
 )
 from nhl.player_pipeline import process_players
 from nhl.sidebar import render_sidebar
@@ -297,6 +298,7 @@ share_params = encode_state_to_params(st.session_state)
 # =============================================================================
 hist_df              = load_historical_data()
 historical_baselines = get_historical_baselines()
+_win_prob_weights    = load_win_prob_weights()
 
 # id_to_name_map and clone_details_map are only needed in player mode (KNN engine)
 if not team_mode:
@@ -409,7 +411,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.86.1 -- 6302 lines of Python<br>"
+    "Created by Iksperial. v0.87.0 -- 7095 lines of Python<br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

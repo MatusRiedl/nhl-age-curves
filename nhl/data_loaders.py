@@ -4,6 +4,7 @@ Keep the silent fallback behavior. The APIs are undocumented and occasionally
 weird.
 """
 
+import json
 import os
 
 import pandas as pd
@@ -26,6 +27,7 @@ from nhl.constants import (
     TEAM_METRICS,
     normalize_league_abbrev,
 )
+from nhl.win_prob import validate_model_artifact
 
 
 def _normalize_historical_goalie_rates(df: pd.DataFrame) -> pd.DataFrame:
@@ -80,6 +82,19 @@ def load_historical_data() -> pd.DataFrame:
     except Exception:
         pass
     return pd.DataFrame()
+
+
+@st.cache_data
+def load_win_prob_weights() -> dict:
+    """Load the exported win-probability model artifact from disk."""
+    try:
+        if not os.path.exists("win_prob_weights.json"):
+            return {}
+        with open("win_prob_weights.json", "r", encoding="utf-8") as infile:
+            payload = json.load(infile)
+        return validate_model_artifact(payload)
+    except Exception:
+        return {}
 
 
 @st.cache_data
