@@ -70,8 +70,9 @@ def _store_player_chart_colors(player_colors: dict[str, str | None]) -> None:
 def _build_chart_glow_style(player_colors: dict) -> str:
     """Return a <style> block that illuminates the chart center with player trace colors.
 
-    Uses tight radial gradients anchored at 50% 52% (vertical center-ish) that fade to
-    transparent well before the edges. Returns an empty string when no colors are available.
+    Uses broader radial gradients anchored at 50% 52% (vertical center-ish) that fade to
+    transparent before fully reaching the edges. Returns an empty string when no colors are
+    available.
 
     Args:
         player_colors: Mapping of player name to hex/rgb color string.
@@ -83,19 +84,23 @@ def _build_chart_glow_style(player_colors: dict) -> str:
     if not colors:
         return ""
 
-    # All gradients centered; tight ellipse fades to transparent before reaching edges
+    # All gradients centered; broader ellipse keeps the glow subtle while spreading wider.
     glows = []
     for color in colors[:3]:
         strong = _with_alpha(color, 0.07)
         fade = _with_alpha(color, 0.0)
         glows.append(
-            f"radial-gradient(ellipse 38% 30% at 50% 52%, {strong} 0%, {fade} 70%)"
+            f"radial-gradient(ellipse 54% 42% at 50% 52%, {strong} 0%, {fade} 78%)"
         )
 
     bg = ", ".join(glows)
 
-    # Outer edge glow: very subtle blend of first 2 player colors
-    shadow = ", ".join(f"0 0 24px {_with_alpha(c, 0.05)}" for c in colors[:2])
+    # Outer edge glow: softly layered spread from the first two player colors.
+    shadow_layers = []
+    for color in colors[:2]:
+        shadow_layers.append(f"0 0 32px {_with_alpha(color, 0.04)}")
+        shadow_layers.append(f"0 0 64px {_with_alpha(color, 0.02)}")
+    shadow = ", ".join(shadow_layers)
 
     return (
         "<style>"
@@ -297,8 +302,8 @@ def _build_chart_axis_cue_annotations(
     )
     return [
         dict(
-            x=0.012,
-            y=0.958,
+            x=0.028,
+            y=0.988,
             xref="paper",
             yref="paper",
             xanchor="left",
@@ -1253,6 +1258,16 @@ def render_chart(
         return 430;
     }}
 
+    function calcResponsiveYAxisCueX(width) {{
+        if (width <= 768) return 0.038;
+        return 0.028;
+    }}
+
+    function calcResponsiveYAxisCueY(width) {{
+        if (width <= 768) return 0.972;
+        return 0.988;
+    }}
+
     function syncToolbarTitleOffset(plot, parent) {{
         var toolbar = parent.document.getElementById(TOOLBAR_ID);
         if (!toolbar) return;
@@ -1304,6 +1319,8 @@ def render_chart(
             'yaxis.tickfont.family': calcResponsiveYAxisTickFontFamily(width),
             'yaxis.tickfont.size': yAxisTickFontSize,
         }};
+        updates['annotations[0].x'] = calcResponsiveYAxisCueX(width);
+        updates['annotations[0].y'] = calcResponsiveYAxisCueY(width);
         updates['xaxis.tickangle'] = (IS_AGE_MODE || IS_GAMES_MODE) ? 0 : -45;
         Plotly.relayout(plot, updates).then(function() {{
             syncToolbarTitleOffset(plot, window.parent);
@@ -1546,6 +1563,8 @@ def render_chart(
                     'xaxis.tickfont.size': calcResponsiveAxisTickFontSize(width),
                     'yaxis.tickfont.family': calcResponsiveYAxisTickFontFamily(width),
                     'yaxis.tickfont.size': calcResponsiveYAxisTickFontSize(width),
+                    'annotations[0].x': calcResponsiveYAxisCueX(width),
+                    'annotations[0].y': calcResponsiveYAxisCueY(width),
                 }}).then(function() {{
                     syncToolbarTitleOffset(p, parent);
                 }});
