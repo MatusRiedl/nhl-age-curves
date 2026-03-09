@@ -761,7 +761,7 @@ _CSS = """
             box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 22px rgba(0, 0, 0, 0.18);
         }
         .comparison-panel-heading {
-            margin: 0 0 0.42rem 0;
+            margin: 0 0 0.22rem 0;
             color: #f4f6fb;
             font-size: 0.98rem;
             font-weight: 700;
@@ -830,32 +830,48 @@ _CSS = """
             font-size: 0.74rem;
         }
 
+        /* Compact the dedicated right-rail stack */
+        div[data-testid="stVerticalBlock"]:has(> div.element-container:has(#comparison-right-rail)) {
+            gap: 0.18rem !important;
+        }
+
         /* Chart season selector moved into the comparison panel */
         div:has(> #comparison-season-filter) {
             margin: 0 !important;
             line-height: 0 !important;
         }
         div:has(> #comparison-season-filter) + div {
-            margin-top: -0.55rem !important;
-            margin-bottom: 0.35rem !important;
+            margin-top: -0.78rem !important;
+            margin-bottom: 0.08rem !important;
         }
         div:has(> #comparison-season-filter) + div .stSelectbox label {
             margin-top: 0 !important;
             padding-top: 0 !important;
+        }
+        div:has(> #comparison-season-filter) + div .stSelectbox {
+            margin-bottom: 0 !important;
         }
         div:has(> #comparison-controls-panel) {
             margin: 0 !important;
             line-height: 0 !important;
         }
         div:has(> #comparison-controls-panel) + div {
-            margin-top: -0.2rem !important;
+            margin-top: -0.42rem !important;
+            margin-bottom: 0 !important;
+        }
+        div:has(> #comparison-controls-panel) + div [data-testid="stExpander"] {
+            margin-bottom: 0 !important;
+        }
+        div:has(> #comparison-controls-panel) + div [data-testid="stExpander"] details summary {
+            padding-top: 0.3rem !important;
+            padding-bottom: 0.3rem !important;
         }
         div:has(> #comparison-predictions-panel) {
-            margin: 0.18rem 0 0 0 !important;
+            margin: 0 !important;
             line-height: 0 !important;
         }
         div:has(> #comparison-predictions-panel) + div {
-            margin-top: -0.18rem !important;
+            margin-top: -0.34rem !important;
         }
         div.element-container:has(#comparison-main-plotly) {
             margin: 0 !important;
