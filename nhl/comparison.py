@@ -61,7 +61,6 @@ _TEAM_SHORT_NAMES = {
 _DEFAULT_PANEL_TAB = "overview"
 _DEFAULT_PLAYER_RANK_COLOR = "#4caf50"
 _CARD_CONTEXT_TEXT_COLOR = "#b3b3b3"
-_PLAYER_TRACE_TOGGLE_LABEL = "Chart line"
 _PROBABILITY_BAR_LIGHTNESS = 0.36
 _PROBABILITY_BAR_SATURATION = 0.68
 _CATEGORY_TAB_KEYS = {
@@ -593,24 +592,21 @@ def _build_card_stat_row(stats: list[tuple[str, str | int | float]]) -> str:
 def _build_player_trace_toggle_button(
     player_name: str,
     player_color: str | None,
-    label: str,
     *,
     compact: bool = False,
 ) -> str:
-    """Return one HTML toggle chip wired to a player legend group."""
+    """Return one icon-only HTML toggle wired to a player legend group."""
     safe_player_name = escape(str(player_name), quote=True)
-    safe_label = escape(str(label))
     safe_color = _resolve_chart_accent_color(player_color)
     safe_title = escape(f"Toggle {player_name} on chart", quote=True)
     compact_class = " comparison-trace-toggle--compact" if compact else ""
     return (
-        f"<button type='button' class='comparison-trace-toggle{compact_class}' "
+        f"<button type='button' class='comparison-trace-toggle comparison-trace-toggle--icon-only{compact_class}' "
         "data-nhl-trace-toggle='1' "
         f"data-legendgroup='{safe_player_name}' "
         f"title='{safe_title}' aria-label='{safe_title}' aria-pressed='true' "
         f"style='--trace-toggle-color:{safe_color};'>"
         "<span class='comparison-trace-toggle__line' aria-hidden='true'></span>"
-        f"<span class='comparison-trace-toggle__label'>{safe_label}</span>"
         "</button>"
     )
 
@@ -618,13 +614,11 @@ def _build_player_trace_toggle_button(
 def _build_player_trace_toggle_markup(
     player_name: str,
     player_color: str | None,
-    label: str = _PLAYER_TRACE_TOGGLE_LABEL,
 ) -> str:
-    """Return one card-level chart-toggle row for a comparison Overview card."""
+    """Return one card-level icon toggle row for a comparison Overview card."""
     button_html = _build_player_trace_toggle_button(
         player_name=player_name,
         player_color=player_color,
-        label=label,
         compact=False,
     )
     return (

@@ -735,6 +735,12 @@ _CSS = """
             opacity: 0.56;
             background: rgba(15, 23, 42, 0.28);
         }
+        .comparison-trace-toggle--icon-only {
+            justify-content: center;
+            gap: 0;
+            min-width: 2.45rem;
+            padding: 0.34rem 0.62rem;
+        }
         .comparison-trace-toggle__line {
             position: relative;
             width: 18px;
@@ -929,6 +935,10 @@ _CSS = """
                 gap: 0.45rem;
                 padding: 0.3rem 0.64rem;
                 font-size: 0.74rem;
+            }
+            .comparison-trace-toggle--icon-only {
+                min-width: 2.2rem;
+                padding: 0.3rem 0.52rem;
             }
             .comparison-trace-toggle--compact {
                 padding: 0.26rem 0.56rem;
