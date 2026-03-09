@@ -190,7 +190,7 @@ _CSS = """
         }
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button[kind="secondary"][data-testid="stBaseButton-secondary"]:hover {
             background-color: rgba(255, 255, 255, 0.1) !important;
-            color: #ff4b4b !important;
+            color: #2596be !important;
         }
 
         /* Stretch columns to equal height, then center content within each */
@@ -917,8 +917,8 @@ _CSS = """
             color: #d9d9d9 !important;
         }
         div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-            border-color: #ff4b4b !important;
-            background: rgba(255, 75, 75, 0.14) !important;
+            border-color: #2596be !important;
+            background: rgba(37, 150, 190, 0.14) !important;
         }
         div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] [data-baseweb="tab-panel"] {
             padding-top: 0.1rem !important;
@@ -1084,7 +1084,7 @@ _CSS = """
             height: 4px;
             background: linear-gradient(90deg,
                 #2b71c7 0%,
-                #ff4b4b 50%,
+                #2596be 50%,
                 #2b71c7 100%);
             background-size: 200% 100%;
             border-radius: 2px;
