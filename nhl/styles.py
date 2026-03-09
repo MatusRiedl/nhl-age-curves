@@ -767,6 +767,26 @@ _CSS = """
             font-weight: 700;
             letter-spacing: 0.01em;
         }
+        .comparison-panel-heading--rail-title {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            text-align: center;
+            font-size: 1.08rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            line-height: 1.1;
+            color: rgba(255, 255, 255, 0.80);
+        }
+        .comparison-panel-heading--predictions {
+            margin: 0 auto 0.42rem;
+            padding: 0.18rem 0 0.16rem;
+        }
+        .comparison-panel-heading--season {
+            margin: 0 auto 0.2rem;
+            padding: 0.18rem 0 0.08rem;
+        }
         .comparison-trace-toggle-row {
             display: flex;
             flex-wrap: wrap;
@@ -837,16 +857,15 @@ _CSS = """
 
         /* Chart season selector moved into the comparison panel */
         div:has(> #comparison-season-filter) {
-            margin: 0 !important;
+            margin: 0 0 0.02rem 0 !important;
             line-height: 0 !important;
         }
         div:has(> #comparison-season-filter) + div {
-            margin-top: -0.78rem !important;
+            margin-top: 0 !important;
             margin-bottom: 0.08rem !important;
         }
         div:has(> #comparison-season-filter) + div .stSelectbox label {
-            margin-top: 0 !important;
-            padding-top: 0 !important;
+            display: none !important;
         }
         div:has(> #comparison-season-filter) + div .stSelectbox {
             margin-bottom: 0 !important;

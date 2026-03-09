@@ -393,7 +393,15 @@ def render_chart_season_picker(chart_season_options: list[str | int] | None) -> 
     if not chart_season_options:
         return
 
-    st.markdown("<div id='comparison-season-filter'></div>", unsafe_allow_html=True)
+    st.markdown(
+        (
+            "<div id='comparison-season-filter'>"
+            "<div class='comparison-panel-heading comparison-panel-heading--rail-title "
+            "comparison-panel-heading--season'>Chart season</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
     _prime_chart_season_picker(chart_season_options)
     st.selectbox(
         "Chart season",
@@ -401,6 +409,7 @@ def render_chart_season_picker(chart_season_options: list[str | int] | None) -> 
         key="_chart_season_picker",
         on_change=_sync_chart_season_picker,
         format_func=_format_chart_season_label,
+        label_visibility="collapsed",
     )
 
 
@@ -766,7 +775,7 @@ def render_predictions_panel() -> None:
     """Render the dedicated Predictions panel in the desktop right rail."""
     st.markdown("<div id='comparison-predictions-panel'></div>", unsafe_allow_html=True)
     st.markdown(
-        "<div class='comparison-panel-heading'>Machine Learning predicts upcoming matches</div>",
+        "<div class='comparison-panel-heading comparison-panel-heading--rail-title comparison-panel-heading--predictions'>Next matches prediction</div>",
         unsafe_allow_html=True,
     )
     _render_live_games_tab()
