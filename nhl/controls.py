@@ -1,4 +1,4 @@
-"""Top control surface for category, metric, view mode, and chart toggles."""
+"""Top control surface for chart options, stat selection, and view toggles."""
 
 from html import escape
 
@@ -126,7 +126,7 @@ def render_controls() -> tuple:
     season_mode = st.session_state.get("chart_season", "All") != "All"
     games_mode = st.session_state.x_axis_mode == "Games Played" or season_mode
 
-    with st.expander("📊 Category & Metric", expanded=False):
+    with st.expander("📊 Chart Controls", expanded=False):
         # ------------------------------------------------------------------
         # Row 1: Compact pill toolbar
         # ------------------------------------------------------------------

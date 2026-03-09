@@ -198,7 +198,7 @@ else:
     st.session_state._pre_season_do_era = None
 
 # =============================================================================
-# Controls — Category/Metric and View Options expanders.
+# Controls — chart options expander and view toggles.
 # MUST render before render_sidebar() so control widget keys are registered in
 # Streamlit's widget registry before any st.rerun() call from the sidebar can
 # interrupt execution. Without this order, Streamlit orphan-cleans the key=
