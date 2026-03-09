@@ -33,7 +33,7 @@ _CSS = """
             max-width: 100%;
             height: auto;
             margin: 0;
-            filter: drop-shadow(0 8px 18px rgba(43, 113, 199, 0.16));
+            filter: drop-shadow(0 8px 18px rgba(43, 113, 199, 0.16)) drop-shadow(0 6px 20px rgba(255, 255, 255, 0.22));
         }
 
         div.element-container:has(.sidebar-brand) {
