@@ -13,7 +13,7 @@ from nhl.data_loaders import (
     get_player_awards,
     get_player_career_rank,
     get_player_current_team,
-    get_player_hero_image,
+    get_player_headshot,
     get_player_season_rank_map,
     get_team_season_rank_map,
     get_player_roster_info,
@@ -480,13 +480,19 @@ def _render_comparison_media_card(
 
 
 def _render_player_media_card(
-    hero_url: str | None,
+    image_url: str | None,
     body_html: str,
     *,
     player_color: str | None = None,
 ) -> None:
-    """Render a player detail card with optional media."""
-    _render_comparison_media_card(hero_url, body_html, player_color=player_color)
+    """Render a player detail card with a cutout-style player image."""
+    _render_comparison_media_card(
+        image_url,
+        body_html,
+        media_modifier_class="comparison-player-card__media--player",
+        image_modifier_class="comparison-player-card__image--player-cutout",
+        player_color=player_color,
+    )
 
 
 def _render_team_media_card(
@@ -1032,7 +1038,7 @@ def _render_overview_player_card(
     if sort_cols:
         real = real.sort_values(sort_cols).reset_index(drop=True)
 
-    hero_url = get_player_hero_image(int(pid))
+    headshot_url = get_player_headshot(int(pid))
     team_abbr = get_player_current_team(int(pid))
     logo_html = (
         f"<img src='{_TEAM_LOGO_URL.format(abbr=team_abbr)}' "
@@ -1123,7 +1129,7 @@ def _render_overview_player_card(
         name_html = name_markup
 
     _render_player_media_card(
-        hero_url,
+        headshot_url,
         "<div style='line-height:1.4;margin:0;padding:0;'>"
         f"{name_html}{logo_html}<br>"
         f"{stats_row}"
@@ -1436,7 +1442,7 @@ def _render_trophies_players(
     player_colors = _get_player_chart_colors()
 
     def _render_trophy_card(pid, name, _proc_df) -> None:
-        hero_url = get_player_hero_image(int(pid))
+        headshot_url = get_player_headshot(int(pid))
         team_abbr = get_player_current_team(int(pid))
         player_color = player_colors.get(name)
         logo_html = (
@@ -1483,7 +1489,7 @@ def _render_trophies_players(
             )
 
         _render_player_media_card(
-            hero_url,
+            headshot_url,
             "<div style='line-height:1.5;margin:0;padding:0;'>"
             f"{name_html}{logo_html}<br>"
             f"{'<br>'.join(lines)}"

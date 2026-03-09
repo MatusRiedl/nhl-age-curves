@@ -651,12 +651,65 @@ _CSS = """
             flex: 0 0 38%;
             max-width: 180px;
         }
+        .comparison-player-card__media--player {
+            position: relative;
+            align-items: center;
+            justify-content: flex-end;
+            flex: 0 0 20%;
+            min-width: 72px;
+            min-height: 86px;
+            max-width: 104px;
+            padding: 0.15rem 0.2rem 0;
+            isolation: isolate;
+            overflow: visible;
+        }
+        .comparison-player-card__media--player::before {
+            content: "";
+            position: absolute;
+            inset: 14% 8% 22%;
+            border-radius: 50%;
+            background: radial-gradient(
+                circle at 50% 40%,
+                rgba(255, 255, 255, 0.14) 0%,
+                rgba(116, 148, 220, 0.18) 28%,
+                rgba(39, 54, 92, 0) 74%
+            );
+            filter: blur(13px);
+            z-index: 0;
+            pointer-events: none;
+        }
+        .comparison-player-card__media--player::after {
+            content: "";
+            position: absolute;
+            left: 16%;
+            right: 16%;
+            bottom: 0.45rem;
+            height: 1.2rem;
+            border-radius: 999px;
+            background: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.38) 0%, rgba(0, 0, 0, 0) 72%);
+            filter: blur(6px);
+            z-index: 0;
+            pointer-events: none;
+        }
         .comparison-player-card__image {
             display: block;
             width: 100%;
             aspect-ratio: 4 / 3;
             object-fit: cover;
             border-radius: 14px;
+        }
+        .comparison-player-card__image--player-cutout {
+            position: relative;
+            z-index: 1;
+            width: auto;
+            max-width: 100%;
+            height: 96px;
+            aspect-ratio: auto;
+            object-fit: contain;
+            border-radius: 0;
+            filter: drop-shadow(0 12px 14px rgba(0, 0, 0, 0.32)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.16));
+            transform: translateY(5px) scale(1.16);
+            transform-origin: center bottom;
         }
         .comparison-player-card__body {
             flex: 1 1 auto;
@@ -927,6 +980,15 @@ _CSS = """
             .comparison-player-card__media {
                 flex-basis: auto;
                 max-width: 100%;
+            }
+            .comparison-player-card__media--player {
+                width: min(100%, 118px);
+                min-height: 90px;
+                margin: 0 auto;
+            }
+            .comparison-player-card__image--player-cutout {
+                height: 100px;
+                transform: translateY(6px) scale(1.14);
             }
             .comparison-card-stats {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
