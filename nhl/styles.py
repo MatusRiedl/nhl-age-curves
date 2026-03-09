@@ -373,13 +373,6 @@ _CSS = """
         }
 
         /* === Unified matchup cards === */
-        [data-testid="stHorizontalBlock"]:has(.live-game-card) {
-            border: 1px solid rgba(255, 255, 255, 0.10);
-            border-radius: 10px;
-            overflow: hidden;
-            margin-bottom: 0.55rem;
-            background: rgba(255, 255, 255, 0.012);
-        }
         .live-game-card {
             background:
                 linear-gradient(
@@ -390,8 +383,10 @@ _CSS = """
                     var(--lgc-home-tint, transparent) 100%
                 );
             box-shadow: inset 0 0 80px var(--lgc-inset-glow, transparent);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 10px;
+            margin-bottom: 0.55rem;
             padding: 0.55rem 0.65rem 0.45rem;
-            height: 100%;
             box-sizing: border-box;
         }
         .lgc-matchup {
