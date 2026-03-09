@@ -25,9 +25,17 @@ from nhl.constants import (
     TEAM_LIST_URL,
     TEAM_STATS_URL,
     TEAM_METRICS,
+    TEAM_LINEAGES,
     normalize_league_abbrev,
 )
 from nhl.win_prob import validate_model_artifact
+
+
+_TEAM_ALIAS_TO_ACTIVE = {
+    alias: active_abbr
+    for active_abbr, aliases in TEAM_LINEAGES.items()
+    for alias in aliases
+}
 
 
 def _normalize_historical_goalie_rates(df: pd.DataFrame) -> pd.DataFrame:
@@ -47,6 +55,14 @@ def _normalize_historical_goalie_rates(df: pd.DataFrame) -> pd.DataFrame:
 
     d.loc[goalie_mask, 'SavePct'] = save_pct.clip(lower=0.0, upper=1.0).fillna(0.0)
     return d
+
+
+def _canonical_team_abbrev(team_abbr: str | None) -> str:
+    """Return the active-team abbreviation for a historical franchise alias."""
+    clean_abbr = str(team_abbr or "").strip().upper()
+    if not clean_abbr:
+        return ""
+    return _TEAM_ALIAS_TO_ACTIVE.get(clean_abbr, clean_abbr)
 
 
 # ---------------------------------------------------------------------------
@@ -97,14 +113,14 @@ def load_win_prob_weights() -> dict:
         return {}
 
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def load_all_team_seasons() -> pd.DataFrame:
     """Fetch all team-season records from the NHL stats REST API.
 
     Fetches regular-season and playoff rows separately (gameTypeId 2 and 3),
     then concatenates them into one table with an explicit gameTypeId column.
     teamAbbrev (triCode) is joined from the separate team-list endpoint.
-    Permanently cached — historical records don't change.
+    Cached hourly so active-season rows do not go stale during the season.
 
     Returns:
         DataFrame with one row per team-season, or an empty DataFrame on failure.
@@ -145,6 +161,7 @@ def load_all_team_seasons() -> pd.DataFrame:
 
         # Attach teamAbbrev from the triCode map
         df["teamAbbrev"] = df["teamId"].map(id_to_tricode)
+        df["FranchiseAbbrev"] = df["teamAbbrev"].apply(_canonical_team_abbrev)
         # Derive columns
         df["SeasonYear"] = df["seasonId"] // 10000
         df["GP"]     = df["gamesPlayed"]
@@ -168,7 +185,7 @@ def load_all_team_seasons() -> pd.DataFrame:
         )
 
         keep = [
-            "teamId", "teamFullName", "teamAbbrev", "seasonId", "gameTypeId",
+            "teamId", "teamFullName", "teamAbbrev", "FranchiseAbbrev", "seasonId", "gameTypeId",
             "SeasonYear", "GP", "Wins", "Losses", "OTLosses", "Ties", "Points", "Win%",
             "Goals", "GF/G", "GA/G", "PPG", "PP%",
         ]
@@ -259,7 +276,7 @@ def fetch_all_time_records(category: str, s_type: str) -> list:
         return []
 
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_top_50(metric: str = "Points") -> dict:
     """Fetch the top 50 all-time NHL skaters ranked by the specified career counting stat.
 
@@ -310,7 +327,7 @@ def get_top_50(metric: str = "Points") -> dict:
     }
 
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_top_50_goalies() -> dict:
     """Fetch the top 50 all-time NHL goalies ranked by career regular-season wins.
 
@@ -448,7 +465,7 @@ def search_local_players(query: str, category: str) -> dict:
 # Roster & headshot
 # ---------------------------------------------------------------------------
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_team_roster(team_abbr: str) -> dict:
     """Fetch the current NHL roster for a team.
 
@@ -723,14 +740,18 @@ def _weighted_team_metric(grp: pd.DataFrame, col: str) -> float:
 @st.cache_data(ttl=3600)
 def get_team_available_nhl_seasons(team_abbr: str) -> list[int]:
     """Return descending NHL season start years available for one team."""
-    clean_abbr = str(team_abbr or "").strip().upper()
+    clean_abbr = _canonical_team_abbrev(team_abbr)
     if not clean_abbr:
         return []
     df = load_all_team_seasons()
-    if df.empty or "teamAbbrev" not in df.columns or "SeasonYear" not in df.columns:
+    if df.empty or "SeasonYear" not in df.columns:
         return []
+    if "FranchiseAbbrev" not in df.columns:
+        df = df.copy()
+        df["FranchiseAbbrev"] = df["teamAbbrev"].apply(_canonical_team_abbrev)
+    franchise_col = "FranchiseAbbrev"
     seasons = pd.to_numeric(
-        df.loc[df["teamAbbrev"] == clean_abbr, "SeasonYear"],
+        df.loc[df[franchise_col] == clean_abbr, "SeasonYear"],
         errors="coerce",
     ).dropna()
     return sorted({int(year) for year in seasons.tolist()}, reverse=True)
@@ -835,21 +856,28 @@ def _normalize_team_game_log_rows(
 @st.cache_data(ttl=3600)
 def get_team_season_game_log(team_abbr: str, season_year: int) -> pd.DataFrame:
     """Fetch one NHL season of normalized per-game rows for a team."""
-    clean_abbr = str(team_abbr or "").strip().upper()
+    clean_abbr = _canonical_team_abbrev(team_abbr)
     season_id = _season_year_to_id(season_year)
     if not clean_abbr or season_id is None:
         return pd.DataFrame()
 
     try:
         season_df = load_all_team_seasons()
-        if season_df.empty or "teamAbbrev" not in season_df.columns:
+        if season_df.empty:
             return pd.DataFrame()
-        team_rows = season_df[season_df["teamAbbrev"] == clean_abbr]
+        if "FranchiseAbbrev" not in season_df.columns:
+            season_df = season_df.copy()
+            season_df["FranchiseAbbrev"] = season_df["teamAbbrev"].apply(_canonical_team_abbrev)
+        franchise_col = "FranchiseAbbrev"
+        team_rows = season_df[
+            (season_df[franchise_col] == clean_abbr)
+            & (season_df["SeasonYear"] == int(season_year))
+        ]
         if team_rows.empty or "teamId" not in team_rows.columns:
             return pd.DataFrame()
 
         team_id = int(team_rows["teamId"].dropna().iloc[0])
-        team_name = str(team_rows["teamFullName"].dropna().iloc[0] or ACTIVE_TEAMS.get(clean_abbr, clean_abbr))
+        team_name = ACTIVE_TEAMS.get(clean_abbr, clean_abbr)
 
         data: list[dict] = []
         for game_type_id, game_type_label in ((2, "Regular"), (3, "Playoffs")):
@@ -883,6 +911,9 @@ def get_team_season_summary(season_year: int, season_type: str) -> pd.DataFrame:
     df = load_all_team_seasons()
     if df.empty or "SeasonYear" not in df.columns or "teamAbbrev" not in df.columns:
         return pd.DataFrame()
+    if "FranchiseAbbrev" not in df.columns:
+        df = df.copy()
+        df["FranchiseAbbrev"] = df["teamAbbrev"].apply(_canonical_team_abbrev)
 
     season_df = df[df["SeasonYear"] == int(season_year)].copy()
     if season_df.empty:
@@ -898,9 +929,7 @@ def get_team_season_summary(season_year: int, season_type: str) -> pd.DataFrame:
 
     if season_type == "Both":
         rows: list[dict] = []
-        group_cols = ["teamAbbrev"]
-        if "teamFullName" in season_df.columns:
-            group_cols.append("teamFullName")
+        group_cols = ["FranchiseAbbrev"]
         if "teamId" in season_df.columns:
             group_cols.append("teamId")
 
@@ -908,8 +937,8 @@ def get_team_season_summary(season_year: int, season_type: str) -> pd.DataFrame:
             if not isinstance(keys, tuple):
                 keys = (keys,)
             team_abbr = str(keys[0])
-            team_name = str(keys[1]) if len(keys) > 1 else ACTIVE_TEAMS.get(team_abbr, team_abbr)
-            team_id = keys[2] if len(keys) > 2 else None
+            team_name = ACTIVE_TEAMS.get(team_abbr, team_abbr)
+            team_id = keys[1] if len(keys) > 1 else None
             gp = float(pd.to_numeric(grp.get("GP"), errors="coerce").fillna(0).sum())
             goals = float(pd.to_numeric(grp.get("Goals"), errors="coerce").fillna(0).sum())
             points = float(pd.to_numeric(grp.get("Points"), errors="coerce").fillna(0).sum())
@@ -944,6 +973,9 @@ def get_team_season_summary(season_year: int, season_type: str) -> pd.DataFrame:
             )
         return pd.DataFrame(rows).reset_index(drop=True)
 
+    season_df["teamAbbrev"] = season_df["FranchiseAbbrev"]
+    if "teamFullName" in season_df.columns:
+        season_df["teamFullName"] = season_df["teamAbbrev"].map(ACTIVE_TEAMS).fillna(season_df["teamFullName"])
     return season_df.reset_index(drop=True)
 
 
@@ -1322,7 +1354,7 @@ def get_player_available_nhl_seasons(player_id: int) -> list[int]:
     return sorted(seasons, reverse=True)
 
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_player_season_game_log(
     player_id: int,
     base_name: str,
@@ -1372,7 +1404,7 @@ def get_player_season_game_log(
         return pd.DataFrame(), base_name, 'S'
 
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_player_raw_stats(
     player_id: int,
     base_name: str,
@@ -1566,7 +1598,7 @@ def get_player_career_rank(pid: int, category: str, s_type: str, metric: str = "
     return None
 
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def get_team_all_time_stats() -> dict:
     """Compute all-time franchise stats for each NHL team from historical data.
 
@@ -1574,7 +1606,7 @@ def get_team_all_time_stats() -> dict:
     all-time wins rank (1 = most wins), and best single season by wins.
 
     Returns:
-        Dict mapping teamAbbrev (str) to a stats dict with keys:
+        Dict mapping active team abbreviation (str) to a stats dict with keys:
             total_wins (int), total_gp (int), total_points (int), total_goals (int),
             wins_rank (int), best_year (int | None), best_wins (int | None),
             best_gp (int | None).
@@ -1582,9 +1614,12 @@ def get_team_all_time_stats() -> dict:
     df = load_all_team_seasons()
     if df.empty:
         return {}
+    if "FranchiseAbbrev" not in df.columns:
+        df = df.copy()
+        df["FranchiseAbbrev"] = df["teamAbbrev"].apply(_canonical_team_abbrev)
     reg = df[df['gameTypeId'] == 2].copy()
 
-    totals = reg.groupby('teamAbbrev', as_index=False).agg(
+    totals = reg.groupby('FranchiseAbbrev', as_index=False).agg(
         total_wins=('Wins', 'sum'),
         total_gp=('GP', 'sum'),
         total_points=('Points', 'sum'),
@@ -1595,15 +1630,15 @@ def get_team_all_time_stats() -> dict:
 
     best = (
         reg.sort_values('Wins', ascending=False)
-           .groupby('teamAbbrev', as_index=False)
-           .first()[['teamAbbrev', 'SeasonYear', 'Wins', 'GP']]
+           .groupby('FranchiseAbbrev', as_index=False)
+           .first()[['FranchiseAbbrev', 'SeasonYear', 'Wins', 'GP']]
            .rename(columns={'SeasonYear': 'best_year', 'Wins': 'best_wins', 'GP': 'best_gp'})
     )
 
-    merged = totals.merge(best, on='teamAbbrev', how='left')
+    merged = totals.merge(best, on='FranchiseAbbrev', how='left')
     result: dict = {}
     for _, row in merged.iterrows():
-        result[row['teamAbbrev']] = {
+        result[row['FranchiseAbbrev']] = {
             'total_wins':   int(row['total_wins']),
             'total_gp':     int(row['total_gp']),
             'total_points': int(row['total_points']),

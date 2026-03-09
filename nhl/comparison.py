@@ -687,36 +687,6 @@ def _iter_visible_teams(processed_dfs: list, active_teams: dict):
         yield abbr, full_name, proc_df
 
 
-def render_comparison_area(
-    processed_dfs: list,
-    players: dict,
-    teams: dict,
-    peak_info: dict,
-    metric: str,
-    stat_category: str,
-    season_type: str,
-    team_mode: bool,
-    selected_season: str | int = "All",
-    chart_season_options: list[str | int] | None = None,
-    do_cumul: bool = False,
-) -> None:
-    """Render the comparison UI in the legacy single-column order."""
-    render_chart_season_picker(chart_season_options)
-    render_detail_tabs(
-        processed_dfs=processed_dfs,
-        players=players,
-        teams=teams,
-        peak_info=peak_info,
-        metric=metric,
-        stat_category=stat_category,
-        season_type=season_type,
-        team_mode=team_mode,
-        selected_season=selected_season,
-        do_cumul=do_cumul,
-    )
-    render_predictions_panel()
-
-
 def render_detail_tabs(
     processed_dfs: list,
     players: dict,
@@ -949,16 +919,7 @@ def _get_team_short_name(team_abbr: str, fallback_name: str) -> str:
 
 
 def _render_live_games_tab() -> None:
-    """Render the shared Live games tab UI.
-
-    Args:
-        None.
-
-    Returns:
-        None.
-
-    Shows the next four upcoming NHL games with win-probability cards.
-    """
+    """Render the shared right-rail predictions cards for upcoming games."""
     upcoming_games = get_upcoming_games(limit=4)
     if not upcoming_games:
         st.info("No upcoming NHL games found right now.")
@@ -967,54 +928,6 @@ def _render_live_games_tab() -> None:
     for game in upcoming_games:
         card_html = _build_live_game_card_html(game)
         st.markdown(card_html, unsafe_allow_html=True)
-
-
-def _render_live_games_players(
-    processed_dfs: list,
-    players: dict,
-    peak_info: dict,
-    metric: str,
-    stat_category: str,
-    season_type: str,
-    selected_season: str | int = "All",
-    do_cumul: bool = False,
-) -> None:
-    """Live games tab for skater and goalie modes.
-
-    Args:
-        processed_dfs: Active processed DataFrames.
-        players: Selected comparison players.
-        peak_info: Peak-season metadata.
-        metric: Active metric name.
-        stat_category: Active category string.
-        season_type: Active season scope.
-
-    Returns:
-        None.
-    """
-    del processed_dfs, players, peak_info, metric, stat_category, season_type, selected_season, do_cumul
-    _render_live_games_tab()
-
-
-def _render_live_games_teams(
-    active_teams: dict,
-    processed_dfs: list,
-    metric: str,
-    season_type: str = "Regular",
-    selected_season: str | int = "All",
-    do_cumul: bool = False,
-) -> None:
-    """Live games tab for team mode.
-
-    Args:
-        active_teams: Selected comparison teams.
-        metric: Active metric name.
-
-    Returns:
-        None.
-    """
-    del active_teams, processed_dfs, metric, season_type, selected_season, do_cumul
-    _render_live_games_tab()
 
 
 def _render_overview_player_card(
@@ -1247,6 +1160,7 @@ def _render_overview_teams(
         visible_teams = list(_iter_visible_teams(processed_dfs, active_teams))
 
         def _render_season_team_card(abbr: str, full_name: str, proc_df: pd.DataFrame) -> None:
+            """Render one selected-season team overview card."""
             real = proc_df.sort_values(["CumGP", "GameDate", "GameId"], na_position="last").reset_index(drop=True)
             latest = real.iloc[-1]
             summary_stats = season_summary_map.get(abbr, {})
@@ -1330,6 +1244,7 @@ def _render_overview_teams(
         ]
 
         def _render_all_time_team_card(abbr: str, full_name: str, stats: dict) -> None:
+            """Render one all-time franchise overview card."""
             founded = escape(str(TEAM_FOUNDED.get(abbr, "")))
             logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
             team_color = chart_colors.get(full_name)
@@ -1357,7 +1272,7 @@ def _render_overview_teams(
                     ("GP", f"{total_gp:,}"),
                 ]
             )
-            rank_row = _build_card_context_row(f"#{wins_rank} in all-time Wins")
+            rank_row = _build_card_context_row(f"#{wins_rank} in franchise Wins")
             best_row = ""
             if best_year and best_wins is not None:
                 sy_str = f"{best_year - 1}-{str(best_year)[2:]}"
@@ -1451,6 +1366,7 @@ def _render_trophies_players(
     player_colors = _get_player_chart_colors()
 
     def _render_trophy_card(pid, name, _proc_df) -> None:
+        """Render one player trophy summary card."""
         headshot_url = get_player_headshot(int(pid))
         team_abbr = get_player_current_team(int(pid))
         player_color = player_colors.get(name)
@@ -1533,6 +1449,7 @@ def _render_trophies_teams(
     trophy_entries = list(active_teams.items())
 
     def _render_team_trophy_card(abbr: str, full_name: str) -> None:
+        """Render one team trophy summary card."""
         founded = TEAM_FOUNDED.get(abbr, "")
         logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
         team_name_markup = _build_colored_card_name(full_name, chart_colors.get(full_name))
@@ -1592,37 +1509,3 @@ _DETAIL_PANEL_TABS = (
         render_team=_render_trophies_teams,
     ),
 )
-
-
-def render_comparison_panel(
-    processed_dfs: list,
-    players: dict,
-    peak_info: dict,
-    metric: str,
-    stat_category: str,
-    season_type: str,
-) -> None:
-    """Render the legacy player overview panel without tabs."""
-    _render_overview_players(
-        processed_dfs=processed_dfs,
-        players=players,
-        peak_info=peak_info,
-        metric=metric,
-        stat_category=stat_category,
-        season_type=season_type,
-        selected_season="All",
-        do_cumul=False,
-    )
-
-
-def render_team_comparison_panel(active_teams: dict, metric: str) -> None:
-    """Render legacy Overview-only team comparison cards.
-
-    Args:
-        active_teams: Selected comparison teams.
-        metric: Active metric name.
-
-    Returns:
-        None.
-    """
-    _render_overview_teams(active_teams=active_teams, processed_dfs=[], metric=metric)

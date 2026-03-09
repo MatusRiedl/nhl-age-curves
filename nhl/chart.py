@@ -702,6 +702,7 @@ def render_chart(
     # Team season-year hover should display season spans (e.g., 2024 -> 24-25)
     if team_mode and not games_mode and "SeasonYear" in final_df.columns:
         def _season_span_label(start_year: float) -> str:
+            """Format one season-start year into a short hockey-season span label."""
             try:
                 sy = int(start_year)
                 return f"{str(sy)[2:]}-{str(sy + 1)[2:]}"

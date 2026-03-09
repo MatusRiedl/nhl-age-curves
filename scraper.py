@@ -281,6 +281,7 @@ def fetch_player_data(player_id):
 
 
 def main():
+    """Scrape historical player seasons and export the parquet artifact."""
     player_ids = get_all_player_ids()
     all_seasons_data = []
 

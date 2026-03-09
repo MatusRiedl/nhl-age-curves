@@ -173,6 +173,7 @@ def _build_matchup_card_html(game: dict) -> str:
         )
 
     def _score_html(value, did_win: bool) -> str:
+        """Return styled score markup with winner emphasis."""
         color = '#ffffff' if did_win else '#8b949e'
         return f"<div style='font-size:32px;font-weight:800;color:{color};line-height:1.0;'>{value if value is not None else '—'}</div>"
 

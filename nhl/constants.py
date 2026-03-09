@@ -63,6 +63,17 @@ ACTIVE_TEAMS = {
 }
 """32-team abbreviation -> full name mapping used across sidebar and pipeline."""
 
+TEAM_LINEAGES: dict[str, tuple[str, ...]] = {
+    "CAR": ("CAR", "HFD"),
+    "CGY": ("CGY", "AFM"),
+    "COL": ("COL", "QUE"),
+    "DAL": ("DAL", "MNS"),
+    "NJD": ("NJD", "CLR", "KCS"),
+    "UTA": ("UTA", "ARI", "PHX", "WIN"),
+    "WPG": ("WPG", "ATL"),
+}
+"""Current active team -> historical abbreviation aliases for franchise lineage lookups."""
+
 TEAM_BRAND_COLORS: dict[str, tuple[str, str]] = {
     "ANA": ("#F47A38", "#B9975B"),
     "BOS": ("#FFB81C", "#111111"),
@@ -106,7 +117,7 @@ TEAM_FOUNDED: dict[str, int] = {
     "LAK": 1967, "MIN": 2000, "MTL": 1917, "NSH": 1998,
     "NJD": 1974, "NYI": 1972, "NYR": 1926, "OTT": 1992,
     "PHI": 1967, "PIT": 1967, "SJS": 1991, "SEA": 2021,
-    "STL": 1967, "TBL": 1992, "TOR": 1917, "UTA": 2024,
+    "STL": 1967, "TBL": 1992, "TOR": 1917, "UTA": 1979,
     "VAN": 1970, "VGK": 2017, "WSH": 1974, "WPG": 1999,
 }
 """NHL franchise founding year (year the current org entered the NHL)."""

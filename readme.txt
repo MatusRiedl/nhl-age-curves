@@ -18,8 +18,9 @@ The app has three data sources/artifacts:
 The parquet file powers KNN projection and historical baselines. Without it, the app still
 renders real data, but projection and baseline features degrade.
 
-The JSON weight artifact powers pregame win probability in the Live games tab. The Streamlit
-app never trains that model at runtime; it only loads frozen weights and scores current matchups.
+The JSON weight artifact powers pregame win probability in the right-rail predictions panel.
+The Streamlit app never trains that model at runtime; it only loads frozen weights and scores
+current matchups.
 
 `app.py` is the session-state coordinator and render pass. It:
 - loads URL params once
@@ -27,7 +28,7 @@ app never trains that model at runtime; it only loads frozen weights and scores 
 - auto-loads a live or recent game once per session when appropriate
 - renders sidebar and controls
 - dispatches to `process_players()` or `process_teams()`
-- renders the chart and comparison panel
+- renders the chart, the right-rail `Chart season` / predictions area, and the comparison panel
 
 SECTION 2 - FILE STRUCTURE
 --------------------------
@@ -54,7 +55,7 @@ Top level:
 - `sidebar.py` - sidebar UI and add/remove flows
 - `dialog.py` - chart click dialogs
 - `chart.py` - Plotly render, baseline overlay, share link, click dispatch
-- `comparison.py` - Overview / Trophies / Live games tabs
+- `comparison.py` - Overview / Trophies tabs plus the right-rail chart-season picker and predictions panel
 - `url_params.py` - compact share-link encode/decode
 - `schedule.py` - live defaults, upcoming games, featured players, and runtime win-prob inference
 - `async_preloader.py` - background cache warming for non-active categories
@@ -111,7 +112,6 @@ Core state:
 - `x_axis_mode`
 - `chart_season`
 - `league_filter`
-- `team_sel_abbr`
 
 Toggles:
 - `do_smooth`
@@ -133,6 +133,8 @@ One-shot guards:
 
 Season-mode memory:
 - `_pre_season_chart_x_axis_mode`
+- `_pre_season_league_filter`
+- `_pre_season_do_era`
 
 Notes:
 - URL params are applied once, before defaults settle.
@@ -140,6 +142,9 @@ Notes:
 - Missing URL params leave defaults alone.
 - Extra widget keys like metric selectors are created later by Streamlit widgets.
 - `do_cumul` is derived per render, not stored.
+- Leaving selected-season mode restores the saved x-axis, league filter, and era toggle through
+  `_restore_pre_season_state()`, including the invalid-season fallback that resets
+  `chart_season` to `All`.
 
 SECTION 5 - STRICT SKATER / GOALIE SPLIT
 ----------------------------------------
@@ -262,10 +267,13 @@ Chart duties handled in `chart.py`:
 - concatenate processed frames
 - add baseline overlays when enabled
 - link each player's projected trace to the same legend toggle so one click hides or shows both
-- render compact chart header text and the chart-top single-season selector
+- render compact chart header text
 - inject JS pan / zoom clamping
 - dispatch click data into `show_season_details()`
 - offer a Copy link control using compact URL params
+
+`comparison.py` owns the right-rail `Chart season` picker and keeps it synced with the canonical
+`st.session_state["chart_season"]` value.
 
 Games Played mode chart specifics:
 - x-axis uses `CumGP`
@@ -279,19 +287,24 @@ Permanent cache:
 - `load_historical_data()`
 - `load_win_prob_weights()`
 - `get_historical_baselines()`
-- `load_all_team_seasons()`
 - `get_team_baselines()`
+
+Hourly cache (`ttl=3600`):
+- `get_player_landing()`
+- `load_all_team_seasons()`
 - `get_top_50()`
 - `get_top_50_goalies()`
 - `get_team_roster()`
 - `get_player_raw_stats()`
 - `get_player_season_game_log()`
-
-Hourly cache (`ttl=3600`):
-- `get_player_landing()`
 - `get_player_available_nhl_seasons()`
+- `get_team_available_nhl_seasons()`
+- `get_team_season_game_log()`
+- `get_team_season_summary()`
+- `get_team_all_time_stats()`
 - `get_season_leaderboard()`
 - `get_player_season_rank_map()`
+- `get_team_season_rank_map()`
 - `fetch_all_time_records()`
 - `get_id_to_name_map()`
 - `search_player()`
@@ -323,6 +336,7 @@ Runtime rules:
 - load frozen weights once through `load_win_prob_weights()`
 - fetch only the current season game logs for the two teams in the upcoming matchup
 - rebuild the same feature vector, score the base probability, then apply the capped goalie Save% proxy
+- surface the result in the read-only predictions cards only; there is no quick-add action
 
 Current feature set:
 - season-to-date points %
@@ -388,7 +402,7 @@ Module responsibilities:
 - `sidebar.py` - player/team add flows plus sidebar status widgets
 - `dialog.py` - player clicks, team game snapshot clicks, projection, and baseline dialogs
 - `chart.py` - figure assembly, baseline overlay, share-link button, player/team click dispatch
-- `comparison.py` - tabbed comparison area with season-aware Overview, Trophies, and Live games including pregame win probability
+- `comparison.py` - season-aware Overview / Trophies tabs plus the right-rail chart-season picker and read-only predictions panel
 - `url_params.py` - compact share-link encoder/decoder with legacy link support
 - `schedule.py` - live/recent matchup detection, upcoming games, featured players, and runtime pregame win-prob inference
 - `async_preloader.py` - background warming of non-active category caches
@@ -396,10 +410,12 @@ Module responsibilities:
 Key integration notes:
 - `schedule.py` only auto-seeds the board on first session load and only if a shared URL did not already populate players or teams
 - `comparison.py` stores tab memory per category via `panel_tab_skater`, `panel_tab_goalie`, and `panel_tab_team`
+- Team all-time cards and team season discovery must use franchise lineage (`TEAM_LINEAGES` /
+  `FranchiseAbbrev`), not raw historical `teamAbbrev` fragments.
 - `train_win_prob.py` is the only place that should import `scikit-learn` for this feature; runtime scoring must stay numpy/pandas only
 - selected-season Overview cards prefer league-wide season rank text from the summary endpoints and fall back to the old game-log scope label if rank data is unavailable
 - Team chart-season options now come from `load_all_team_seasons()` history for the selected franchises, not from player landing payloads.
 - Team selected-season share links now rely on the same forced-games-mode URL logic as skater and goalie season mode.
-- `url_params.py` supports compact ID-only links, legacy `id|name` / `abbr|name` links, and the chart-top `chart_season` selector without redundantly encoding forced games mode
+- `url_params.py` supports compact ID-only links, legacy `id|name` / `abbr|name` links, and the right-rail `chart_season` selector without redundantly encoding forced games mode
 
 That is the architecture. No magic, just disciplined pandas.

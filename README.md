@@ -18,7 +18,9 @@ https://nhl-age-curves.streamlit.app/
 
 * **Games Played X-Axis Mode:** Switch the X-axis from Age to career Games Played. Every player shares a common (0, 0) origin so you can compare players at the same point in career experience instead of pretending missed seasons never happened.
 
-* **Single-Season Game-Log Mode:** Use the chart-top `Chart season` selector next to the header to switch skaters, goalies, or teams from the default `All` history view into one real NHL season. Picking `2024-25`, `2023-24`, etc. forces the X-axis to individual games and plots actual game-log rows instead of season aggregates.
+* **Single-Season Game-Log Mode:** Use the right-rail `Chart season` picker above the predictions panel to switch skaters, goalies, or teams from the default `All` history view into one real NHL season. Picking `2024-25`, `2023-24`, etc. forces the X-axis to individual games and plots actual game-log rows instead of season aggregates.
+
+* **Franchise-Aware Team History:** Team season pickers and all-time overview cards aggregate relocated and renamed clubs under the active franchise abbreviation, so `UTA` includes the old `WIN` / `PHX` / `ARI` history and overview cards reflect franchise totals instead of raw abbreviation fragments.
 
 * **Triple Class Architecture:** Natively separates skaters, goaltenders and teams, rendering entirely different metric sets (Save Percentage vs. Points Per Game, etc.).
 
@@ -26,9 +28,9 @@ https://nhl-age-curves.streamlit.app/
 
 * **Season Snapshot:** In single-season mode, click any game to see the exact matchup card with both teams, logos, final score, venue/time when available, plus the player or team one-game stat line. Age-mode and projection clicks still keep the broader season/career context.
 
-* **Live Games Quick-Add:** A dedicated comparison tab lists the next 4 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and can add both teams plus each club's current points leader and best Save% goalie in one click.
+* **Upcoming Games Predictions Panel:** A dedicated right-rail panel lists the next 4 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and keeps the cards read-only so they function as matchup context instead of a quick-add workflow.
 
-* **Pregame Win Probability:** The Live games tab also shows a pregame away/home win estimate for each upcoming matchup. The base probability comes from an offline-trained logistic regression on the last 5 completed NHL regular seasons, then a capped goalie Save% proxy is layered on top at runtime.
+* **Pregame Win Probability:** The right-rail predictions panel also shows a pregame away/home win estimate for each upcoming matchup. The base probability comes from an offline-trained logistic regression on the last 5 completed NHL regular seasons, then a capped goalie Save% proxy is layered on top at runtime.
 
 * **Shareable URLs:** Click the chart's **Copy link** control to copy a compact exact-state URL only when you want to share it. Player and team names are omitted from the query string, default values are skipped, and the browser URL stays clean while you explore.
 
@@ -65,8 +67,8 @@ nhl/
     controls.py          Category/Metric and View Options expanders
     sidebar.py           player and team sidebar UI
     dialog.py            season-detail popup dialog
-    chart.py             Plotly chart rendering, chart-top season selector, share link, and JS pan-clamp
-    comparison.py        tabbed comparison panel with season-aware Overview, Trophies, and Live games
+    chart.py             Plotly chart rendering, share link, and JS pan-clamp
+    comparison.py        Overview/Trophies detail tabs plus the right-rail chart-season picker and predictions panel
     url_params.py        URL query param encode/decode for shareable links and chart season state
     schedule.py          live defaults, upcoming games, featured-player helpers, and runtime matchup inference
     async_preloader.py   background cache warming for Goalie/Team categories
@@ -82,7 +84,7 @@ win_prob_weights.json    offline-trained logistic-regression weights used at run
 3. Open the extracted folder, hold Shift and right click on empty space in the folder and click on "Open in Terminal"
 4. Type this into terminal and hit Enter: `pip install -r requirements.txt`
 5. Ensure `nhl_historical_seasons.parquet` is present in the root directory (required for KNN projections and baselines)
-6. Ensure `win_prob_weights.json` is present in the root directory (required for pregame win probability in the Live games tab)
+6. Ensure `win_prob_weights.json` is present in the root directory (required for pregame win probability in the predictions panel)
 7. If you want to refresh the historical parquet, run `python scraper.py`
 8. If you want to retrain the pregame win-probability model, run `python train_win_prob.py`
 9. Launch the app by opening a terminal in the folder and write `streamlit run app.py`

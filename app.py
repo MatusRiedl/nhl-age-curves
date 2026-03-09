@@ -77,6 +77,24 @@ def _resolve_shared_team_names(teams: dict[str, str]) -> dict[str, str]:
     return resolved_teams
 
 
+def _restore_pre_season_state() -> None:
+    """Restore controls temporarily overridden by selected-season mode."""
+    saved_x_axis = st.session_state.get("_pre_season_chart_x_axis_mode")
+    if saved_x_axis in {"Age", "Games Played", "Season Year"} and st.session_state.x_axis_mode == "Games Played":
+        st.session_state.x_axis_mode = saved_x_axis
+    st.session_state._pre_season_chart_x_axis_mode = None
+
+    saved_leagues = st.session_state.get("_pre_season_league_filter")
+    if isinstance(saved_leagues, list):
+        st.session_state.league_filter = saved_leagues or ["NHL"]
+    st.session_state._pre_season_league_filter = None
+
+    saved_do_era = st.session_state.get("_pre_season_do_era")
+    if isinstance(saved_do_era, bool):
+        st.session_state.do_era = saved_do_era
+    st.session_state._pre_season_do_era = None
+
+
 # =============================================================================
 # Page configuration — must be the first Streamlit call
 # =============================================================================
@@ -114,8 +132,6 @@ if 'do_prime'         not in st.session_state: st.session_state.do_prime        
 if 'x_axis_mode'       not in st.session_state: st.session_state.x_axis_mode       = "Age"
 if 'chart_season'      not in st.session_state: st.session_state.chart_season      = "All"
 if 'league_filter'     not in st.session_state: st.session_state.league_filter     = ['NHL']
-if 'team_sel_abbr'     not in st.session_state:
-    st.session_state.team_sel_abbr = list(ACTIVE_TEAMS.keys())[0]
 if 'panel_tab_skater'  not in st.session_state: st.session_state.panel_tab_skater  = "overview"
 if 'panel_tab_goalie'  not in st.session_state: st.session_state.panel_tab_goalie  = "overview"
 if 'panel_tab_team'    not in st.session_state: st.session_state.panel_tab_team    = "overview"
@@ -184,18 +200,7 @@ if _season_mode_requested:
         st.session_state._pre_season_do_era = bool(st.session_state.do_era)
     st.session_state.do_era = False
 else:
-    _saved_x_axis = st.session_state.get("_pre_season_chart_x_axis_mode")
-    if _saved_x_axis in {"Age", "Games Played", "Season Year"} and st.session_state.x_axis_mode == "Games Played":
-        st.session_state.x_axis_mode = _saved_x_axis
-    st.session_state._pre_season_chart_x_axis_mode = None
-    _saved_leagues = st.session_state.get("_pre_season_league_filter")
-    if isinstance(_saved_leagues, list):
-        st.session_state.league_filter = _saved_leagues or ["NHL"]
-    st.session_state._pre_season_league_filter = None
-    _saved_do_era = st.session_state.get("_pre_season_do_era")
-    if isinstance(_saved_do_era, bool):
-        st.session_state.do_era = _saved_do_era
-    st.session_state._pre_season_do_era = None
+    _restore_pre_season_state()
 
 # =============================================================================
 # Controls — chart options expander and view toggles.
@@ -273,14 +278,7 @@ chart_season_options.extend(sorted(available_chart_seasons, reverse=True))
 
 if st.session_state.chart_season not in chart_season_options:
     st.session_state.chart_season = "All"
-    _saved_x_axis = st.session_state.get("_pre_season_chart_x_axis_mode")
-    if _saved_x_axis in {"Age", "Games Played", "Season Year"} and st.session_state.x_axis_mode == "Games Played":
-        st.session_state.x_axis_mode = _saved_x_axis
-    st.session_state._pre_season_chart_x_axis_mode = None
-    _saved_leagues = st.session_state.get("_pre_season_league_filter")
-    if isinstance(_saved_leagues, list):
-        st.session_state.league_filter = _saved_leagues or ["NHL"]
-    st.session_state._pre_season_league_filter = None
+    _restore_pre_season_state()
 
 season_mode = st.session_state.chart_season != "All"
 games_mode = st.session_state.x_axis_mode == "Games Played"
@@ -412,7 +410,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.92.8 -- 7,607 lines of Python<br>"
+    "Created by Iksperial. v0.93.0 -- 7,599 lines of Python<br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

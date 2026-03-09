@@ -165,6 +165,7 @@ def compute_team_feature_history(team_games: pd.DataFrame) -> pd.DataFrame:
         return normalized
 
     def _apply_group_features(group: pd.DataFrame) -> pd.DataFrame:
+        """Build leak-safe rolling team features for one season/team slice."""
         g = group.sort_values(["GameDate", "GameId"], kind="stable").reset_index(drop=True).copy()
         goal_diff = g["Goals"] - g["GoalsAgainst"]
         games_before = np.arange(len(g), dtype=float)

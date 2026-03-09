@@ -263,6 +263,7 @@ def _find_game_from_url(url: str, reverse_dates: bool = False) -> tuple[str, str
     # Sort games by start time (most recent first) to ensure we pick the latest game
     # even if multiple games are live or finished on the same day
     def _get_start_time(game: dict) -> datetime:
+        """Return one game's parsed UTC start time for stable descending sorting."""
         start_time_utc = game.get("startTimeUTC")
         if start_time_utc:
             try:
