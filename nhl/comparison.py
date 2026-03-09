@@ -558,12 +558,12 @@ def _build_colored_card_name(name: str, chart_color: str | None) -> str:
     return f"<strong style='color:{safe_color};'>{safe_name}</strong>"
 
 
-def _build_card_context_row(label: str) -> str:
+def _build_card_context_row(label: str, *, font_weight: int = 700) -> str:
     """Return muted comparison-card copy for season and all-time labels."""
     safe_label = escape(str(label))
     return (
         "<div class='comparison-card-context-row' style='font-size:14px;"
-        f"color:{_CARD_CONTEXT_TEXT_COLOR};font-weight:bold;'>{safe_label}</div>"
+        f"color:{_CARD_CONTEXT_TEXT_COLOR};font-weight:{font_weight};'>{safe_label}</div>"
     )
 
 
@@ -1071,7 +1071,7 @@ def _render_overview_player_card(
     if not season_mode:
         rank = get_player_career_rank(int(pid), stat_category, season_type, metric)
         if rank is not None:
-            rank_row = _build_card_context_row(f"#{rank} all-time {rank_suffix}")
+            rank_row = _build_card_context_row(f"#{rank} in all-time {rank_suffix}")
 
     trace_toggle_row = _build_player_trace_toggle_markup(
         player_name=name,
@@ -1104,8 +1104,9 @@ def _render_overview_player_card(
             )
             sy_str = f"{sy - 1}-{str(sy)[2:]}" if sy else "?"
             best_row = _build_card_context_row(
-                f"Best: Age {age} ({sy_str})"
-                f" -- {_format_peak_metric_value(metric, val)} {metric_short} in {peak_gp} GP"
+                f"Best at age {age} ({sy_str})"
+                f" -- {_format_peak_metric_value(metric, val)} {metric_short} in {peak_gp} GP",
+                font_weight=400,
             )
 
     roster_info = get_player_roster_info(int(pid))
@@ -1337,7 +1338,7 @@ def _render_overview_teams(
                 f"GF:&nbsp;{total_gf:,} &nbsp;|&nbsp; "
                 f"GP:&nbsp;{total_gp:,}"
             )
-            rank_row = _build_card_context_row(f"#{wins_rank} all-time Wins")
+            rank_row = _build_card_context_row(f"#{wins_rank} in all-time Wins")
             best_row = ""
             if best_year and best_wins is not None:
                 sy_str = f"{best_year - 1}-{str(best_year)[2:]}"

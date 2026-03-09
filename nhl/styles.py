@@ -661,6 +661,7 @@ _CSS = """
             align-items: baseline;
             gap: 0.2rem 0.9rem;
             margin: 0.18rem 0 0 0;
+            font-size: 0.92rem;
         }
         .comparison-card-context-row {
             margin-top: 0.18rem;
