@@ -434,6 +434,7 @@ def _render_comparison_media_card(
     card_modifier_class: str = "",
     media_modifier_class: str = "",
     image_modifier_class: str = "",
+    player_color: str | None = None,
 ) -> None:
     """Render one comparison detail card with optional media and style modifiers."""
     outer_classes = "comparison-player-card"
@@ -459,8 +460,17 @@ def _render_comparison_media_card(
     else:
         outer_classes = "comparison-player-card comparison-player-card--no-image"
 
+    card_style = ""
+    if player_color:
+        resolved = _resolve_chart_accent_color(player_color)
+        card_style = escape(
+            f"--pc-inset-glow:{_hex_to_rgba(resolved, 0.22)};"
+            f"--pc-color-tint:{_hex_to_rgba(resolved, 0.08)};",
+            quote=True,
+        )
+
     st.markdown(
-        f"<div class='{outer_classes}'>"
+        f"<div class='{outer_classes}' style='{card_style}'>"
         f"{media_html}"
         "<div class='comparison-player-card__body'>"
         f"{body_html or ''}"
@@ -470,18 +480,29 @@ def _render_comparison_media_card(
     )
 
 
-def _render_player_media_card(hero_url: str | None, body_html: str) -> None:
+def _render_player_media_card(
+    hero_url: str | None,
+    body_html: str,
+    *,
+    player_color: str | None = None,
+) -> None:
     """Render a player detail card with optional media."""
-    _render_comparison_media_card(hero_url, body_html)
+    _render_comparison_media_card(hero_url, body_html, player_color=player_color)
 
 
-def _render_team_media_card(logo_url: str | None, body_html: str) -> None:
+def _render_team_media_card(
+    logo_url: str | None,
+    body_html: str,
+    *,
+    player_color: str | None = None,
+) -> None:
     """Render a team detail card using the shared comparison card shell."""
     _render_comparison_media_card(
         logo_url,
         body_html,
         card_modifier_class="comparison-player-card--team",
         media_modifier_class="comparison-player-card__media--team",
+        player_color=player_color,
         image_modifier_class="comparison-player-card__image--team-logo",
     )
 
@@ -1116,6 +1137,7 @@ def _render_overview_player_card(
         f"{best_row}"
         f"{trace_toggle_row}"
         "</div>",
+        player_color=player_color,
     )
 
 
@@ -1280,6 +1302,7 @@ def _render_overview_teams(
                 f"{best_row}"
                 f"{trace_toggle_row}"
                 "</div>",
+                player_color=team_color,
             )
 
         _render_card_grid(
@@ -1341,6 +1364,7 @@ def _render_overview_teams(
                 f"{best_row}"
                 f"{trace_toggle_row}"
                 "</div>",
+                player_color=team_color,
             )
 
         _render_card_grid(
@@ -1464,6 +1488,7 @@ def _render_trophies_players(
             f"{name_html}{logo_html}<br>"
             f"{'<br>'.join(lines)}"
             "</div>",
+            player_color=player_color,
         )
 
     _render_player_card_grid(
@@ -1528,6 +1553,7 @@ def _render_trophies_teams(
             f"{team_name_html}<br>"
             f"{cups_row}"
             "</div>",
+            player_color=chart_colors.get(full_name),
         )
 
     _render_card_grid(

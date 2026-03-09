@@ -624,8 +624,15 @@ _CSS = """
             padding: 0.9rem;
             border: 1px solid rgba(70, 84, 122, 0.5);
             border-radius: 18px;
-            background: linear-gradient(180deg, rgba(12, 18, 33, 0.92) 0%, rgba(9, 13, 24, 0.98) 100%);
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
+            background: linear-gradient(
+                160deg,
+                var(--pc-color-tint, transparent) 0%,
+                rgba(12, 18, 33, 0.92) 40%,
+                rgba(9, 13, 24, 0.98) 100%
+            );
+            box-shadow:
+                inset 0 0 80px var(--pc-inset-glow, transparent),
+                0 12px 24px rgba(0, 0, 0, 0.16);
         }
         .comparison-player-card--no-image {
             padding-left: 1rem;
