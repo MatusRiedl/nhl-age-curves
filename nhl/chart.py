@@ -297,8 +297,8 @@ def _build_chart_axis_cue_annotations(
     )
     return [
         dict(
-            x=0.006,
-            y=0.998,
+            x=0.012,
+            y=0.958,
             xref="paper",
             yref="paper",
             xanchor="left",
@@ -308,8 +308,8 @@ def _build_chart_axis_cue_annotations(
             font=dict(size=15, family="Arial Black", color=Y_AXIS_CUE_COLOR),
         ),
         dict(
-            x=0.994,
-            y=0.004,
+            x=0.988,
+            y=0.042,
             xref="paper",
             yref="paper",
             xanchor="right",
@@ -948,7 +948,7 @@ def render_chart(
 
     fig.update_layout(
         uirevision  = 'constant',
-        margin      = dict(l=0, r=0, t=18, b=0 if not team_mode else 12),
+        margin      = dict(l=6, r=6, t=18, b=6 if not team_mode else 14),
         height      = 430,
         font        = dict(size=16),
         hoverlabel  = dict(font_size=16, font_family="Arial"),
@@ -975,7 +975,7 @@ def render_chart(
 
     if team_mode and not games_mode:
         fig.update_layout(
-            margin = dict(l=0, r=0, t=18, b=18),
+            margin = dict(l=6, r=6, t=18, b=20),
         )
         fig.update_traces(
             connectgaps    = True,
