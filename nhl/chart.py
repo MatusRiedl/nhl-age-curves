@@ -68,11 +68,10 @@ def _store_player_chart_colors(player_colors: dict[str, str | None]) -> None:
 
 
 def _build_chart_glow_style(player_colors: dict) -> str:
-    """Return a <style> block that illuminates the chart container with player trace colors.
+    """Return a <style> block that illuminates the chart center with player trace colors.
 
-    Uses radial gradients centered in the chart and an inset box-shadow to create an
-    underglow effect matching the player card and matchup panel design language. Returns
-    an empty string when no player colors are available.
+    Uses tight radial gradients anchored at 50% 52% (vertical center-ish) that fade to
+    transparent well before the edges. Returns an empty string when no colors are available.
 
     Args:
         player_colors: Mapping of player name to hex/rgb color string.
@@ -84,25 +83,19 @@ def _build_chart_glow_style(player_colors: dict) -> str:
     if not colors:
         return ""
 
-    # Up to 3 radial gradient positions spread across the center of the chart
-    positions = ["40% 55%", "60% 55%", "50% 45%"]
+    # All gradients centered; tight ellipse fades to transparent before reaching edges
     glows = []
-    for color, pos in zip(colors[:3], positions):
-        strong = _with_alpha(color, 0.13)
+    for color in colors[:3]:
+        strong = _with_alpha(color, 0.07)
         fade = _with_alpha(color, 0.0)
         glows.append(
-            f"radial-gradient(ellipse 55% 40% at {pos}, {strong} 0%, {fade} 75%)"
+            f"radial-gradient(ellipse 38% 30% at 50% 52%, {strong} 0%, {fade} 70%)"
         )
 
     bg = ", ".join(glows)
 
-    # Inset shadow: first 2 colors only to avoid muddiness
-    shadow_parts = [
-        f"inset 0 0 90px {_with_alpha(c, 0.17)}"
-        for c in colors[:2]
-    ]
-    shadow_parts.append("0 0 0 1px rgba(255,255,255,0.07)")
-    shadow = ", ".join(shadow_parts)
+    # Outer edge glow: very subtle blend of first 2 player colors
+    shadow = ", ".join(f"0 0 24px {_with_alpha(c, 0.05)}" for c in colors[:2])
 
     return (
         "<style>"
@@ -994,12 +987,13 @@ def render_chart(
             ),
         )
         fig.update_xaxes(
-            title_text  = "",
-            dtick       = _team_dtick,
-            tickangle   = -45,
-            automargin  = True,
-            tickfont    = dict(size=16, family='Arial Black', color=X_AXIS_TICK_COLOR),
-            range       = _team_initial_range,
+            title_text        = "",
+            dtick             = _team_dtick,
+            tickangle         = -45,
+            automargin        = False,
+            ticklabelposition = "inside",
+            tickfont          = dict(size=16, family='Arial Black', color=X_AXIS_TICK_COLOR),
+            range             = _team_initial_range,
         )
     elif games_mode:
         games_hover_label = "Game" if str(selected_season) != "All" else "Career Game"
@@ -1050,10 +1044,11 @@ def render_chart(
                 ),
             )
         fig.update_xaxes(
-            title_text  = "",
-            tickangle   = 0,
-            automargin  = True,
-            tickfont    = dict(size=16, family='Arial Black', color=X_AXIS_TICK_COLOR),
+            title_text        = "",
+            tickangle         = 0,
+            automargin        = False,
+            ticklabelposition = "inside",
+            tickfont          = dict(size=16, family='Arial Black', color=X_AXIS_TICK_COLOR),
         )
     else:
         fig.update_traces(
@@ -1069,15 +1064,18 @@ def render_chart(
             ),
         )
         fig.update_xaxes(
-            title_text  = "",
-            tickangle   = 0,
-            automargin  = True,
-            tickfont    = dict(size=16, family='Arial Black', color=X_AXIS_TICK_COLOR),
+            title_text        = "",
+            tickangle         = 0,
+            automargin        = False,
+            ticklabelposition = "inside",
+            tickfont          = dict(size=16, family='Arial Black', color=X_AXIS_TICK_COLOR),
         )
 
     fig.update_yaxes(
-        title_text = "",
-        tickfont   = dict(size=16, family='Arial Black', color=Y_AXIS_TICK_COLOR),
+        title_text         = "",
+        tickfont           = dict(size=16, family='Arial Black', color=Y_AXIS_TICK_COLOR),
+        ticklabelposition  = "inside",
+        automargin         = False,
     )
 
     # Percentage suffix for rate metrics shown as percentages

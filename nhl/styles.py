@@ -806,6 +806,7 @@ _CSS = """
         }
         /* === Main chart window base styles === */
         div[data-testid="stPlotlyChart"] {
+            border: 1px solid rgba(70, 84, 122, 0.5);
             border-radius: 14px;
             overflow: hidden;
             transition: box-shadow 0.3s ease, background 0.3s ease;
