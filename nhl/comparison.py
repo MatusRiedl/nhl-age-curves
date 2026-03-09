@@ -21,7 +21,7 @@ from nhl.data_loaders import (
     get_team_all_time_stats,
     get_team_trophy_summary,
 )
-from nhl.schedule import get_featured_players, get_upcoming_games
+from nhl.schedule import get_upcoming_games
 
 _TEAM_LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbr}_light.svg"
 _TEAM_SHORT_NAMES = {
@@ -751,22 +751,6 @@ def render_predictions_panel() -> None:
     _render_live_games_tab()
 
 
-def _add_live_game_to_comparison(game: dict) -> None:
-    """Add both teams plus featured players for one upcoming game.
-
-    Args:
-        game: Normalized game dict returned by ``nhl.schedule.get_upcoming_games()``.
-
-    Returns:
-        None.
-    """
-    st.session_state.teams[game["away_abbr"]] = game["away_name"]
-    st.session_state.teams[game["home_abbr"]] = game["home_name"]
-
-    featured = get_featured_players(game["home_abbr"], game["away_abbr"])
-    st.session_state.teams.update(featured.get("teams", {}))
-    st.session_state.players.update(featured.get("players", {}))
-
 
 def _build_live_game_card_html(game: dict) -> str:
     """Build the unified matchup card HTML for one upcoming game.
@@ -943,8 +927,7 @@ def _render_live_games_tab() -> None:
     Returns:
         None.
 
-    Shows the next four upcoming NHL games and lets the user seed the
-    comparison board with both teams plus each club's featured skater and goalie.
+    Shows the next four upcoming NHL games with win-probability cards.
     """
     upcoming_games = get_upcoming_games(limit=4)
     if not upcoming_games:
@@ -953,15 +936,7 @@ def _render_live_games_tab() -> None:
 
     for game in upcoming_games:
         card_html = _build_live_game_card_html(game)
-        button_key = f"add_live_game_{game['game_id']}_{game['away_abbr']}_{game['home_abbr']}"
-        matchup_col, action_col = st.columns([0.76, 0.24], gap="small")
-        with matchup_col:
-            st.markdown(card_html, unsafe_allow_html=True)
-        with action_col:
-            st.markdown("<div class='lgc-btn-anchor'></div>", unsafe_allow_html=True)
-            if st.button("Compare", key=button_key):
-                _add_live_game_to_comparison(game)
-                st.rerun()
+        st.markdown(card_html, unsafe_allow_html=True)
 
 
 def _render_live_games_players(

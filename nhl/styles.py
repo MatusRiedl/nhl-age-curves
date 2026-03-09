@@ -410,39 +410,7 @@ _CSS = """
             color: #8c8c8c;
             font-size: 0.9rem;
         }
-        /* Button anchor for right column */
-        .lgc-btn-anchor {
-            display: block;
-            height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        div.element-container:has(.lgc-btn-anchor) {
-            margin: 0 !important;
-            line-height: 0 !important;
-        }
-        div.element-container:has(.lgc-btn-anchor) + div.element-container {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            margin-top: 0 !important;
-            margin-bottom: 0 !important;
-        }
-        div.element-container:has(.lgc-btn-anchor) + div.element-container [data-testid="stButton"] {
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            width: 100% !important;
-        }
-        div.element-container:has(.lgc-btn-anchor) + div.element-container [data-testid="stButton"] button {
-            padding: 0.18rem 0.82rem !important;
-            font-size: 0.92rem !important;
-            min-height: 2.3rem !important;
-            width: auto !important;
-            max-width: 100% !important;
-            white-space: normal !important;
-            overflow-wrap: anywhere !important;
-        }
+
         .live-games-probability__labels {
             display: flex;
             justify-content: space-between;
