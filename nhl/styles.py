@@ -1079,6 +1079,9 @@ _CSS = """
             :root {
                 --pp-overlay-sidebar-top: calc(env(safe-area-inset-top, 0px) + 3.75rem);
             }
+            .comparison-player-card__media--player {
+                display: none !important;
+            }
             [data-testid="stAppViewContainer"] {
                 overflow-x: clip !important;
             }
