@@ -804,6 +804,12 @@ _CSS = """
             padding-bottom: 0 !important;
             line-height: normal !important;
         }
+        /* === Main chart window base styles === */
+        div[data-testid="stPlotlyChart"] {
+            border-radius: 14px;
+            overflow: hidden;
+            transition: box-shadow 0.3s ease, background 0.3s ease;
+        }
         div.element-container:has(#comparison-detail-layout) {
             margin: -2.2rem 0 0 0 !important;
             line-height: 0 !important;

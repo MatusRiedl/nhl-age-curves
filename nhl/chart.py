@@ -67,6 +67,55 @@ def _store_player_chart_colors(player_colors: dict[str, str | None]) -> None:
     setattr(st.session_state, PLAYER_COLOR_STATE_KEY, dict(player_colors))
 
 
+def _build_chart_glow_style(player_colors: dict) -> str:
+    """Return a <style> block that illuminates the chart container with player trace colors.
+
+    Uses radial gradients centered in the chart and an inset box-shadow to create an
+    underglow effect matching the player card and matchup panel design language. Returns
+    an empty string when no player colors are available.
+
+    Args:
+        player_colors: Mapping of player name to hex/rgb color string.
+
+    Returns:
+        str: HTML <style> block, or empty string if no colors.
+    """
+    colors = [c for c in player_colors.values() if c]
+    if not colors:
+        return ""
+
+    # Up to 3 radial gradient positions spread across the center of the chart
+    positions = ["40% 55%", "60% 55%", "50% 45%"]
+    glows = []
+    for color, pos in zip(colors[:3], positions):
+        strong = _with_alpha(color, 0.13)
+        fade = _with_alpha(color, 0.0)
+        glows.append(
+            f"radial-gradient(ellipse 55% 40% at {pos}, {strong} 0%, {fade} 75%)"
+        )
+
+    bg = ", ".join(glows)
+
+    # Inset shadow: first 2 colors only to avoid muddiness
+    shadow_parts = [
+        f"inset 0 0 90px {_with_alpha(c, 0.17)}"
+        for c in colors[:2]
+    ]
+    shadow_parts.append("0 0 0 1px rgba(255,255,255,0.07)")
+    shadow = ", ".join(shadow_parts)
+
+    return (
+        "<style>"
+        "div[data-testid='stPlotlyChart']{"
+        f"background:{bg};"
+        f"box-shadow:{shadow};"
+        "border-radius:14px;"
+        "overflow:hidden;"
+        "}"
+        "</style>"
+    )
+
+
 def _get_chart_context_label(
     team_mode: bool,
     games_mode: bool,
@@ -1101,6 +1150,10 @@ def render_chart(
         ],
         "displaylogo": False,
     }
+
+    glow_style = _build_chart_glow_style(player_colors)
+    if glow_style:
+        st.markdown(glow_style, unsafe_allow_html=True)
 
     st.markdown("<div id='comparison-main-plotly'></div>", unsafe_allow_html=True)
 
