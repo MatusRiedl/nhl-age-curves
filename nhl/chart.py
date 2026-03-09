@@ -302,8 +302,8 @@ def _build_chart_axis_cue_annotations(
     )
     return [
         dict(
-            x=0.028,
-            y=0.988,
+            x=0.062,
+            y=1.004,
             xref="paper",
             yref="paper",
             xanchor="left",
@@ -1259,13 +1259,15 @@ def render_chart(
     }}
 
     function calcResponsiveYAxisCueX(width) {{
-        if (width <= 768) return 0.038;
-        return 0.028;
+        if (width <= 480) return 0.102;
+        if (width <= 768) return 0.082;
+        return 0.062;
     }}
 
     function calcResponsiveYAxisCueY(width) {{
-        if (width <= 768) return 0.972;
-        return 0.988;
+        if (width <= 480) return 0.992;
+        if (width <= 768) return 0.998;
+        return 1.004;
     }}
 
     function syncToolbarTitleOffset(plot, parent) {{
