@@ -709,11 +709,7 @@ _CSS = """
             width: 100%;
             aspect-ratio: 1 / 1;
             object-fit: contain;
-            padding: 0.8rem;
-            border-radius: 18px;
-            background: radial-gradient(circle at 50% 35%, rgba(31, 41, 68, 0.96) 0%, rgba(13, 18, 31, 0.94) 100%);
-            border: 1px solid rgba(102, 126, 234, 0.22);
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 22px rgba(0, 0, 0, 0.18);
+            padding: 0.4rem;
         }
         .comparison-panel-heading {
             margin: 0 0 0.22rem 0;
@@ -989,7 +985,7 @@ _CSS = """
                 margin: 0 auto;
             }
             .comparison-player-card__image--team-logo {
-                padding: 0.7rem;
+                padding: 0.3rem;
             }
             .comparison-trace-toggle {
                 gap: 0.45rem;
