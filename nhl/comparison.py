@@ -568,13 +568,13 @@ def _build_card_context_row(label: str, *, font_weight: int = 700) -> str:
 
 
 def _build_card_stat_row(stats: list[tuple[str, str | int | float]]) -> str:
-    """Return one fixed four-cell stat row for comparison cards.
+    """Return one compact stat row for comparison cards.
 
     Args:
         stats: Ordered ``(label, value)`` pairs for the compact top stat row.
 
     Returns:
-        HTML markup that keeps each stat in its own consistent grid cell.
+        HTML markup that keeps each stat in its own consistent inline cell.
     """
     stat_items: list[str] = []
     for label, value in stats:
@@ -1250,12 +1250,14 @@ def _render_overview_teams(
                 if founded
                 else team_name_markup
             )
-            stats_row = (
-                f"Rec:&nbsp;{record_label} &nbsp;|&nbsp; "
-                f"Pts:&nbsp;{points} &nbsp;|&nbsp; "
-                f"GF:&nbsp;{goals} &nbsp;|&nbsp; "
-                f"GA:&nbsp;{goals_against} &nbsp;|&nbsp; "
-                f"GP:&nbsp;{gp}"
+            stats_row = _build_card_stat_row(
+                [
+                    ("Rec", record_label),
+                    ("Pts", points),
+                    ("GF", goals),
+                    ("GA", goals_against),
+                    ("GP", gp),
+                ]
             )
             season_rank = season_rank_map.get(abbr)
             scope_label = (
@@ -1282,7 +1284,7 @@ def _render_overview_teams(
                 extra_bits.append(f"Final {escape(metric)}: {metric_value}")
             best_row = ""
             if extra_bits:
-                best_row = _build_card_context_row(" | ".join(extra_bits))
+                best_row = _build_card_context_row(" | ".join(extra_bits), font_weight=400)
             trace_toggle_row = _build_player_trace_toggle_markup(
                 player_name=full_name,
                 player_color=team_color,
@@ -1332,18 +1334,21 @@ def _render_overview_teams(
                 if founded
                 else team_name_markup
             )
-            stats_row = (
-                f"W:&nbsp;{total_w:,} &nbsp;|&nbsp; "
-                f"Pts:&nbsp;{total_pts:,} &nbsp;|&nbsp; "
-                f"GF:&nbsp;{total_gf:,} &nbsp;|&nbsp; "
-                f"GP:&nbsp;{total_gp:,}"
+            stats_row = _build_card_stat_row(
+                [
+                    ("W", f"{total_w:,}"),
+                    ("Pts", f"{total_pts:,}"),
+                    ("GF", f"{total_gf:,}"),
+                    ("GP", f"{total_gp:,}"),
+                ]
             )
             rank_row = _build_card_context_row(f"#{wins_rank} in all-time Wins")
             best_row = ""
             if best_year and best_wins is not None:
                 sy_str = f"{best_year - 1}-{str(best_year)[2:]}"
                 best_row = _build_card_context_row(
-                    f"Best: {sy_str} -- {best_wins} W in {best_gp} GP"
+                    f"Best season: {sy_str} -- {best_wins} W in {best_gp} GP",
+                    font_weight=400,
                 )
             trace_toggle_row = _build_player_trace_toggle_markup(
                 player_name=full_name,
