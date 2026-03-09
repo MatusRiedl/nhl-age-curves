@@ -372,41 +372,74 @@ _CSS = """
             color: #ffffff !important;
         }
 
-        div.element-container:has(.live-games-matchup),
-        div.element-container:has(.live-games-detail),
-        div.element-container:has(.live-games-action-anchor) {
-            margin-bottom: 0 !important;
+        /* === Unified matchup cards === */
+        [data-testid="stHorizontalBlock"]:has(.live-game-card) {
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 0.55rem;
+            background: rgba(255, 255, 255, 0.012);
         }
-        .live-games-detail {
+        .live-game-card {
+            background:
+                linear-gradient(
+                    105deg,
+                    var(--lgc-away-tint, transparent) 0%,
+                    rgba(255, 255, 255, 0.018) 38%,
+                    rgba(255, 255, 255, 0.018) 62%,
+                    var(--lgc-home-tint, transparent) 100%
+                );
+            box-shadow: inset 0 0 80px var(--lgc-inset-glow, transparent);
+            padding: 0.55rem 0.65rem 0.45rem;
+            height: 100%;
+            box-sizing: border-box;
+        }
+        .lgc-matchup {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 1rem;
+            margin-bottom: 0.15rem;
+        }
+        .lgc-detail {
             color: #8c8c8c;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
             line-height: 1.2;
-            margin: 0.1rem 0 0.3rem 0;
+            margin-bottom: 0.38rem;
         }
-        div.element-container:has(.live-games-action-anchor) {
-            margin: 0 !important;
-            line-height: 0 !important;
+        .lgc-prob-section {
+            /* probability labels + bar + meta embedded in card */
         }
-        .live-games-action-anchor--tight {
+        .live-games-probability--muted {
+            color: #8c8c8c;
+            font-size: 0.9rem;
+        }
+        /* Button anchor for right column */
+        .lgc-btn-anchor {
             display: block;
             height: 0 !important;
             margin: 0 !important;
             padding: 0 !important;
         }
-        div.element-container:has(.live-games-action-anchor) + div.element-container {
-            margin-top: -0.45rem !important;
-            margin-bottom: 0 !important;
-            padding-top: 0 !important;
+        div.element-container:has(.lgc-btn-anchor) {
+            margin: 0 !important;
+            line-height: 0 !important;
         }
-        div.element-container:has(.live-games-action-anchor) + div.element-container [data-testid="stButton"] {
+        div.element-container:has(.lgc-btn-anchor) + div.element-container {
             display: flex !important;
-            justify-content: flex-end !important;
-            align-items: flex-start !important;
+            align-items: center !important;
+            justify-content: center !important;
             margin-top: 0 !important;
             margin-bottom: 0 !important;
-            padding-top: 0 !important;
         }
-        div.element-container:has(.live-games-action-anchor) + div.element-container [data-testid="stButton"] button {
+        div.element-container:has(.lgc-btn-anchor) + div.element-container [data-testid="stButton"] {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            width: 100% !important;
+        }
+        div.element-container:has(.lgc-btn-anchor) + div.element-container [data-testid="stButton"] button {
             padding: 0.18rem 0.82rem !important;
             font-size: 0.92rem !important;
             min-height: 2.3rem !important;
@@ -414,30 +447,6 @@ _CSS = """
             max-width: 100% !important;
             white-space: normal !important;
             overflow-wrap: anywhere !important;
-            margin-top: 0 !important;
-            align-self: flex-start !important;
-        }
-        .live-games-probability {
-            position: relative;
-            overflow: hidden;
-            border: 1px solid rgba(120, 120, 120, 0.16);
-            border-radius: 10px;
-            background:
-                linear-gradient(
-                    90deg,
-                    var(--away-panel-tint, rgba(255, 255, 255, 0)) 0%,
-                    rgba(255, 255, 255, 0.028) 30%,
-                    rgba(255, 255, 255, 0.02) 50%,
-                    rgba(255, 255, 255, 0.028) 70%,
-                    var(--home-panel-tint, rgba(255, 255, 255, 0)) 100%
-                );
-            padding: 0.42rem 0.55rem;
-            margin: 0 0 0.35rem 0;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 10px 24px rgba(0, 0, 0, 0.14);
-        }
-        .live-games-probability--muted {
-            color: #8c8c8c;
-            font-size: 0.9rem;
         }
         .live-games-probability__labels {
             display: flex;
@@ -537,53 +546,8 @@ _CSS = """
             font-size: 0.78rem;
             line-height: 1.2;
         }
-        div.element-container:has(.live-games-detail) + div.element-container {
-            margin-top: 0 !important;
+        div.element-container:has(.live-game-card) {
             margin-bottom: 0 !important;
-        }
-        div.element-container:has(.live-games-detail) + div.element-container [data-testid="stButton"] {
-            margin-top: 0 !important;
-            margin-bottom: 0.1rem !important;
-        }
-        div.element-container:has(.live-games-detail) + div.element-container [data-testid="stButton"] button {
-            padding: 0.18rem 0.7rem !important;
-            font-size: 0.92rem !important;
-            min-height: 2.3rem !important;
-            width: auto !important;
-            max-width: 100% !important;
-            white-space: normal !important;
-            overflow-wrap: anywhere !important;
-        }
-        div.element-container:has(.live-games-detail) + div + div.element-container {
-            margin-top: 0 !important;
-            margin-bottom: 0 !important;
-        }
-        div.element-container:has(.live-games-detail) + div + div.element-container hr {
-            margin: 0 !important;
-        }
-        div.element-container:has(.live-games-probability) {
-            margin-top: 0 !important;
-            margin-bottom: 0 !important;
-        }
-        div.element-container:has(.live-games-probability) + div.element-container {
-            margin-top: 0 !important;
-            margin-bottom: 0 !important;
-        }
-        div.element-container:has(.live-games-probability) + div.element-container [data-testid="stButton"] {
-            margin-top: 0 !important;
-            margin-bottom: 0.1rem !important;
-        }
-        div.element-container:has(.live-games-probability) + div.element-container [data-testid="stButton"] button {
-            padding: 0.18rem 0.7rem !important;
-            font-size: 0.92rem !important;
-            min-height: 2.3rem !important;
-            width: auto !important;
-            max-width: 100% !important;
-            white-space: normal !important;
-            overflow-wrap: anywhere !important;
-        }
-        div.element-container:has(.live-games-probability) + div + div.element-container hr {
-            margin: 0 !important;
         }
 
         /* Controls dropdowns: stack one per row on mobile */

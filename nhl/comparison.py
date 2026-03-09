@@ -129,6 +129,19 @@ def _get_team_probability_background(team_abbr: str, fallback_color: str) -> str
     return escape(_normalize_probability_color(primary_color), quote=True)
 
 
+def _get_raw_team_color(team_abbr: str, fallback_color: str) -> str:
+    """Return the raw (non-normalized) brand primary color for a team.
+
+    Args:
+        team_abbr: Three-letter NHL team abbreviation.
+        fallback_color: Hex color used if the team is unknown.
+
+    Returns:
+        Raw hex color string for the team's primary brand color.
+    """
+    return TEAM_BRAND_COLORS.get(str(team_abbr or "").upper(), (fallback_color, fallback_color))[0]
+
+
 def _build_probability_segment_style(
     width_pct: int,
     hex_color: str,
@@ -755,136 +768,155 @@ def _add_live_game_to_comparison(game: dict) -> None:
     st.session_state.players.update(featured.get("players", {}))
 
 
-def _build_live_game_matchup_html(game: dict) -> str:
-    """Build the matchup label HTML with both team logos.
+def _build_live_game_card_html(game: dict) -> str:
+    """Build the unified matchup card HTML for one upcoming game.
+
+    Combines team logos, time/venue detail, and win-probability bar into a
+    single ``.live-game-card`` div with team-color background illumination
+    that scales with prediction confidence.
 
     Args:
         game: Normalized game dict returned by ``get_upcoming_games()``.
 
     Returns:
-        HTML string showing away and home logos beside short team names.
+        HTML string for the complete game card.
     """
-    away_logo = _TEAM_LOGO_URL.format(abbr=game["away_abbr"])
-    home_logo = _TEAM_LOGO_URL.format(abbr=game["home_abbr"])
-    away_short_name = _get_team_short_name(game["away_abbr"], game["away_name"])
-    home_short_name = _get_team_short_name(game["home_abbr"], game["home_name"])
+    away_abbr = game.get("away_abbr", "")
+    home_abbr = game.get("home_abbr", "")
+    away_logo = _TEAM_LOGO_URL.format(abbr=away_abbr)
+    home_logo = _TEAM_LOGO_URL.format(abbr=home_abbr)
+    away_short_name = _get_team_short_name(away_abbr, game.get("away_name", ""))
+    home_short_name = _get_team_short_name(home_abbr, game.get("home_name", ""))
+
+    detail_bits = [game["start_label_cest"]]
+    if game.get("venue"):
+        detail_bits.append(game["venue"])
+    detail_text = escape(" • ".join(detail_bits))
+
+    probability = game.get("pregame_win_prob")
+    has_prob = isinstance(probability, dict)
+    if has_prob:
+        try:
+            away_pct = int(probability.get("away_pct", 0))
+            home_pct = int(probability.get("home_pct", 0))
+        except Exception:
+            has_prob = False
+
+    if has_prob:
+        away_pct = min(max(away_pct, 0), 100)
+        home_pct = min(max(home_pct, 0), 100)
+        away_background = _get_team_probability_background(away_abbr, "#4F8FFF")
+        home_background = _get_team_probability_background(home_abbr, "#FF5C5C")
+        away_raw = _get_raw_team_color(away_abbr, "#4F8FFF")
+        home_raw = _get_raw_team_color(home_abbr, "#FF5C5C")
+        edge_strength = min(abs(away_pct - home_pct) / 34.0, 1.0)
+        is_tied = away_pct == home_pct
+        away_leading = away_pct > home_pct
+        home_leading = home_pct > away_pct
+        panel_state = "tied"
+        if away_leading:
+            panel_state = "away-lead"
+        elif home_leading:
+            panel_state = "home-lead"
+
+        # Card background tints — much stronger than the old probability bar tints
+        away_card_alpha = 0.14 if is_tied else (0.30 + edge_strength * 0.14 if away_leading else 0.03)
+        home_card_alpha = 0.14 if is_tied else (0.30 + edge_strength * 0.14 if home_leading else 0.03)
+        away_card_tint = _hex_to_rgba(away_background, away_card_alpha)
+        home_card_tint = _hex_to_rgba(home_background, home_card_alpha)
+
+        # Inset glow from the winning team's raw brand color
+        if is_tied:
+            glow_alpha = 0.10
+            glow_color = away_raw
+        elif away_leading:
+            glow_alpha = 0.18 + edge_strength * 0.14
+            glow_color = away_raw
+        else:
+            glow_alpha = 0.18 + edge_strength * 0.14
+            glow_color = home_raw
+        card_inset_glow = _hex_to_rgba(glow_color, glow_alpha)
+
+        away_bar_glow = _hex_to_rgba(
+            away_background,
+            0.08 if is_tied else (0.16 + edge_strength * 0.14 if away_leading else 0.0),
+        )
+        home_bar_glow = _hex_to_rgba(
+            home_background,
+            0.08 if is_tied else (0.16 + edge_strength * 0.14 if home_leading else 0.0),
+        )
+        bar_style = escape(
+            f"--away-glow-width:{away_pct}%;"
+            f"--home-glow-width:{home_pct}%;"
+            f"--away-bar-glow:{away_bar_glow};"
+            f"--home-bar-glow:{home_bar_glow};",
+            quote=True,
+        )
+        away_label_state = "tied" if is_tied else ("leading" if away_leading else "trailing")
+        home_label_state = "tied" if is_tied else ("leading" if home_leading else "trailing")
+        away_segment_state = "tied" if is_tied else ("leading" if away_leading else "trailing")
+        home_segment_state = "tied" if is_tied else ("leading" if home_leading else "trailing")
+        away_label_style = _build_probability_label_style(
+            away_background, is_leading=away_leading, is_tied=is_tied, edge_strength=edge_strength,
+        )
+        home_label_style = _build_probability_label_style(
+            home_background, is_leading=home_leading, is_tied=is_tied, edge_strength=edge_strength,
+        )
+        away_segment_style = _build_probability_segment_style(
+            away_pct, away_background, is_leading=away_leading, is_tied=is_tied, edge_strength=edge_strength,
+        )
+        home_segment_style = _build_probability_segment_style(
+            home_pct, home_background, is_leading=home_leading, is_tied=is_tied, edge_strength=edge_strength,
+        )
+        away_short_esc = escape(away_short_name)
+        home_short_esc = escape(home_short_name)
+        model_label = escape(str(probability.get("model_label", "") or "").strip())
+        goalie_label = escape(str(probability.get("goalie_label", "") or "").strip())
+        playoff_note = ""
+        if int(game.get("game_type", 0) or 0) == 3:
+            playoff_note = "<div class='live-games-probability__meta'>Regular-season calibrated model.</div>"
+
+        prob_section = (
+            "<div class='lgc-prob-section'>"
+            "<div class='live-games-probability__labels'>"
+            f"<span class='live-games-probability__label live-games-probability__label--away live-games-probability__label--{away_label_state}' style='{away_label_style}'>{away_short_esc} <strong>{away_pct}%</strong></span>"
+            f"<span class='live-games-probability__label live-games-probability__label--home live-games-probability__label--{home_label_state}' style='{home_label_style}'><strong>{home_pct}%</strong> {home_short_esc}</span>"
+            "</div>"
+            f"<div class='live-games-probability__bar' style='{bar_style}'>"
+            f"<span class='live-games-probability__segment live-games-probability__segment--away live-games-probability__segment--{away_segment_state}' style='{away_segment_style}'></span>"
+            f"<span class='live-games-probability__segment live-games-probability__segment--home live-games-probability__segment--{home_segment_state}' style='{home_segment_style}'></span>"
+            f"<span class='live-games-probability__divider' style='left:{away_pct}%;'></span>"
+            "</div>"
+            f"<div class='live-games-probability__meta'>{model_label}</div>"
+            f"<div class='live-games-probability__meta'>{goalie_label}</div>"
+            f"{playoff_note}"
+            "</div>"
+        )
+        card_style = escape(
+            f"--lgc-away-tint:{away_card_tint};"
+            f"--lgc-home-tint:{home_card_tint};"
+            f"--lgc-inset-glow:{card_inset_glow};",
+            quote=True,
+        )
+    else:
+        prob_section = "<div class='lgc-prob-section live-games-probability--muted'>Estimate unavailable.</div>"
+        card_style = ""
+        panel_state = "no-prob"
+
+    away_short_esc = escape(away_short_name)
+    home_short_esc = escape(home_short_name)
+
     return (
-        "<div class='live-games-matchup' style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;'>"
+        f"<div class='live-game-card live-game-card--{panel_state}' style='{card_style}'>"
+        "<div class='lgc-matchup'>"
         f"<img src='{away_logo}' height='26' style='vertical-align:middle;'>"
-        f"<strong>{away_short_name}</strong>"
+        f"<strong>{away_short_esc}</strong>"
         "<span style='color:#aaa;font-size:13px;'>at</span>"
         f"<img src='{home_logo}' height='26' style='vertical-align:middle;'>"
-        f"<strong>{home_short_name}</strong>"
+        f"<strong>{home_short_esc}</strong>"
         "</div>"
-    )
-
-
-def _build_live_game_probability_html(game: dict) -> str:
-    """Build the compact pregame win-probability strip for one live-games row."""
-    probability = game.get("pregame_win_prob")
-    if not isinstance(probability, dict):
-        return "<div class='live-games-probability live-games-probability--muted'>Estimate unavailable.</div>"
-
-    try:
-        away_pct = int(probability.get("away_pct", 0))
-        home_pct = int(probability.get("home_pct", 0))
-    except Exception:
-        return "<div class='live-games-probability live-games-probability--muted'>Estimate unavailable.</div>"
-
-    away_pct = min(max(away_pct, 0), 100)
-    home_pct = min(max(home_pct, 0), 100)
-    away_background = _get_team_probability_background(game.get("away_abbr", ""), "#4F8FFF")
-    home_background = _get_team_probability_background(game.get("home_abbr", ""), "#FF5C5C")
-    edge_strength = min(abs(away_pct - home_pct) / 34.0, 1.0)
-    is_tied = away_pct == home_pct
-    away_leading = away_pct > home_pct
-    home_leading = home_pct > away_pct
-    panel_state = "tied"
-    if away_leading:
-        panel_state = "away-lead"
-    elif home_leading:
-        panel_state = "home-lead"
-
-    away_panel_tint = _hex_to_rgba(
-        away_background,
-        0.035 if is_tied else (0.07 + (edge_strength * 0.09) if away_leading else 0.0),
-    )
-    home_panel_tint = _hex_to_rgba(
-        home_background,
-        0.035 if is_tied else (0.07 + (edge_strength * 0.09) if home_leading else 0.0),
-    )
-    away_bar_glow = _hex_to_rgba(
-        away_background,
-        0.08 if is_tied else (0.16 + (edge_strength * 0.14) if away_leading else 0.0),
-    )
-    home_bar_glow = _hex_to_rgba(
-        home_background,
-        0.08 if is_tied else (0.16 + (edge_strength * 0.14) if home_leading else 0.0),
-    )
-    panel_style = escape(
-        f"--away-panel-tint:{away_panel_tint};"
-        f"--home-panel-tint:{home_panel_tint};",
-        quote=True,
-    )
-    bar_style = escape(
-        f"--away-glow-width:{away_pct}%;"
-        f"--home-glow-width:{home_pct}%;"
-        f"--away-bar-glow:{away_bar_glow};"
-        f"--home-bar-glow:{home_bar_glow};",
-        quote=True,
-    )
-    away_label_state = "tied" if is_tied else ("leading" if away_leading else "trailing")
-    home_label_state = "tied" if is_tied else ("leading" if home_leading else "trailing")
-    away_segment_state = "tied" if is_tied else ("leading" if away_leading else "trailing")
-    home_segment_state = "tied" if is_tied else ("leading" if home_leading else "trailing")
-    away_label_style = _build_probability_label_style(
-        away_background,
-        is_leading=away_leading,
-        is_tied=is_tied,
-        edge_strength=edge_strength,
-    )
-    home_label_style = _build_probability_label_style(
-        home_background,
-        is_leading=home_leading,
-        is_tied=is_tied,
-        edge_strength=edge_strength,
-    )
-    away_segment_style = _build_probability_segment_style(
-        away_pct,
-        away_background,
-        is_leading=away_leading,
-        is_tied=is_tied,
-        edge_strength=edge_strength,
-    )
-    home_segment_style = _build_probability_segment_style(
-        home_pct,
-        home_background,
-        is_leading=home_leading,
-        is_tied=is_tied,
-        edge_strength=edge_strength,
-    )
-    away_short_name = escape(_get_team_short_name(game["away_abbr"], game["away_name"]))
-    home_short_name = escape(_get_team_short_name(game["home_abbr"], game["home_name"]))
-    model_label = escape(str(probability.get("model_label", "") or "").strip())
-    goalie_label = escape(str(probability.get("goalie_label", "") or "").strip())
-    playoff_note = ""
-    if int(game.get("game_type", 0) or 0) == 3:
-        playoff_note = "<div class='live-games-probability__meta'>Regular-season calibrated model.</div>"
-
-    return (
-        f"<div class='live-games-probability live-games-probability--{panel_state}' style='{panel_style}'>"
-        "<div class='live-games-probability__labels'>"
-        f"<span class='live-games-probability__label live-games-probability__label--away live-games-probability__label--{away_label_state}' style='{away_label_style}'>{away_short_name} <strong>{away_pct}%</strong></span>"
-        f"<span class='live-games-probability__label live-games-probability__label--home live-games-probability__label--{home_label_state}' style='{home_label_style}'><strong>{home_pct}%</strong> {home_short_name}</span>"
-        "</div>"
-        f"<div class='live-games-probability__bar' style='{bar_style}'>"
-        f"<span class='live-games-probability__segment live-games-probability__segment--away live-games-probability__segment--{away_segment_state}' style='{away_segment_style}'></span>"
-        f"<span class='live-games-probability__segment live-games-probability__segment--home live-games-probability__segment--{home_segment_state}' style='{home_segment_style}'></span>"
-        f"<span class='live-games-probability__divider' style='left:{away_pct}%;'></span>"
-        "</div>"
-        f"<div class='live-games-probability__meta'>{model_label}</div>"
-        f"<div class='live-games-probability__meta'>{goalie_label}</div>"
-        f"{playoff_note}"
+        f"<div class='lgc-detail'>{detail_text}</div>"
+        f"{prob_section}"
         "</div>"
     )
 
@@ -920,29 +952,16 @@ def _render_live_games_tab() -> None:
         return
 
     for game in upcoming_games:
-        detail_bits = [game["start_label_cest"]]
-        if game.get("venue"):
-            detail_bits.append(game["venue"])
-        matchup_html = _build_live_game_matchup_html(game)
-        detail_html = escape(" • ".join(detail_bits))
+        card_html = _build_live_game_card_html(game)
         button_key = f"add_live_game_{game['game_id']}_{game['away_abbr']}_{game['home_abbr']}"
-        probability_html = _build_live_game_probability_html(game)
-
         matchup_col, action_col = st.columns([0.76, 0.24], gap="small")
         with matchup_col:
-            st.markdown(matchup_html, unsafe_allow_html=True)
-            st.markdown(f"<div class='live-games-detail'>{detail_html}</div>", unsafe_allow_html=True)
+            st.markdown(card_html, unsafe_allow_html=True)
         with action_col:
-            st.markdown("<div class='live-games-action-anchor live-games-action-anchor--tight'></div>", unsafe_allow_html=True)
+            st.markdown("<div class='lgc-btn-anchor'></div>", unsafe_allow_html=True)
             if st.button("Compare", key=button_key):
                 _add_live_game_to_comparison(game)
                 st.rerun()
-        st.markdown(probability_html, unsafe_allow_html=True)
-
-        st.markdown(
-            "<hr style='margin:2px 0 6px 0;border:none;border-top:1px solid #2a2a2a;'>",
-            unsafe_allow_html=True,
-        )
 
 
 def _render_live_games_players(
