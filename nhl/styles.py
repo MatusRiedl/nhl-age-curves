@@ -525,13 +525,20 @@ _CSS = """
         }
 
         /* Main chart toolbar */
+        div.element-container:has(.nhl-chart-toolbar) {
+            margin: 0 !important;
+            line-height: 0 !important;
+        }
+        div.element-container:has(.nhl-chart-toolbar) + div.element-container {
+            margin-top: 0 !important;
+        }
         .nhl-chart-toolbar {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 0.75rem;
             min-height: 40px !important;
-            margin: 0 0 0.4rem 0;
+            margin: 0 0 0.18rem 0;
         }
         .nhl-chart-toolbar__title {
             color: rgba(255, 255, 255, 0.90);
@@ -588,7 +595,7 @@ _CSS = """
             .nhl-chart-toolbar {
                 gap: 0.4rem;
                 min-height: 32px !important;
-                margin: 0 0 0.2rem 0;
+                margin: 0 0 0.1rem 0;
             }
             .nhl-chart-toolbar__title {
                 font-size: 0.84rem;

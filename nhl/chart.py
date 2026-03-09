@@ -1134,8 +1134,9 @@ def render_chart(
 
     share_button_id = f"nhl-share-btn-{abs(hash(chart_key))}"
     toolbar_id = f"nhl-chart-toolbar-{abs(hash(chart_key))}"
+    glow_style = _build_chart_glow_style(player_colors)
     st.markdown(
-        _build_chart_toolbar_markup(chart_header, share_button_id, toolbar_id),
+        _build_chart_toolbar_markup(chart_header, share_button_id, toolbar_id) + glow_style,
         unsafe_allow_html=True,
     )
 
@@ -1153,10 +1154,6 @@ def render_chart(
         ],
         "displaylogo": False,
     }
-
-    glow_style = _build_chart_glow_style(player_colors)
-    if glow_style:
-        st.markdown(glow_style, unsafe_allow_html=True)
 
     st.markdown("<div id='comparison-main-plotly'></div>", unsafe_allow_html=True)
 
