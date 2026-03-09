@@ -1074,6 +1074,39 @@ _CSS = """
             }
         }
 
+        /* Early overlay sidebar mode — stop reflow on foldables / cramped widths */
+        @media screen and (max-width: 1400px), screen and (max-width: 1600px) and (max-aspect-ratio: 11/10) {
+            :root {
+                --pp-overlay-sidebar-top: calc(env(safe-area-inset-top, 0px) + 3.75rem);
+            }
+            [data-testid="stAppViewContainer"] {
+                overflow-x: clip !important;
+            }
+            section[data-testid="stSidebar"] {
+                position: fixed !important;
+                inset: var(--pp-overlay-sidebar-top) auto 0 0 !important;
+                height: calc(100dvh - var(--pp-overlay-sidebar-top)) !important;
+                z-index: 1002 !important;
+            }
+            section[data-testid="stSidebar"] > div:first-child {
+                height: calc(100dvh - var(--pp-overlay-sidebar-top)) !important;
+                box-shadow: 18px 0 36px rgba(8, 12, 22, 0.42) !important;
+            }
+            section[data-testid="stMain"] {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            [data-testid="collapsedControl"] {
+                position: fixed !important;
+                top: calc(var(--pp-overlay-sidebar-top) + 0.35rem) !important;
+                left: 0.75rem !important;
+                z-index: 1003 !important;
+            }
+            [data-testid="stSidebarCollapseButton"] {
+                z-index: 1003 !important;
+            }
+        }
+
         /* ── Sidebar toggle: always visible ────────────────────────────── */
         [data-testid="stSidebarCollapseButton"] button,
         [data-testid="collapsedControl"] {
@@ -1175,7 +1208,7 @@ def get_header_logo_data_uri() -> str:
 def inject_css() -> None:
     """Inject the NHL Age Curves custom CSS into the Streamlit page.
 
-    Covers: sidebar brand logo styling, tighter top spacing, sidebar compact layout,
+    Covers: sidebar brand logo styling, tighter top spacing, sidebar compact/overlay layout,
     blue Add-Legend button override, compact controls toolbar styling,
     compact mobile header sizing,
     a real chart toolbar row with copy-link button, responsive stacking of the

@@ -239,10 +239,145 @@ def _inject_no_keyboard() -> None:
     )
 
 
+def _inject_sidebar_overlay_dismiss() -> None:
+    """Close the overlay sidebar when the user taps outside it on cramped screens.
+
+    Args:
+        None.
+
+    Returns:
+        None.
+    """
+    components.html(
+        """
+        <script>
+        (function() {
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
+            const overlayMedia = parentWindow.matchMedia(
+                '(max-width: 1400px), ((max-width: 1600px) and (max-aspect-ratio: 11/10))'
+            );
+
+            if (typeof parentWindow.__ppSidebarOverlayCleanup === 'function') {
+                parentWindow.__ppSidebarOverlayCleanup();
+            }
+
+            let backdrop = null;
+            let rafId = null;
+
+            function getSidebar() {
+                return doc.querySelector('section[data-testid="stSidebar"]');
+            }
+
+            function getCollapseButton() {
+                return doc.querySelector('[data-testid="stSidebarCollapseButton"] button');
+            }
+
+            function isSidebarOpen(sidebar) {
+                return !!sidebar && sidebar.getAttribute('aria-expanded') === 'true';
+            }
+
+            function removeBackdrop() {
+                if (backdrop) {
+                    backdrop.remove();
+                    backdrop = null;
+                }
+            }
+
+            function ensureBackdrop() {
+                if (backdrop && doc.body.contains(backdrop)) {
+                    return backdrop;
+                }
+
+                backdrop = doc.createElement('div');
+                backdrop.setAttribute('data-testid', 'ppSidebarOverlayBackdrop');
+                Object.assign(backdrop.style, {
+                    position: 'fixed',
+                    right: '0',
+                    bottom: '0',
+                    background: 'rgba(3, 8, 18, 0.22)',
+                    zIndex: '1001',
+                    pointerEvents: 'auto',
+                    touchAction: 'manipulation',
+                });
+                backdrop.addEventListener('pointerdown', function(event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const collapseButton = getCollapseButton();
+                    if (collapseButton) {
+                        collapseButton.click();
+                    }
+                });
+                doc.body.appendChild(backdrop);
+                return backdrop;
+            }
+
+            function updateBackdrop() {
+                const sidebar = getSidebar();
+                if (!overlayMedia.matches || !isSidebarOpen(sidebar)) {
+                    removeBackdrop();
+                    return;
+                }
+
+                const rect = sidebar.getBoundingClientRect();
+                const nextBackdrop = ensureBackdrop();
+                nextBackdrop.style.top = Math.max(0, rect.top) + 'px';
+                nextBackdrop.style.left = Math.max(0, rect.right) + 'px';
+            }
+
+            function scheduleUpdate() {
+                if (rafId !== null) {
+                    parentWindow.cancelAnimationFrame(rafId);
+                }
+                rafId = parentWindow.requestAnimationFrame(function() {
+                    rafId = null;
+                    updateBackdrop();
+                });
+            }
+
+            const observer = new MutationObserver(scheduleUpdate);
+            observer.observe(doc.body, {
+                attributes: true,
+                childList: true,
+                subtree: true,
+                attributeFilter: ['aria-expanded', 'style', 'class'],
+            });
+
+            parentWindow.addEventListener('resize', scheduleUpdate, { passive: true });
+            if (typeof overlayMedia.addEventListener === 'function') {
+                overlayMedia.addEventListener('change', scheduleUpdate);
+            } else if (typeof overlayMedia.addListener === 'function') {
+                overlayMedia.addListener(scheduleUpdate);
+            }
+
+            parentWindow.__ppSidebarOverlayCleanup = function() {
+                observer.disconnect();
+                parentWindow.removeEventListener('resize', scheduleUpdate, { passive: true });
+                if (typeof overlayMedia.removeEventListener === 'function') {
+                    overlayMedia.removeEventListener('change', scheduleUpdate);
+                } else if (typeof overlayMedia.removeListener === 'function') {
+                    overlayMedia.removeListener(scheduleUpdate);
+                }
+                if (rafId !== null) {
+                    parentWindow.cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
+                removeBackdrop();
+            };
+
+            scheduleUpdate();
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
+
 def render_sidebar() -> dict:
     """Render the sidebar and return the widget-derived chart cache keys."""
     with st.sidebar:
         _inject_no_keyboard()   # Prevent mobile keyboard on dropdowns
+        _inject_sidebar_overlay_dismiss()   # Close overlay sidebar when tapping outside it
         current_category = _sanitize_stat_category(st.session_state.get("stat_category"))
         st.session_state.stat_category = current_category
         if st.session_state.get("_stat_category_picker") != current_category:
