@@ -126,7 +126,7 @@ def render_controls() -> tuple:
     season_mode = st.session_state.get("chart_season", "All") != "All"
     games_mode = st.session_state.x_axis_mode == "Games Played" or season_mode
 
-    with st.expander("📊 Chart Controls", expanded=False):
+    with st.expander("Metric Selections", expanded=False):
         # ------------------------------------------------------------------
         # Row 1: Compact pill toolbar
         # ------------------------------------------------------------------

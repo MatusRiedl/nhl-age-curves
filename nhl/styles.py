@@ -233,6 +233,13 @@ _CSS = """
         [data-testid="stExpander"] details summary {
             padding-top: 0.4rem !important;
             padding-bottom: 0.4rem !important;
+            justify-content: center !important;
+        }
+        [data-testid="stExpander"] details summary p {
+            font-size: 1.08rem !important;
+            font-weight: 700 !important;
+            color: rgba(255, 255, 255, 0.80) !important;
+            letter-spacing: 0.01em !important;
         }
         [data-testid="stExpander"] details > div {
             padding-top: 0.25rem !important;
