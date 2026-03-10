@@ -470,7 +470,7 @@ _CSS = """
             line-height: 1.2;
         }
         div.element-container:has(.live-game-card) {
-            margin-bottom: 0 !important;
+            margin-bottom: 0.55rem !important;
         }
 
         /* Controls dropdowns: stack one per row on mobile */
@@ -572,6 +572,11 @@ _CSS = """
             }
         }
 
+        /* Match column gap between side-by-side player cards to prediction card gap */
+        [data-baseweb="tab-panel"] [data-testid="stHorizontalBlock"]:has(.comparison-player-card) {
+            column-gap: 1.1rem !important;
+        }
+
         /* Comparison panel cards */
         .comparison-card {
             padding: 0.5rem 0.25rem;
@@ -587,7 +592,7 @@ _CSS = """
             display: flex;
             align-items: flex-start;
             gap: 0.9rem;
-            margin: 0 0 0.85rem 0;
+            margin: 0 0 1.1rem 0;
             padding: 0.9rem;
             border: 1px solid rgba(70, 84, 122, 0.5);
             border-radius: 18px;
@@ -806,9 +811,9 @@ _CSS = """
             font-size: 0.74rem;
         }
 
-        /* Compact the dedicated right-rail stack */
+        /* Right-rail stack gap */
         div[data-testid="stVerticalBlock"]:has(> div.element-container:has(#comparison-right-rail)) {
-            gap: 0.18rem !important;
+            gap: 1.1rem !important;
         }
 
         /* Chart season selector moved into the comparison panel */
@@ -870,7 +875,7 @@ _CSS = """
             transition: box-shadow 0.3s ease, background 0.3s ease;
         }
         div.element-container:has(#comparison-detail-layout) {
-            margin: -2.2rem 0 0 0 !important;
+            margin: -1.65rem 0 0 0 !important;
             line-height: 0 !important;
         }
         div.element-container:has(#comparison-detail-layout) + div.element-container {
