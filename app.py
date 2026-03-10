@@ -213,31 +213,25 @@ else:
 # Returns (metric, do_cumul): do_cumul is already resolved (False for rate stats,
 # False in games_mode) so pipelines and chart don't need to recompute it.
 # =============================================================================
-_show_panel = True
-
 st.markdown("<div id='main-chart-layout'></div>", unsafe_allow_html=True)
 
-if _show_panel:
-    col_chart, col_stats = st.columns([62, 38], gap="small")
-else:
-    col_chart = st.container()
-    col_stats = None
+col_chart, col_stats = st.columns([62, 38], gap="small")
 
-season_slot = None
-predictions_slot = None
+# Define visual slots inside col_chart in top-to-bottom DOM order.
+# sub_col2 is filled immediately so render_controls() runs early (before pipeline).
+with col_chart:
+    chart_placeholder = st.container()
+    sub_col1, sub_col2 = st.columns([3, 7])
+    detail_placeholder = st.container()
 
-if col_stats is not None:
-    with col_stats:
-        st.markdown("<div id='comparison-right-rail'></div>", unsafe_allow_html=True)
-        season_slot = st.container()
-        controls_slot = st.container()
-        predictions_slot = st.container()
-    with controls_slot:
-        st.markdown("<div id='comparison-controls-panel'></div>", unsafe_allow_html=True)
-        metric, do_cumul = render_controls()
-else:
-    with col_chart:
-        metric, do_cumul = render_controls()
+with col_stats:
+    st.markdown("<div id='comparison-right-rail'></div>", unsafe_allow_html=True)
+    predictions_slot = st.container()
+
+# Must run before pipeline — produces metric and do_cumul.
+with sub_col2:
+    st.markdown("<div id='comparison-controls-panel'></div>", unsafe_allow_html=True)
+    metric, do_cumul = render_controls()
 
 # =============================================================================
 # Sidebar — renders player/team board and returns keys for chart cache-busting.
@@ -358,11 +352,10 @@ elif active_players:
 # seed players and teams without forcing the user through the sidebar.
 # Overview and Trophies render directly under the chart inside the left column.
 # =============================================================================
-if season_slot is not None:
-    with season_slot:
-        render_chart_season_picker(chart_season_options)
+with sub_col1:
+    render_chart_season_picker(chart_season_options)
 
-with col_chart:
+with chart_placeholder:
     render_chart(
         processed_dfs        = processed_dfs,
         metric               = metric,
@@ -385,23 +378,23 @@ with col_chart:
         share_params         = share_params,
     )
 
+with detail_placeholder:
     st.markdown("<div id='comparison-detail-layout'></div>", unsafe_allow_html=True)
     render_detail_tabs(
-        processed_dfs = processed_dfs,
-        players       = active_players,
-        teams         = st.session_state.teams,
-        peak_info     = peak_info,
-        metric        = metric,
-        stat_category = st.session_state.stat_category,
-        season_type   = st.session_state.season_type,
-        team_mode     = team_mode,
+        processed_dfs   = processed_dfs,
+        players         = active_players,
+        teams           = st.session_state.teams,
+        peak_info       = peak_info,
+        metric          = metric,
+        stat_category   = st.session_state.stat_category,
+        season_type     = st.session_state.season_type,
+        team_mode       = team_mode,
         selected_season = st.session_state.chart_season,
-        do_cumul      = do_cumul,
+        do_cumul        = do_cumul,
     )
 
-if predictions_slot is not None:
-    with predictions_slot:
-        render_predictions_panel()
+with predictions_slot:
+    render_predictions_panel()
 
 # =============================================================================
 # Footer
@@ -410,7 +403,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.94.5 -- 7,617 lines of Python<br>"
+    "Created by Iksperial. v0.95.0 -- 7,607 lines of Python<br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

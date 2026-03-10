@@ -818,11 +818,6 @@ _CSS = """
             font-size: 0.74rem;
         }
 
-        /* Right-rail stack gap */
-        div[data-testid="stVerticalBlock"]:has(> div.element-container:has(#comparison-right-rail)) {
-            gap: 1.1rem !important;
-        }
-
         /* Chart season selector moved into the comparison panel */
         div:has(> #comparison-season-filter) {
             margin: 0 !important;
