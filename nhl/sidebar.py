@@ -404,6 +404,11 @@ def render_sidebar() -> dict:
         ):
             show_app_guide()
 
+        st.markdown(
+            "<div class='comparison-panel-heading comparison-panel-heading--rail-title'"
+            " style='margin:0.5rem auto 0.3rem;'>Category</div>",
+            unsafe_allow_html=True,
+        )
         st.segmented_control(
             "Category",
             options=_VALID_STAT_CATEGORIES,
@@ -503,10 +508,15 @@ def _render_player_sidebar() -> dict:
         st.session_state.players[pid] = name
         st.session_state.roster_ver = ver + 1
 
+    st.markdown(
+        "<div class='comparison-panel-heading comparison-panel-heading--rail-title'"
+        " style='margin:0.5rem auto 0.3rem;'>Global Search</div>",
+        unsafe_allow_html=True,
+    )
     search_term = st.text_input(
         "Global Search",
         placeholder="e.g., McDavid, Crosby, Connor…",
-        label_visibility="visible",
+        label_visibility="collapsed",
         key=f"search_input_{st.session_state.search_ver}",
     )
 
@@ -550,17 +560,29 @@ def _render_player_sidebar() -> dict:
         top_50_label   = "Top 50 All-Time Skaters"
     _SENT = "— select a player —"
     st.session_state.top50_opts = top_50_dict
+    st.markdown(
+        f"<div class='comparison-panel-heading comparison-panel-heading--rail-title'"
+        f" style='margin:0.5rem auto 0.3rem;'>{top_50_label}</div>",
+        unsafe_allow_html=True,
+    )
     top_selected = st.selectbox(
         top_50_label,
         [_SENT] + list(top_50_dict.keys()),
         key=f"_top50_pick_{st.session_state.top50_ver}",
         on_change=_on_top50_select,
+        label_visibility="collapsed",
     )
 
+    st.markdown(
+        "<div class='comparison-panel-heading comparison-panel-heading--rail-title'"
+        " style='margin:0.5rem auto 0.3rem;'>Active Rosters</div>",
+        unsafe_allow_html=True,
+    )
     team_abbr = st.selectbox(
         "Active Rosters",
         list(ACTIVE_TEAMS.keys()),
         format_func=lambda x: f"{x} - {ACTIVE_TEAMS[x]}",
+        label_visibility="collapsed",
     )
     if team_abbr:
         st.markdown(
@@ -657,13 +679,18 @@ def _render_team_sidebar() -> dict:
             unsafe_allow_html=True,
         )
 
+    st.markdown(
+        "<div class='comparison-panel-heading comparison-panel-heading--rail-title'"
+        " style='margin:0.5rem auto 0.3rem;'>Team Comparison</div>",
+        unsafe_allow_html=True,
+    )
     _team_sel = st.selectbox(
         "Team Comparison",
         [_SENT] + _team_keys,
         format_func=lambda x: x if x == _SENT else f"{x} — {ACTIVE_TEAMS[x]}",
         key=f"_team_pick_{st.session_state.team_ver}",
         on_change=_on_team_select,
-        label_visibility="visible",
+        label_visibility="collapsed",
     )
 
     st.markdown("---")
