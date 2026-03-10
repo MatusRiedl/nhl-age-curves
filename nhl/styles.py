@@ -825,12 +825,12 @@ _CSS = """
 
         /* Chart season selector moved into the comparison panel */
         div:has(> #comparison-season-filter) {
-            margin: 0 0 0.02rem 0 !important;
+            margin: 0 !important;
             line-height: 0 !important;
         }
         div:has(> #comparison-season-filter) + div {
             margin-top: 0 !important;
-            margin-bottom: 0.08rem !important;
+            margin-bottom: 0 !important;
         }
         div:has(> #comparison-season-filter) + div .stSelectbox label {
             display: none !important;
@@ -838,12 +838,18 @@ _CSS = """
         div:has(> #comparison-season-filter) + div .stSelectbox {
             margin-bottom: 0 !important;
         }
+        div:has(> #comparison-season-filter) + div .stSelectbox [data-baseweb="select"] span {
+            font-weight: 700 !important;
+            font-size: 1.08rem !important;
+            color: rgba(255, 255, 255, 0.80) !important;
+            letter-spacing: 0.01em !important;
+        }
         div:has(> #comparison-controls-panel) {
             margin: 0 !important;
             line-height: 0 !important;
         }
         div:has(> #comparison-controls-panel) + div {
-            margin-top: -0.42rem !important;
+            margin-top: -0.55rem !important;
             margin-bottom: 0 !important;
         }
         div:has(> #comparison-controls-panel) + div [data-testid="stExpander"] {

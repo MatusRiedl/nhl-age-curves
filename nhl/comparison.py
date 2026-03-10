@@ -240,7 +240,7 @@ def _format_chart_season_label(value: str | int) -> str:
         Human-readable label such as ``All`` or ``2024-25``.
     """
     if str(value) == "All":
-        return "All"
+        return "Whole career"
     try:
         season_year = int(value)
         return f"{season_year}-{str(season_year + 1)[2:]}"
@@ -393,15 +393,7 @@ def render_chart_season_picker(chart_season_options: list[str | int] | None) -> 
     if not chart_season_options:
         return
 
-    st.markdown(
-        (
-            "<div id='comparison-season-filter'>"
-            "<div class='comparison-panel-heading comparison-panel-heading--rail-title "
-            "comparison-panel-heading--season'>Chart season</div>"
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
+    st.markdown("<div id='comparison-season-filter'></div>", unsafe_allow_html=True)
     _prime_chart_season_picker(chart_season_options)
     st.selectbox(
         "Chart season",
