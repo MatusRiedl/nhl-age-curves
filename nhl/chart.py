@@ -25,7 +25,10 @@ import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
-from nhl.constants import RATE_STATS, TEAM_RATE_STATS
+from nhl.constants import (
+    RATE_STATS, TEAM_RATE_STATS,
+    SKATER_COLORS, GOALIE_COLORS, TEAM_COLORS,
+)
 from nhl.dialog import show_season_details, show_team_game_details
 
 
@@ -53,6 +56,22 @@ SEASON_MARKER_GLOW_SIZE = 24
 SEASON_MARKER_GLOW_OPACITY = 0.101
 SEASON_STEM_WIDTH = 2
 SEASON_MARKER_OUTLINE = "rgba(255, 255, 255, 0.78)"
+
+
+def _palette_for_category(stat_category: str) -> list[str]:
+    """Return the chart color palette for the active stat category.
+
+    Args:
+        stat_category: One of ``Skater``, ``Goalie``, or ``Team``.
+
+    Returns:
+        list[str]: Ordered list of hex color strings for the colorway.
+    """
+    if stat_category == "Goalie":
+        return GOALIE_COLORS
+    if stat_category == "Team":
+        return TEAM_COLORS
+    return SKATER_COLORS
 
 
 def _store_player_chart_colors(player_colors: dict[str, str | None]) -> None:
@@ -876,14 +895,20 @@ def render_chart(
         )
 
     # Apply visual conventions per trace
+    _palette = _palette_for_category(stat_category)
     player_colors = {}  # Map player name -> color
     proj_traces = []  # Store (x, y, color, legendgroup) for projection glow traces
-    
+    _palette_idx = 0
+
     # First pass: capture player colors and projection data
     for trace in fig.data:
         if "(Proj)" not in trace.name and not _is_baseline_trace(trace.name):
-            # This is a real player line - capture its color
-            player_colors[trace.name] = trace.line.color or getattr(trace.marker, "color", None)
+            # Prefer the color px assigned; fall back to palette by index.
+            assigned = trace.line.color or getattr(trace.marker, "color", None)
+            if not assigned:
+                assigned = _palette[_palette_idx % len(_palette)]
+                _palette_idx += 1
+            player_colors[trace.name] = assigned
             trace.legendgroup = trace.name
         elif _is_baseline_trace(trace.name):
             trace.legendgroup = trace.name
@@ -952,8 +977,10 @@ def render_chart(
                 )
 
 
+    _active_palette = _palette_for_category(stat_category)
     fig.update_layout(
         uirevision  = 'constant',
+        colorway    = _active_palette,
         margin      = dict(l=6, r=6, t=18, b=6 if not team_mode else 14),
         height      = 430,
         font        = dict(size=16),

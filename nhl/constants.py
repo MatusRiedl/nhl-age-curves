@@ -271,3 +271,49 @@ STAT_FLOORS: dict[str, float] = {
 Per-metric lower bounds applied during projection.
 +/- has a symmetric floor (-60) to mirror its ceiling (60).
 """
+
+# ---------------------------------------------------------------------------
+# Chart color palettes — one per stat category
+# ---------------------------------------------------------------------------
+
+SKATER_COLORS: list[str] = [
+    "#4FC3F7",  # light blue
+    "#29B6F6",  # sky blue
+    "#26C6DA",  # cyan
+    "#4DD0E1",  # teal cyan
+    "#4DB6AC",  # teal
+    "#66BB6A",  # green
+    "#80CBC4",  # seafoam
+    "#81D4FA",  # pale blue
+    "#B2EBF2",  # very pale cyan
+    "#A5D6A7",  # pale green
+]
+"""Cool-toned palette (blues / greens / cyans) for skater traces."""
+
+GOALIE_COLORS: list[str] = [
+    "#FFA726",  # orange
+    "#FF7043",  # deep orange
+    "#EF5350",  # red
+    "#FFCA28",  # amber
+    "#FF8A65",  # light orange
+    "#FFB300",  # golden
+    "#F4511E",  # burnt orange
+    "#E53935",  # crimson
+    "#FFCC02",  # yellow
+    "#FF6E40",  # coral
+]
+"""Warm-toned palette (oranges / reds / yellows) for goalie traces."""
+
+TEAM_COLORS: list[str] = [
+    "#CE93D8",  # light purple
+    "#BA68C8",  # medium purple
+    "#F48FB1",  # pink
+    "#F06292",  # hot pink
+    "#FFFFFF",  # white
+    "#E1BEE7",  # pale lavender
+    "#FCE4EC",  # pale pink
+    "#AB47BC",  # violet
+    "#EC407A",  # rose
+    "#E040FB",  # bright purple
+]
+"""High-contrast palette (purples / pinks / whites) for team traces."""
