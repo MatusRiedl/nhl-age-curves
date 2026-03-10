@@ -223,6 +223,11 @@ _CSS = """
             width: 18px !important;
             height: 18px !important;
         }
+        /* Dim sidebar selectbox value text to match text-input muted tone */
+        [data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] > div > div:first-child,
+        [data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] > div > div:first-child * {
+            color: rgba(250, 250, 250, 0.55) !important;
+        }
 
         /* Compact header and controls expander — reduce vertical whitespace */
         [data-testid="stExpander"] details summary {
