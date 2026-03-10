@@ -262,6 +262,18 @@ _CSS = """
             gap: 0.25rem !important;
         }
 
+        /* Metric Selections popover — widen so all dropdown labels are fully visible */
+        [data-testid="stPopoverBody"] {
+            width: 640px !important;
+            min-width: 640px !important;
+        }
+        @media (max-width: 768px) {
+            [data-testid="stPopoverBody"] {
+                width: 94vw !important;
+                min-width: 0 !important;
+            }
+        }
+
         /* Controls toolbar: muted unavailable pills */
         .controls-toolbar-muted {
             display: flex;

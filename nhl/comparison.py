@@ -912,7 +912,7 @@ def _get_team_short_name(team_abbr: str, fallback_name: str) -> str:
 
 def _render_live_games_tab() -> None:
     """Render the shared right-rail predictions cards for upcoming games."""
-    upcoming_games = get_upcoming_games(limit=4)
+    upcoming_games = get_upcoming_games(limit=5)
     if not upcoming_games:
         st.info("No upcoming NHL games found right now.")
         return
