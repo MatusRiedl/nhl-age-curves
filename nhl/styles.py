@@ -972,6 +972,10 @@ _CSS = """
                 flex-direction: column;
                 gap: 0.7rem;
                 padding: 0.8rem;
+                margin-bottom: 0.55rem;
+            }
+            div.element-container:has(.live-game-card) {
+                margin-bottom: 1.1rem !important;
             }
             .comparison-player-card__media {
                 flex-basis: auto;
