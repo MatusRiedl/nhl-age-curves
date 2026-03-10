@@ -562,7 +562,7 @@ _CSS = """
             .nhl-chart-toolbar {
                 gap: 0.4rem;
                 min-height: 32px !important;
-                margin: 0 0 0.1rem 0;
+                margin: 3.75rem 0 0.1rem 0;
             }
             .nhl-chart-toolbar__title {
                 font-size: 0.84rem;
