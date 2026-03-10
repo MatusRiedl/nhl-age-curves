@@ -478,7 +478,11 @@ def _select_best_skater(skaters: list[dict]) -> dict | None:
 
 
 def _select_best_goalie(goalies: list[dict]) -> dict | None:
-    """Pick the best-save-percentage goalie with sane fallbacks.
+    """Pick the franchise starter from a team goalie list.
+
+    Sorting priority: minimum 6 GP (filters tourist call-ups), then wins
+    (identifies the workhorse starter), then save percentage as a tiebreaker,
+    then playerId for a stable final ordering.
 
     Args:
         goalies: List of normalized goalie rows from ``_fetch_club_stats()``.
@@ -492,10 +496,9 @@ def _select_best_goalie(goalies: list[dict]) -> dict | None:
     return max(
         goalies,
         key=lambda goalie: (
-            _coerce_save_percentage(goalie.get("savePercentage", 0.0)) > 0.0,
-            _coerce_save_percentage(goalie.get("savePercentage", 0.0)),
-            int(goalie.get("gamesPlayed", 0)),
+            int(goalie.get("gamesPlayed", 0)) > 5,
             int(goalie.get("wins", 0)),
+            _coerce_save_percentage(goalie.get("savePercentage", 0.0)),
             int(goalie.get("playerId", 0)),
         ),
     )
