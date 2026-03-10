@@ -838,7 +838,8 @@ _CSS = """
         div:has(> #comparison-season-filter) + div .stSelectbox {
             margin-bottom: 0 !important;
         }
-        div:has(> #comparison-season-filter) + div .stSelectbox [data-baseweb="select"] span {
+        div:has(> #comparison-season-filter) + div .stSelectbox [data-baseweb="select"] > div > div:first-child,
+        div:has(> #comparison-season-filter) + div .stSelectbox [data-baseweb="select"] > div > div:first-child * {
             font-weight: 700 !important;
             font-size: 1.08rem !important;
             color: rgba(255, 255, 255, 0.80) !important;
