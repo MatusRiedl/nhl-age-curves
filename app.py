@@ -221,7 +221,7 @@ col_chart, col_stats = st.columns([62, 38], gap="small")
 # sub_col2 is filled immediately so render_controls() runs early (before pipeline).
 with col_chart:
     chart_placeholder = st.container()
-    sub_col1, sub_col2 = st.columns([1, 2])
+    sub_col1, sub_col2 = st.columns([1.96, 2])
     detail_placeholder = st.container()
 
 with col_stats:
