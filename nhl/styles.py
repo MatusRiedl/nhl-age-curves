@@ -353,6 +353,7 @@ _CSS = """
 
         /* === Unified matchup cards === */
         .live-game-card {
+            position: relative;
             background:
                 linear-gradient(
                     105deg,
@@ -367,6 +368,27 @@ _CSS = """
             margin-bottom: 0.55rem;
             padding: 0.55rem 0.65rem 0.45rem;
             box-sizing: border-box;
+            cursor: default;
+            transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+        }
+        .live-game-card:hover,
+        .live-game-card:focus-within,
+        .live-game-card:focus {
+            transform: translateY(-3px);
+            box-shadow:
+                0 10px 22px rgba(0, 0, 0, 0.26),
+                inset 0 0 80px var(--lgc-inset-glow, transparent);
+            border-color: rgba(255, 255, 255, 0.16);
+            outline: none;
+        }
+        .lgc-header {
+            position: relative;
+            display: block;
+            margin-bottom: 0.34rem;
+        }
+        .lgc-header__main {
+            min-width: 0;
+            padding-right: 0;
         }
         .lgc-matchup {
             display: flex;
@@ -380,10 +402,51 @@ _CSS = """
             color: #8c8c8c;
             font-size: 0.9rem;
             line-height: 1.2;
-            margin-bottom: 0.38rem;
+            min-width: 0;
+        }
+        .lgc-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: flex-start;
+            gap: 0.14rem;
+            min-width: 220px;
+            max-width: min(280px, calc(100vw - 4rem));
+            text-align: left;
+        }
+        .lgc-meta-popover {
+            position: absolute;
+            top: 0.1rem;
+            right: 0;
+            z-index: 4;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(6px);
+            pointer-events: none;
+            transition: opacity 140ms ease, visibility 140ms ease, transform 140ms ease;
+        }
+        .live-game-card:hover .lgc-meta-popover,
+        .live-game-card:focus-within .lgc-meta-popover,
+        .live-game-card:focus .lgc-meta-popover {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        .lgc-meta-popover .lgc-meta {
+            padding: 0.48rem 0.58rem;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 10px;
+            background: rgba(8, 13, 21, 0.96);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
+            backdrop-filter: blur(10px);
+        }
+        .lgc-meta-popover .live-games-probability__meta {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #c3c3c3;
         }
         .lgc-prob-section {
-            /* probability labels + bar + meta embedded in card */
+            /* probability labels + bar embedded below the header block */
         }
         .live-games-probability--muted {
             color: #8c8c8c;
@@ -484,16 +547,49 @@ _CSS = """
             z-index: 2;
         }
         .live-games-probability__meta {
-            color: #9a9a9a;
-            font-size: 0.78rem;
+            color: #b1b1b1;
+            font-size: 0.75rem;
             line-height: 1.2;
+            overflow-wrap: anywhere;
+        }
+        .live-games-probability__meta--playoff {
+            margin-top: 0.18rem;
+            padding-top: 0.18rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
         }
         div.element-container:has(.live-game-card) {
             margin-bottom: 0.55rem !important;
         }
 
+        @media (max-width: 1200px) {
+            .lgc-meta {
+                max-width: min(250px, calc(100vw - 4rem));
+            }
+        }
+
         /* Controls dropdowns: stack one per row on mobile */
-        @media (max-width: 768px) {
+        @media (hover: none), (max-width: 768px) {
+            .live-game-card {
+                transform: none !important;
+            }
+            .lgc-meta-popover {
+                position: static;
+                opacity: 1;
+                visibility: visible;
+                transform: none;
+                pointer-events: auto;
+                margin-top: 0.35rem;
+            }
+            .lgc-meta-popover .lgc-meta {
+                min-width: 0;
+                max-width: none;
+                padding: 0;
+                border: 0;
+                border-radius: 0;
+                background: transparent;
+                box-shadow: none;
+                backdrop-filter: none;
+            }
             div:has(> #controls-dropdowns) + div [data-testid="stHorizontalBlock"] {
                 flex-wrap: wrap !important;
             }

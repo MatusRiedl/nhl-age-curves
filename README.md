@@ -28,7 +28,7 @@ https://nhl-age-curves.streamlit.app/
 
 * **Season Snapshot:** In single-season mode, click any game to see the exact matchup card with both teams, logos, final score, venue/time when available, plus the player or team one-game stat line. Age-mode and projection clicks still keep the broader season/career context.
 
-* **Upcoming Games Predictions Panel:** A dedicated right-rail panel lists the next 4 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and keeps the cards read-only so they function as matchup context instead of a quick-add workflow.
+* **Upcoming Games Predictions Panel:** A dedicated right-rail panel lists the next 6 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and keeps the cards read-only so they function as matchup context instead of a quick-add workflow.
 
 * **Pregame Win Probability:** The right-rail predictions panel also shows a pregame away/home win estimate for each upcoming matchup. The base probability comes from an offline-trained logistic regression on the last 5 completed NHL regular seasons, then a capped goalie Save% proxy is layered on top at runtime.
 

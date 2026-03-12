@@ -71,7 +71,7 @@ def get_live_or_recent_game() -> tuple[str, str] | None:
 
 
 @st.cache_data(ttl=300)
-def get_upcoming_games(limit: int = 4, days_ahead: int = 14) -> list[dict]:
+def get_upcoming_games(limit: int = 6, days_ahead: int = 14) -> list[dict]:
     """Return the next few upcoming games for the Live games tab."""
     if limit <= 0:
         return []

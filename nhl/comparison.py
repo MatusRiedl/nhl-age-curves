@@ -850,7 +850,16 @@ def _build_live_game_card_html(game: dict) -> str:
         goalie_label = escape(str(probability.get("goalie_label", "") or "").strip())
         playoff_note = ""
         if int(game.get("game_type", 0) or 0) == 3:
-            playoff_note = "<div class='live-games-probability__meta'>Regular-season calibrated model.</div>"
+            playoff_note = "<div class='live-games-probability__meta live-games-probability__meta--playoff'>Regular-season calibrated model.</div>"
+        meta_block = (
+            "<div class='lgc-meta-popover'>"
+            "<div class='lgc-meta'>"
+            f"<div class='live-games-probability__meta'>{model_label}</div>"
+            f"<div class='live-games-probability__meta'>{goalie_label}</div>"
+            f"{playoff_note}"
+            "</div>"
+            "</div>"
+        )
 
         prob_section = (
             "<div class='lgc-prob-section'>"
@@ -863,9 +872,6 @@ def _build_live_game_card_html(game: dict) -> str:
             f"<span class='live-games-probability__segment live-games-probability__segment--home live-games-probability__segment--{home_segment_state}' style='{home_segment_style}'></span>"
             f"<span class='live-games-probability__divider' style='left:{away_pct}%;'></span>"
             "</div>"
-            f"<div class='live-games-probability__meta'>{model_label}</div>"
-            f"<div class='live-games-probability__meta'>{goalie_label}</div>"
-            f"{playoff_note}"
             "</div>"
         )
         card_style = escape(
@@ -875,6 +881,7 @@ def _build_live_game_card_html(game: dict) -> str:
             quote=True,
         )
     else:
+        meta_block = ""
         prob_section = "<div class='lgc-prob-section live-games-probability--muted'>Estimate unavailable.</div>"
         card_style = ""
         panel_state = "no-prob"
@@ -883,7 +890,9 @@ def _build_live_game_card_html(game: dict) -> str:
     home_short_esc = escape(home_short_name)
 
     return (
-        f"<div class='live-game-card live-game-card--{panel_state}' style='{card_style}'>"
+        f"<div class='live-game-card live-game-card--{panel_state}' style='{card_style}' tabindex='0'>"
+        "<div class='lgc-header'>"
+        "<div class='lgc-header__main'>"
         "<div class='lgc-matchup'>"
         f"<img src='{away_logo}' height='26' style='vertical-align:middle;'>"
         f"<strong>{away_short_esc}</strong>"
@@ -892,6 +901,9 @@ def _build_live_game_card_html(game: dict) -> str:
         f"<strong>{home_short_esc}</strong>"
         "</div>"
         f"<div class='lgc-detail'>{detail_text}</div>"
+        "</div>"
+        f"{meta_block}"
+        "</div>"
         f"{prob_section}"
         "</div>"
     )
@@ -912,7 +924,7 @@ def _get_team_short_name(team_abbr: str, fallback_name: str) -> str:
 
 def _render_live_games_tab() -> None:
     """Render the shared right-rail predictions cards for upcoming games."""
-    upcoming_games = get_upcoming_games(limit=5)
+    upcoming_games = get_upcoming_games(limit=6)
     if not upcoming_games:
         st.info("No upcoming NHL games found right now.")
         return
