@@ -277,43 +277,43 @@ Per-metric lower bounds applied during projection.
 # ---------------------------------------------------------------------------
 
 SKATER_COLORS: list[str] = [
-    "#4FC3F7",  # light blue
+    "#4FC3F7",  # electric blue
+    "#76FF03",  # neon lime
     "#29B6F6",  # sky blue
-    "#26C6DA",  # cyan
-    "#4DD0E1",  # teal cyan
-    "#4DB6AC",  # teal
-    "#66BB6A",  # green
-    "#80CBC4",  # seafoam
-    "#81D4FA",  # pale blue
-    "#B2EBF2",  # very pale cyan
-    "#A5D6A7",  # pale green
+    "#00E5A8",  # neon mint
+    "#00E5FF",  # neon cyan
+    "#B2FF59",  # lime glow
+    "#40C4FF",  # bright azure
+    "#64FFDA",  # aqua mint
+    "#18FFFF",  # bright cyan
+    "#AEEA00",  # chartreuse
 ]
-"""Cool-toned palette (blues / greens / cyans) for skater traces."""
+"""Alternating neon blue/green palette for skater traces."""
 
 GOALIE_COLORS: list[str] = [
-    "#FFA726",  # orange
-    "#FF7043",  # deep orange
-    "#EF5350",  # red
-    "#FFCA28",  # amber
-    "#FF8A65",  # light orange
-    "#FFB300",  # golden
-    "#F4511E",  # burnt orange
-    "#E53935",  # crimson
-    "#FFCC02",  # yellow
-    "#FF6E40",  # coral
+    "#FFB300",  # neon amber
+    "#FF5252",  # neon red
+    "#FFD740",  # bright gold
+    "#FF6E40",  # coral orange
+    "#FFAB40",  # vivid orange
+    "#FF4081",  # hot pink accent
+    "#FFC400",  # golden yellow
+    "#FF7043",  # sunset orange
+    "#FF8A65",  # bright salmon
+    "#F50057",  # raspberry neon
 ]
-"""Warm-toned palette (oranges / reds / yellows) for goalie traces."""
+"""Alternating neon warm palette for goalie traces with stronger separation."""
 
 TEAM_COLORS: list[str] = [
-    "#CE93D8",  # light purple
-    "#BA68C8",  # medium purple
-    "#F48FB1",  # pink
-    "#F06292",  # hot pink
-    "#FFFFFF",  # white
-    "#E1BEE7",  # pale lavender
-    "#FCE4EC",  # pale pink
-    "#AB47BC",  # violet
-    "#EC407A",  # rose
-    "#E040FB",  # bright purple
+    "#7C4DFF",  # vivid violet
+    "#536DFE",  # electric indigo
+    "#B388FF",  # bright lavender
+    "#448AFF",  # cobalt blue
+    "#9575CD",  # soft violet
+    "#5C6BC0",  # indigo blue
+    "#7E57C2",  # amethyst
+    "#64B5F6",  # cool neon blue
+    "#651FFF",  # deep electric violet
+    "#7986CB",  # periwinkle
 ]
-"""High-contrast palette (purples / pinks / whites) for team traces."""
+"""Alternating neon blue-violet palette for team traces."""

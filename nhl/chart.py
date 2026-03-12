@@ -16,6 +16,8 @@ Imports from project:
     nhl.dialog    — show_season_details
 """
 
+import colorsys
+import hashlib
 import json
 from html import escape
 
@@ -27,7 +29,6 @@ import streamlit.components.v1 as components
 
 from nhl.constants import (
     RATE_STATS, TEAM_RATE_STATS,
-    SKATER_COLORS, GOALIE_COLORS, TEAM_COLORS,
 )
 from nhl.dialog import show_season_details, show_team_game_details
 
@@ -56,6 +57,45 @@ SEASON_MARKER_GLOW_SIZE = 24
 SEASON_MARKER_GLOW_OPACITY = 0.101
 SEASON_STEM_WIDTH = 2
 SEASON_MARKER_OUTLINE = "rgba(255, 255, 255, 0.78)"
+TRACE_COLOR_MIN_DISTANCE = {
+    "Skater": 90.0,
+    "Goalie": 80.0,
+    "Team": 90.0,
+}
+DISTINCT_TRACE_COLOR_ATTEMPTS = 40
+GOLDEN_RATIO_HUE_STEP = 0.618033988749895
+CATEGORY_TRACE_STARTERS = {
+    "Skater": [
+        "#35D8FF",
+        "#84FF2E",
+        "#FF6B6B",
+        "#C56BFF",
+        "#FFC857",
+        "#23E0B5",
+        "#FF8A3D",
+        "#F76FD6",
+    ],
+    "Goalie": [
+        "#FF7A1A",
+        "#FFE14A",
+        "#FF5C8A",
+        "#69C9FF",
+        "#B67AFF",
+        "#31D8A5",
+        "#FFB347",
+        "#F7FF6A",
+    ],
+    "Team": [
+        "#FF5FD2",
+        "#7AD7FF",
+        "#FFD166",
+        "#71FF70",
+        "#FF7F63",
+        "#B58CFF",
+        "#2DE2C6",
+        "#FF97C7",
+    ],
+}
 
 
 def _palette_for_category(stat_category: str) -> list[str]:
@@ -67,11 +107,164 @@ def _palette_for_category(stat_category: str) -> list[str]:
     Returns:
         list[str]: Ordered list of hex color strings for the colorway.
     """
-    if stat_category == "Goalie":
-        return GOALIE_COLORS
-    if stat_category == "Team":
-        return TEAM_COLORS
-    return SKATER_COLORS
+    return list(CATEGORY_TRACE_STARTERS.get(stat_category, ["#4F8FFF"]))
+
+
+def _rgb_to_hex(red: int, green: int, blue: int) -> str:
+    """Convert integer RGB channels into an uppercase hex color string."""
+    return f"#{red:02X}{green:02X}{blue:02X}"
+
+
+def _hex_to_rgb(color: str | None) -> tuple[int, int, int] | None:
+    """Convert one #RRGGBB string into integer RGB channels."""
+    clean = str(color or "").strip()
+    if not (clean.startswith("#") and len(clean) == 7):
+        return None
+    try:
+        return (
+            int(clean[1:3], 16),
+            int(clean[3:5], 16),
+            int(clean[5:7], 16),
+        )
+    except ValueError:
+        return None
+
+
+def _color_distance(color_a: str | None, color_b: str | None) -> float | None:
+    """Return Euclidean RGB distance between two hex colors."""
+    rgb_a = _hex_to_rgb(color_a)
+    rgb_b = _hex_to_rgb(color_b)
+    if rgb_a is None or rgb_b is None:
+        return None
+    return sum((a - b) ** 2 for a, b in zip(rgb_a, rgb_b)) ** 0.5
+
+
+def _min_color_distance_to_assigned(candidate: str, assigned_colors: list[str]) -> float | None:
+    """Return the smallest distance from one candidate color to assigned colors."""
+    if not assigned_colors:
+        return None
+
+    distances = [
+        distance
+        for assigned in assigned_colors
+        if (distance := _color_distance(candidate, assigned)) is not None
+    ]
+    return min(distances) if distances else None
+
+
+def _build_seeded_trace_color(seed_text: str, category: str, attempt: int = 0) -> str:
+    """Return one bright, deterministic, pseudo-random hex color for a trace."""
+    digest = hashlib.sha256(f"{category}|{seed_text}|{attempt}".encode("utf-8")).digest()
+    hue = (
+        (int.from_bytes(digest[:2], "big") / 65535.0)
+        + (attempt * GOLDEN_RATIO_HUE_STEP)
+    ) % 1.0
+
+    base_saturation = {
+        "Skater": 0.78,
+        "Goalie": 0.74,
+        "Team": 0.82,
+    }.get(category, 0.78)
+    base_lightness = {
+        "Skater": 0.60,
+        "Goalie": 0.62,
+        "Team": 0.58,
+    }.get(category, 0.60)
+
+    saturation = base_saturation + (((digest[2] / 255.0) - 0.5) * 0.14)
+    lightness = base_lightness + (((digest[3] / 255.0) - 0.5) * 0.12)
+    saturation = min(max(saturation, 0.68), 0.90)
+    lightness = min(max(lightness, 0.50), 0.70)
+
+    red, green, blue = colorsys.hls_to_rgb(hue, lightness, saturation)
+    return _rgb_to_hex(round(red * 255), round(green * 255), round(blue * 255))
+
+
+def _pick_next_distinct_trace_color(
+    seed_text: str,
+    assigned_colors: list[str],
+    category: str,
+) -> str:
+    """Pick a deterministic pseudo-random color that stays distinct from prior traces."""
+    min_distance = float(TRACE_COLOR_MIN_DISTANCE.get(category, 85.0))
+    starter_colors = _palette_for_category(category)
+    if not assigned_colors and starter_colors:
+        return starter_colors[0]
+
+    best_candidate = starter_colors[0] if starter_colors else "#4F8FFF"
+    best_distance = -1.0
+
+    for candidate in starter_colors:
+        candidate_min_distance = _min_color_distance_to_assigned(candidate, assigned_colors)
+        if candidate_min_distance is None or candidate_min_distance >= min_distance:
+            return candidate
+        if candidate_min_distance > best_distance:
+            best_candidate = candidate
+            best_distance = candidate_min_distance
+
+    for attempt in range(DISTINCT_TRACE_COLOR_ATTEMPTS):
+        candidate = _build_seeded_trace_color(seed_text=seed_text, category=category, attempt=attempt)
+        candidate_min_distance = _min_color_distance_to_assigned(candidate, assigned_colors)
+        if candidate_min_distance is None:
+            return candidate
+
+        if candidate_min_distance >= min_distance:
+            return candidate
+        if candidate_min_distance > best_distance:
+            best_candidate = candidate
+            best_distance = candidate_min_distance
+
+    return best_candidate
+
+
+def _build_trace_color_map(final_df: pd.DataFrame, stat_category: str, team_mode: bool) -> dict[str, str]:
+    """Build a stable real-trace color map in first-appearance order."""
+    if final_df.empty or "Player" not in final_df.columns:
+        return {}
+
+    source_df = final_df[["Player", "BaseName"]].copy() if "BaseName" in final_df.columns else final_df[["Player"]].copy()
+    if "BaseName" not in source_df.columns:
+        source_df["BaseName"] = source_df["Player"]
+
+    ordered_entries: list[tuple[str, str]] = []
+    seen_players: set[str] = set()
+    for row in source_df[["Player", "BaseName"]].itertuples(index=False, name=None):
+        player_name = str(row[0])
+        base_name = player_name if len(row) <= 1 or pd.isna(row[1]) else str(row[1])
+        if player_name in seen_players:
+            continue
+        if "(Proj)" in player_name or _is_baseline_trace(player_name):
+            continue
+        seen_players.add(player_name)
+        ordered_entries.append((player_name, base_name))
+
+    trace_color_map: dict[str, str] = {}
+    assigned_colors: list[str] = []
+    for player_name, base_name in ordered_entries:
+        selected_color = _pick_next_distinct_trace_color(
+            seed_text=f"{base_name}|{player_name}",
+            assigned_colors=assigned_colors,
+            category=stat_category,
+        )
+        trace_color_map[player_name] = selected_color
+        assigned_colors.append(selected_color)
+    return trace_color_map
+
+
+def _build_plotly_color_map(final_df: pd.DataFrame, trace_color_map: dict[str, str]) -> dict[str, str]:
+    """Extend the real-trace color map with projection aliases for Plotly Express."""
+    plotly_color_map = dict(trace_color_map)
+    if final_df.empty or "Player" not in final_df.columns:
+        return plotly_color_map
+
+    for player_name in final_df["Player"].dropna():
+        display_name = str(player_name)
+        if "(Proj)" not in display_name:
+            continue
+        base_name = display_name.replace(" (Proj)", "")
+        if base_name in trace_color_map:
+            plotly_color_map[display_name] = trace_color_map[base_name]
+    return plotly_color_map
 
 
 def _store_player_chart_colors(player_colors: dict[str, str | None]) -> None:
@@ -869,6 +1062,12 @@ def render_chart(
         games_mode=games_mode,
         selected_season=selected_season,
     )
+    trace_color_map = _build_trace_color_map(
+        final_df=final_df,
+        stat_category=stat_category,
+        team_mode=team_mode,
+    )
+    plotly_color_map = _build_plotly_color_map(final_df, trace_color_map)
 
     # ------------------------------------------------------------------
     # Build Plotly figure
@@ -879,6 +1078,7 @@ def render_chart(
             x           = x_col,
             y           = metric,
             color       = "Player",
+            color_discrete_map = plotly_color_map,
             custom_data = custom_cols,
             template    = "plotly_dark",
         )
@@ -888,6 +1088,7 @@ def render_chart(
             x           = x_col,
             y           = metric,
             color       = "Player",
+            color_discrete_map = plotly_color_map,
             custom_data = custom_cols,
             markers     = True,
             template    = "plotly_dark",
@@ -895,20 +1096,16 @@ def render_chart(
         )
 
     # Apply visual conventions per trace
-    _palette = _palette_for_category(stat_category)
-    player_colors = {}  # Map player name -> color
+    player_colors = dict(trace_color_map)  # Map player name -> explicit chart color
     proj_traces = []  # Store (x, y, color, legendgroup) for projection glow traces
-    _palette_idx = 0
 
-    # First pass: capture player colors and projection data
+    # First pass: wire legend groups and capture projection data
     for trace in fig.data:
         if "(Proj)" not in trace.name and not _is_baseline_trace(trace.name):
-            # Prefer the color px assigned; fall back to palette by index.
-            assigned = trace.line.color or getattr(trace.marker, "color", None)
-            if not assigned:
-                assigned = _palette[_palette_idx % len(_palette)]
-                _palette_idx += 1
-            player_colors[trace.name] = assigned
+            assigned = player_colors.get(trace.name)
+            if assigned:
+                trace.line.color = assigned
+                trace.marker.color = assigned
             trace.legendgroup = trace.name
         elif _is_baseline_trace(trace.name):
             trace.legendgroup = trace.name
@@ -976,8 +1173,7 @@ def render_chart(
                     line_width=0,
                 )
 
-
-    _active_palette = _palette_for_category(stat_category)
+    _active_palette = list(trace_color_map.values()) or _palette_for_category(stat_category)
     fig.update_layout(
         uirevision  = 'constant',
         colorway    = _active_palette,
