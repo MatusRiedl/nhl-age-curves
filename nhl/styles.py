@@ -749,6 +749,32 @@ _CSS = """
             box-shadow:
                 inset 0 0 80px var(--pc-inset-glow, transparent),
                 0 12px 24px rgba(0, 0, 0, 0.16);
+            transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+        }
+        .comparison-card-shell {
+            display: block;
+        }
+        .comparison-card-shell--clickable {
+            display: block;
+            cursor: pointer;
+            outline: none;
+        }
+        .comparison-card-shell--clickable .comparison-player-card {
+            cursor: pointer;
+        }
+        .comparison-card-shell--clickable:hover .comparison-player-card,
+        .comparison-card-shell--clickable:focus .comparison-player-card,
+        .comparison-card-shell--clickable:focus-visible .comparison-player-card,
+        .comparison-card-shell--clickable:focus-within .comparison-player-card {
+            transform: translateY(-3px);
+            border-color: rgba(255, 255, 255, 0.16);
+            box-shadow:
+                inset 0 0 80px var(--pc-inset-glow, transparent),
+                0 14px 30px rgba(0, 0, 0, 0.24);
+        }
+        .comparison-card-shell--clickable:focus,
+        .comparison-card-shell--clickable:focus-visible {
+            outline: none;
         }
         .comparison-player-card--no-image {
             padding-left: 1rem;
@@ -953,6 +979,11 @@ _CSS = """
         .comparison-trace-toggle--compact {
             padding: 0.28rem 0.64rem;
             font-size: 0.74rem;
+        }
+        @media (hover: none), (max-width: 768px) {
+            .comparison-card-shell--clickable .comparison-player-card {
+                transform: none !important;
+            }
         }
 
         /* Chart season selector moved into the comparison panel */

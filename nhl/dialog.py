@@ -7,7 +7,11 @@ import pandas as pd
 import streamlit as st
 
 from nhl.constants import ACTIVE_TEAMS, NHLE_DEFAULT_MULTIPLIER, NHLE_MULTIPLIERS
-from nhl.data_loaders import get_all_time_rank
+from nhl.data_loaders import (
+    get_all_time_rank,
+    get_player_identity_summary,
+    get_team_identity_summary,
+)
 from nhl.era import get_era_multiplier
 from nhl.schedule import get_game_details, get_matchup_history
 
@@ -1107,6 +1111,114 @@ def show_team_game_details(
         hide_index=True,
         use_container_width=True,
     )
+
+
+def _render_identity_rows(rows: list[tuple[str, str]], *, columns: int = 2) -> bool:
+    """Render compact label/value rows for identity dialogs."""
+    clean_rows = [
+        (str(label or "").strip(), str(value or "").strip())
+        for label, value in rows
+        if str(label or "").strip() and str(value or "").strip()
+    ]
+    if not clean_rows:
+        return False
+
+    column_count = max(1, min(int(columns), len(clean_rows)))
+    if column_count == 1:
+        for label, value in clean_rows:
+            st.markdown(f"**{label}**  \n{value}")
+        return True
+
+    layout_columns = st.columns(column_count)
+    for idx, (label, value) in enumerate(clean_rows):
+        with layout_columns[idx % column_count]:
+            st.markdown(f"**{label}**  \n{value}")
+    return True
+
+
+@st.dialog("Player Details")
+def show_player_identity_details(player_id: int) -> None:
+    """Render the overview-card identity modal for one player or goalie."""
+    summary = get_player_identity_summary(player_id)
+    if not summary:
+        st.info("Player details unavailable right now.")
+        return
+
+    st.markdown(f"### {summary.get('name', 'Player')}")
+
+    born_bits: list[str] = []
+    birth_date = str(summary.get("birth_date", "") or "").strip()
+    if birth_date:
+        born_bits.append(birth_date)
+    age = summary.get("age")
+    if age is not None:
+        born_bits.append(f"Age {int(age)}")
+
+    rows = [
+        ("Born", " | ".join(born_bits)),
+        ("Birthplace", str(summary.get("birthplace", "") or "").strip()),
+        (str(summary.get("shot_label", "") or "").strip(), str(summary.get("shot_value", "") or "").strip()),
+        ("Height", str(summary.get("height", "") or "").strip()),
+        ("Weight", str(summary.get("weight", "") or "").strip()),
+        ("Draft", str(summary.get("draft", "") or "").strip()),
+        ("First NHL season", str(summary.get("first_nhl_season_label", "") or "").strip()),
+        ("Debut team", str(summary.get("debut_team", "") or "").strip()),
+    ]
+    rendered_rows = _render_identity_rows(rows, columns=2)
+
+    honors = summary.get("honors", []) or []
+    honors_text = " | ".join(str(item or "").strip() for item in honors if str(item or "").strip())
+    if honors_text:
+        if rendered_rows:
+            st.markdown("---")
+        st.markdown(f"**Honors**  \n{honors_text}")
+
+    if not rendered_rows and not honors_text:
+        st.info("Player details unavailable right now.")
+
+
+@st.dialog("Team Details")
+def show_team_identity_details(team_abbr: str) -> None:
+    """Render the overview-card identity modal for one team."""
+    summary = get_team_identity_summary(team_abbr)
+    if not summary:
+        st.info("Team details unavailable right now.")
+        return
+
+    st.markdown(f"### {summary.get('team_name', team_abbr)}")
+
+    joined_label = str(summary.get("joined_nhl_label", "") or "").strip()
+    if not joined_label:
+        joined_year = summary.get("joined_nhl_year")
+        joined_label = str(joined_year) if joined_year is not None else ""
+
+    current_identity_label = str(summary.get("current_identity_since_label", "") or "").strip()
+    if current_identity_label == joined_label:
+        current_identity_label = ""
+
+    conference_name = str(summary.get("conference_name", "") or "").strip()
+    division_name = str(summary.get("division_name", "") or "").strip()
+    conference_division = " / ".join(part for part in [conference_name, division_name] if part)
+
+    total_nhl_seasons = summary.get("total_nhl_seasons")
+    total_nhl_seasons_label = str(int(total_nhl_seasons)) if total_nhl_seasons else ""
+
+    rows = [
+        ("Joined NHL", joined_label),
+        ("Current identity since", current_identity_label),
+        ("Conference / division", conference_division),
+        ("Total NHL seasons", total_nhl_seasons_label),
+    ]
+    rendered_rows = _render_identity_rows(rows, columns=2)
+
+    lineage_label = str(summary.get("lineage_label", "") or "").strip()
+    if lineage_label:
+        if rendered_rows:
+            st.markdown("---")
+        st.markdown(f"**Franchise lineage**  \n{lineage_label}")
+
+    if not rendered_rows and not lineage_label:
+        st.info("Team details unavailable right now.")
 
 
 @st.dialog("Matchup History")

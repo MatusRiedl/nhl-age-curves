@@ -22,7 +22,11 @@ from nhl.data_loaders import (
     get_team_all_time_stats,
     get_team_trophy_summary,
 )
-from nhl.dialog import show_matchup_history
+from nhl.dialog import (
+    show_matchup_history,
+    show_player_identity_details,
+    show_team_identity_details,
+)
 from nhl.schedule import get_upcoming_games
 
 _TEAM_LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbr}_light.svg"
@@ -73,6 +77,7 @@ _CATEGORY_TAB_KEYS = {
 _MATCHUP_HISTORY_QUERY_KEY = "mh"
 _PENDING_MATCHUP_HISTORY_SESSION_KEY = "_pending_matchup_history"
 _LAST_MATCHUP_HISTORY_TRIGGER_NONCE_SESSION_KEY = "_last_matchup_history_trigger_nonce"
+_LAST_IDENTITY_CARD_TRIGGER_NONCE_SESSION_KEY = "_last_identity_card_trigger_nonce"
 _MATCHUP_HISTORY_CLICK_BRIDGE_JS = """
 export default function(component) {
     const { setTriggerValue } = component;
@@ -110,6 +115,75 @@ export default function(component) {
 _MATCHUP_HISTORY_CLICK_BRIDGE = st.components.v2.component(
     "comparison_matchup_history_click_bridge",
     js=_MATCHUP_HISTORY_CLICK_BRIDGE_JS,
+)
+_IDENTITY_CARD_CLICK_BRIDGE_JS = """
+export default function(component) {
+    const { setTriggerValue } = component;
+
+    const getClickableShell = (target) => {
+        if (!(target instanceof Element)) {
+            return null;
+        }
+        return target.closest('.comparison-card-shell--clickable[data-nhl-identity-card="1"]');
+    };
+
+    const emitTrigger = (shell, event) => {
+        if (!shell) {
+            return;
+        }
+        const payload = String(shell.getAttribute('data-identity-card') || '').trim();
+        if (!payload) {
+            return;
+        }
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        const nonce = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+        setTriggerValue('clicked', `${payload}|${nonce}`);
+    };
+
+    const onClick = (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+        if (target.closest('[data-nhl-trace-toggle="1"]')) {
+            return;
+        }
+        emitTrigger(getClickableShell(target), event);
+    };
+
+    const onKeyDown = (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+        if (target.closest('[data-nhl-trace-toggle="1"]')) {
+            return;
+        }
+        const shell = getClickableShell(target);
+        if (!shell) {
+            return;
+        }
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+        emitTrigger(shell, event);
+    };
+
+    document.addEventListener('click', onClick, true);
+    document.addEventListener('keydown', onKeyDown, true);
+
+    return () => {
+        document.removeEventListener('click', onClick, true);
+        document.removeEventListener('keydown', onKeyDown, true);
+    };
+}
+"""
+_IDENTITY_CARD_CLICK_BRIDGE = st.components.v2.component(
+    "comparison_identity_card_click_bridge",
+    js=_IDENTITY_CARD_CLICK_BRIDGE_JS,
 )
 
 
@@ -478,6 +552,8 @@ def _render_comparison_media_card(
     media_modifier_class: str = "",
     image_modifier_class: str = "",
     player_color: str | None = None,
+    click_payload: str | None = None,
+    click_label: str | None = None,
 ) -> None:
     """Render one comparison detail card with optional media and style modifiers."""
     outer_classes = "comparison-player-card"
@@ -512,13 +588,30 @@ def _render_comparison_media_card(
             quote=True,
         )
 
-    st.markdown(
+    card_html = (
         f"<div class='{outer_classes}' style='{card_style}'>"
         f"{media_html}"
         "<div class='comparison-player-card__body'>"
         f"{body_html or ''}"
         "</div>"
-        "</div>",
+        "</div>"
+    )
+    if click_payload:
+        safe_payload = escape(str(click_payload), quote=True)
+        safe_label = escape(str(click_label or "Open details"), quote=True)
+        card_html = (
+            "<div class='comparison-card-shell comparison-card-shell--clickable' "
+            "data-nhl-identity-card='1' "
+            f"data-identity-card='{safe_payload}' "
+            f"aria-label='{safe_label}' "
+            f"title='{safe_label}' "
+            "role='button' tabindex='0'>"
+            f"{card_html}"
+            "</div>"
+        )
+
+    st.markdown(
+        card_html,
         unsafe_allow_html=True,
     )
 
@@ -528,6 +621,8 @@ def _render_player_media_card(
     body_html: str,
     *,
     player_color: str | None = None,
+    click_payload: str | None = None,
+    click_label: str | None = None,
 ) -> None:
     """Render a player detail card with a cutout-style player image."""
     _render_comparison_media_card(
@@ -536,6 +631,8 @@ def _render_player_media_card(
         media_modifier_class="comparison-player-card__media--player",
         image_modifier_class="comparison-player-card__image--player-cutout",
         player_color=player_color,
+        click_payload=click_payload,
+        click_label=click_label,
     )
 
 
@@ -544,6 +641,8 @@ def _render_team_media_card(
     body_html: str,
     *,
     player_color: str | None = None,
+    click_payload: str | None = None,
+    click_label: str | None = None,
 ) -> None:
     """Render a team detail card using the shared comparison card shell."""
     _render_comparison_media_card(
@@ -553,6 +652,8 @@ def _render_team_media_card(
         media_modifier_class="comparison-player-card__media--team",
         player_color=player_color,
         image_modifier_class="comparison-player-card__image--team-logo",
+        click_payload=click_payload,
+        click_label=click_label,
     )
 
 
@@ -735,6 +836,7 @@ def render_detail_tabs(
     do_cumul: bool = False,
 ) -> None:
     """Render the full-width Overview/Trophies detail tabs below the chart."""
+    identity_trigger_value = _mount_identity_card_click_bridge()
     tab_lookup = {tab.id: tab for tab in _DETAIL_PANEL_TABS}
     tab_key = _get_category_tab_key(stat_category)
     if tab_key not in st.session_state:
@@ -774,6 +876,8 @@ def render_detail_tabs(
                     selected_season=selected_season,
                     do_cumul=do_cumul,
                 )
+
+    _show_identity_card_from_trigger(identity_trigger_value)
 
 
 def _coerce_query_param_scalar(value) -> str:
@@ -887,6 +991,85 @@ def _show_pending_matchup_history_dialog() -> None:
         away_abbr=away_abbr,
         home_abbr=home_abbr,
     )
+
+
+def _noop_identity_card_click_change() -> None:
+    """Provide a stable callback for the overview-card click bridge."""
+
+
+def _mount_identity_card_click_bridge():
+    """Mount the overview-card JS click bridge and return the latest payload."""
+    result = _IDENTITY_CARD_CLICK_BRIDGE(
+        key="comparison_identity_card_click_bridge",
+        on_clicked_change=_noop_identity_card_click_change,
+    )
+    return getattr(result, "clicked", None)
+
+
+def _parse_identity_card_request(value) -> tuple[str, str] | None:
+    """Validate one identity-card payload like ``player:8478402``."""
+    raw_value = _coerce_query_param_scalar(value).strip()
+    if not raw_value or ":" not in raw_value:
+        return None
+
+    entity_kind, entity_value = raw_value.split(":", 1)
+    clean_kind = str(entity_kind or "").strip().lower()
+    clean_value = str(entity_value or "").strip()
+    if clean_kind == "player":
+        try:
+            player_id = int(clean_value)
+        except Exception:
+            return None
+        if player_id <= 0:
+            return None
+        return clean_kind, str(player_id)
+
+    if clean_kind == "team":
+        team_abbr = clean_value.upper()
+        if team_abbr not in ACTIVE_TEAMS:
+            return None
+        return clean_kind, team_abbr
+
+    return None
+
+
+def _parse_identity_card_trigger(value) -> tuple[str, str, str] | None:
+    """Validate one JS trigger payload of the form ``kind:value|nonce``."""
+    raw_value = _coerce_query_param_scalar(value).strip()
+    if not raw_value or "|" not in raw_value:
+        return None
+
+    payload_value, nonce = raw_value.split("|", 1)
+    parsed_request = _parse_identity_card_request(payload_value)
+    clean_nonce = str(nonce or "").strip()
+    if parsed_request is None or not clean_nonce:
+        return None
+
+    entity_kind, entity_value = parsed_request
+    return entity_kind, entity_value, clean_nonce
+
+
+def _show_identity_card_from_trigger(value) -> bool:
+    """Open player/team identity dialogs once for each unique trigger nonce."""
+    parsed_trigger = _parse_identity_card_trigger(value)
+    if parsed_trigger is None:
+        return False
+
+    entity_kind, entity_value, nonce = parsed_trigger
+    try:
+        if st.session_state.get(_LAST_IDENTITY_CARD_TRIGGER_NONCE_SESSION_KEY) == nonce:
+            return False
+        st.session_state[_LAST_IDENTITY_CARD_TRIGGER_NONCE_SESSION_KEY] = nonce
+    except Exception:
+        pass
+
+    if entity_kind == "player":
+        show_player_identity_details(int(entity_value))
+        return True
+    if entity_kind == "team":
+        show_team_identity_details(entity_value)
+        return True
+    return False
 
 
 def render_predictions_panel(share_params: dict | None = None) -> None:
@@ -1263,6 +1446,8 @@ def _render_overview_player_card(
         f"{trace_toggle_row}"
         "</div>",
         player_color=player_color,
+        click_payload=f"player:{int(pid)}",
+        click_label=f"Open player details for {name}",
     )
 
 
@@ -1431,6 +1616,8 @@ def _render_overview_teams(
                 f"{trace_toggle_row}"
                 "</div>",
                 player_color=team_color,
+                click_payload=f"team:{abbr}",
+                click_label=f"Open team details for {full_name}",
             )
 
         _render_card_grid(
@@ -1497,6 +1684,8 @@ def _render_overview_teams(
                 f"{trace_toggle_row}"
                 "</div>",
                 player_color=team_color,
+                click_payload=f"team:{abbr}",
+                click_label=f"Open team details for {full_name}",
             )
 
         _render_card_grid(

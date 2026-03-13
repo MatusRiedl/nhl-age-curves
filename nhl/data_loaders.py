@@ -6,6 +6,7 @@ weird.
 
 import json
 import os
+from datetime import date, datetime
 
 import pandas as pd
 import requests
@@ -22,6 +23,7 @@ from nhl.constants import (
     SEARCH_URL,
     STATS_URL,
     ROSTER_URL,
+    TEAM_FOUNDED,
     TEAM_LIST_URL,
     TEAM_STATS_URL,
     TEAM_METRICS,
@@ -63,6 +65,177 @@ def _canonical_team_abbrev(team_abbr: str | None) -> str:
     if not clean_abbr:
         return ""
     return _TEAM_ALIAS_TO_ACTIVE.get(clean_abbr, clean_abbr)
+
+
+def _payload_text(value: object) -> str:
+    """Return a clean string from plain or NHL nested-name payload values."""
+    if isinstance(value, dict):
+        for key in ("default", "fr", "cs", "de", "es", "fi", "sk", "sv"):
+            text = str(value.get(key, "") or "").strip()
+            if text:
+                return text
+        return ""
+    return str(value or "").strip()
+
+
+def _format_season_span(season_year: int | None) -> str:
+    """Format one NHL start year like ``2024`` into ``2024-25``."""
+    if season_year is None:
+        return ""
+    try:
+        year = int(season_year)
+    except Exception:
+        return ""
+    return f"{year}-{str(year + 1)[2:]}"
+
+
+def _parse_iso_date(value: str) -> datetime | None:
+    """Parse a ``YYYY-MM-DD`` date string when possible."""
+    clean_value = str(value or "").strip()
+    if len(clean_value) < 10:
+        return None
+    try:
+        return datetime.strptime(clean_value[:10], "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _calculate_age_from_birth_date(value: str) -> int | None:
+    """Return the current age for a birth date string."""
+    birth_dt = _parse_iso_date(value)
+    if birth_dt is None:
+        return None
+    today = date.today()
+    age = today.year - birth_dt.year
+    if (today.month, today.day) < (birth_dt.month, birth_dt.day):
+        age -= 1
+    return max(age, 0)
+
+
+def _format_height_label(height_inches, height_cm) -> str:
+    """Format height in imperial and metric units when available."""
+    try:
+        total_inches = int(height_inches)
+    except Exception:
+        total_inches = 0
+    try:
+        centimeters = int(height_cm)
+    except Exception:
+        centimeters = 0
+
+    parts: list[str] = []
+    if total_inches > 0:
+        feet = total_inches // 12
+        inches = total_inches % 12
+        parts.append(f"{feet}'{inches}\"")
+    if centimeters > 0:
+        parts.append(f"{centimeters} cm")
+    return " / ".join(parts)
+
+
+def _format_weight_label(weight_lb, weight_kg) -> str:
+    """Format weight in imperial and metric units when available."""
+    try:
+        pounds = int(weight_lb)
+    except Exception:
+        pounds = 0
+    try:
+        kilograms = int(weight_kg)
+    except Exception:
+        kilograms = 0
+
+    parts: list[str] = []
+    if pounds > 0:
+        parts.append(f"{pounds} lb")
+    if kilograms > 0:
+        parts.append(f"{kilograms} kg")
+    return " / ".join(parts)
+
+
+def _build_record_label(wins: int, losses: int, ot_losses: int, ties: int = 0) -> str:
+    """Return a standard NHL record label."""
+    if ot_losses > 0:
+        return f"{wins}-{losses}-{ot_losses}"
+    if ties > 0:
+        return f"{wins}-{losses}-{ties}"
+    return f"{wins}-{losses}"
+
+
+def _format_draft_summary(draft_details: object) -> str:
+    """Normalize draft details into one compact sentence."""
+    if not isinstance(draft_details, dict):
+        return "Undrafted"
+
+    try:
+        draft_year = int(draft_details.get("year", 0) or 0)
+    except Exception:
+        draft_year = 0
+    team_abbr = str(draft_details.get("teamAbbrev", "") or "").strip().upper()
+
+    try:
+        draft_round = int(draft_details.get("round", 0) or 0)
+    except Exception:
+        draft_round = 0
+    try:
+        pick_in_round = int(draft_details.get("pickInRound", 0) or 0)
+    except Exception:
+        pick_in_round = 0
+    try:
+        overall_pick = int(draft_details.get("overallPick", 0) or 0)
+    except Exception:
+        overall_pick = 0
+
+    if draft_year <= 0 and not team_abbr and overall_pick <= 0:
+        return "Undrafted"
+
+    parts: list[str] = []
+    if draft_year > 0:
+        parts.append(str(draft_year))
+    if team_abbr:
+        parts.append(team_abbr)
+    if draft_round > 0:
+        round_text = f"Round {draft_round}"
+        if pick_in_round > 0:
+            round_text += f", pick {pick_in_round}"
+        parts.append(round_text)
+    elif pick_in_round > 0:
+        parts.append(f"Pick {pick_in_round}")
+    if overall_pick > 0:
+        parts.append(f"{overall_pick} overall")
+    return " | ".join(parts) if parts else "Undrafted"
+
+
+def _format_lineage_segment(segment: dict) -> str:
+    """Format one franchise-identity stint for display."""
+    start_year = segment.get("start_year")
+    end_year = segment.get("end_year")
+    name = str(segment.get("name", "") or segment.get("abbr", "") or "").strip()
+    if not name:
+        return ""
+
+    start_label = _format_season_span(start_year)
+    if not start_label:
+        return name
+
+    if end_year is None:
+        end_label = "present"
+    else:
+        try:
+            clean_end_year = int(end_year)
+        except Exception:
+            clean_end_year = None
+        if clean_end_year is None:
+            end_label = "present"
+        elif clean_end_year >= CURRENT_SEASON_YEAR:
+            end_label = "present"
+        elif clean_end_year == int(start_year):
+            end_label = ""
+        else:
+            end_label = _format_season_span(clean_end_year)
+
+    if not end_label:
+        return f"{name} ({start_label})"
+    return f"{name} ({start_label} to {end_label})"
 
 
 # ---------------------------------------------------------------------------
@@ -586,6 +759,216 @@ def get_player_awards(player_id: int) -> list:
 
 
 @st.cache_data(ttl=3600)
+def get_player_identity_summary(player_id: int) -> dict:
+    """Return normalized player identity details for the overview-card modal."""
+    try:
+        clean_player_id = int(player_id)
+    except Exception:
+        return {}
+    if clean_player_id <= 0:
+        return {}
+
+    payload = get_player_landing(clean_player_id)
+    if not isinstance(payload, dict) or not payload:
+        return {}
+
+    first_name = _payload_text(payload.get("firstName"))
+    last_name = _payload_text(payload.get("lastName"))
+    full_name = f"{first_name} {last_name}".strip() or str(clean_player_id)
+
+    birth_date = str(payload.get("birthDate", "") or "").strip()
+    birth_dt = _parse_iso_date(birth_date)
+    birth_date_label = birth_dt.strftime("%b %d, %Y") if birth_dt is not None else ""
+    birth_year = birth_dt.year if birth_dt is not None else None
+
+    birthplace_parts = [
+        _payload_text(payload.get("birthCity")),
+        _payload_text(payload.get("birthStateProvince")),
+        str(payload.get("birthCountry", "") or "").strip().upper(),
+    ]
+    birthplace = ", ".join(part for part in birthplace_parts if part)
+
+    position = str(payload.get("position", "") or "").strip().upper()
+    shot_value = str(payload.get("shootsCatches", "") or "").strip().upper()
+    shot_label = "Catches" if position == "G" else "Shoots"
+
+    season_totals = payload.get("seasonTotals", []) or []
+    first_nhl_season = None
+    debut_team = ""
+    debut_rows: list[dict] = []
+    for season in season_totals:
+        if not isinstance(season, dict):
+            continue
+        if normalize_league_abbrev(season.get("leagueAbbrev", "")) != "NHL":
+            continue
+        if str(season.get("gameTypeId", "")).strip() not in {"2", "3"}:
+            continue
+        season_str = str(season.get("season", "") or "").strip()
+        if len(season_str) < 4:
+            continue
+        try:
+            season_year = int(season_str[:4])
+        except Exception:
+            continue
+        if first_nhl_season is None or season_year < first_nhl_season:
+            first_nhl_season = season_year
+            debut_rows = [season]
+        elif season_year == first_nhl_season:
+            debut_rows.append(season)
+
+    if debut_rows:
+        debut_rows.sort(
+            key=lambda row: (
+                0 if str(row.get("gameTypeId", "")).strip() == "2" else 1,
+                int(row.get("sequence", 0) or 0),
+                _payload_text(row.get("teamName")),
+            )
+        )
+        debut_row = debut_rows[0]
+        debut_team = (
+            _payload_text(debut_row.get("teamName"))
+            or _payload_text(debut_row.get("teamCommonName"))
+            or _payload_text(debut_row.get("teamPlaceNameWithPreposition"))
+        )
+
+    honors: list[str] = []
+    if bool(payload.get("inHHOF")):
+        honors.append("Hockey Hall of Fame")
+    if bool(payload.get("inTop100AllTime")):
+        honors.append("NHL Top 100")
+
+    return {
+        "player_id": clean_player_id,
+        "name": full_name,
+        "birth_date": birth_date_label,
+        "birth_year": birth_year,
+        "age": _calculate_age_from_birth_date(birth_date),
+        "birthplace": birthplace,
+        "shot_label": shot_label,
+        "shot_value": shot_value,
+        "height": _format_height_label(
+            payload.get("heightInInches"),
+            payload.get("heightInCentimeters"),
+        ),
+        "weight": _format_weight_label(
+            payload.get("weightInPounds"),
+            payload.get("weightInKilograms"),
+        ),
+        "draft": _format_draft_summary(payload.get("draftDetails")),
+        "first_nhl_season": first_nhl_season,
+        "first_nhl_season_label": _format_season_span(first_nhl_season),
+        "debut_team": debut_team,
+        "honors": honors,
+    }
+
+
+@st.cache_data(ttl=3600)
+def get_current_nhl_standings() -> pd.DataFrame:
+    """Return a normalized current NHL standings table for team detail surfaces."""
+    try:
+        response = requests.get("https://api-web.nhle.com/v1/standings/now", timeout=15)
+        status_code = int(getattr(response, "status_code", 200) or 200)
+        if status_code >= 400:
+            return pd.DataFrame()
+        payload = response.json()
+    except Exception:
+        return pd.DataFrame()
+
+    if not isinstance(payload, dict):
+        return pd.DataFrame()
+
+    rows = payload.get("standings", []) or []
+    standings_timestamp = str(payload.get("standingsDateTimeUtc", "") or "").strip()
+
+    pp_summary = get_team_season_summary(CURRENT_SEASON_YEAR, "Regular")
+    pp_pct_by_team: dict[str, float] = {}
+    if not pp_summary.empty and "teamAbbrev" in pp_summary.columns and "PP%" in pp_summary.columns:
+        valid_pp = pp_summary[["teamAbbrev", "PP%"]].dropna(subset=["teamAbbrev"])
+        pp_pct_by_team = {
+            str(row["teamAbbrev"]).strip().upper(): float(row["PP%"])
+            for _, row in valid_pp.iterrows()
+            if str(row["teamAbbrev"]).strip()
+        }
+
+    normalized_rows: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        team_abbr = _payload_text(row.get("teamAbbrev")).upper()
+        if not team_abbr:
+            continue
+
+        games_played = int(row.get("gamesPlayed", 0) or 0)
+        wins = int(row.get("wins", 0) or 0)
+        losses = int(row.get("losses", 0) or 0)
+        ot_losses = int(row.get("otLosses", 0) or 0)
+        ties = int(row.get("ties", 0) or 0)
+        points = int(row.get("points", 0) or 0)
+        goal_diff = int(row.get("goalDifferential", 0) or 0)
+        l10_games_played = int(row.get("l10GamesPlayed", 0) or 0)
+        l10_wins = int(row.get("l10Wins", 0) or 0)
+        l10_losses = int(row.get("l10Losses", 0) or 0)
+        l10_ot_losses = int(row.get("l10OtLosses", 0) or 0)
+        l10_ties = int(row.get("l10Ties", 0) or 0)
+        l10_points = int(row.get("l10Points", 0) or 0)
+
+        normalized_rows.append(
+            {
+                "teamAbbrev": team_abbr,
+                "teamName": _payload_text(row.get("teamName")) or ACTIVE_TEAMS.get(team_abbr, team_abbr),
+                "teamCommonName": _payload_text(row.get("teamCommonName")),
+                "teamLogo": str(row.get("teamLogo", "") or "").strip(),
+                "conferenceName": str(row.get("conferenceName", "") or "").strip(),
+                "divisionName": str(row.get("divisionName", "") or "").strip(),
+                "gamesPlayed": games_played,
+                "wins": wins,
+                "losses": losses,
+                "otLosses": ot_losses,
+                "ties": ties,
+                "points": points,
+                "goalDifferential": goal_diff,
+                "goalDiffPerGame": (goal_diff / games_played) if games_played > 0 else 0.0,
+                "pointPctg": float(row.get("pointPctg", 0.0) or 0.0),
+                "regulationWins": int(row.get("regulationWins", 0) or 0),
+                "regulationPlusOtWinPctg": float(row.get("regulationPlusOtWinPctg", 0.0) or 0.0),
+                "streakCode": str(row.get("streakCode", "") or "").strip(),
+                "streakCount": int(row.get("streakCount", 0) or 0),
+                "leagueSequence": int(row.get("leagueSequence", 0) or 0),
+                "conferenceSequence": int(row.get("conferenceSequence", 0) or 0),
+                "divisionSequence": int(row.get("divisionSequence", 0) or 0),
+                "l10GamesPlayed": l10_games_played,
+                "l10Wins": l10_wins,
+                "l10Losses": l10_losses,
+                "l10OtLosses": l10_ot_losses,
+                "l10Ties": l10_ties,
+                "l10Points": l10_points,
+                "l10GoalDifferential": int(row.get("l10GoalDifferential", 0) or 0),
+                "recordLabel": _build_record_label(wins, losses, ot_losses, ties),
+                "l10RecordLabel": (
+                    f"{l10_wins}-{l10_losses}-{l10_ot_losses}"
+                    if l10_games_played > 0
+                    else ""
+                ),
+                "l10PointPctg": (l10_points / (l10_games_played * 2.0)) if l10_games_played > 0 else 0.0,
+                "standingsDateTimeUtc": standings_timestamp,
+                "PP%": pp_pct_by_team.get(team_abbr, float("nan")),
+            }
+        )
+
+    if not normalized_rows:
+        return pd.DataFrame()
+
+    standings_df = pd.DataFrame(normalized_rows)
+    if "leagueSequence" in standings_df.columns:
+        standings_df = standings_df.sort_values(
+            ["leagueSequence", "teamAbbrev"],
+            kind="stable",
+        ).reset_index(drop=True)
+    return standings_df
+
+
+@st.cache_data(ttl=3600)
 def get_team_trophy_summary() -> dict:
     """Return team trophy summary keyed by tricode (Stanley Cup count + latest season).
 
@@ -755,6 +1138,122 @@ def get_team_available_nhl_seasons(team_abbr: str) -> list[int]:
         errors="coerce",
     ).dropna()
     return sorted({int(year) for year in seasons.tolist()}, reverse=True)
+
+
+@st.cache_data(ttl=3600)
+def get_team_identity_summary(team_abbr: str) -> dict:
+    """Return normalized team identity details for the overview-card modal."""
+    clean_abbr = _canonical_team_abbrev(team_abbr)
+    if not clean_abbr:
+        return {}
+
+    team_name = ACTIVE_TEAMS.get(clean_abbr, clean_abbr)
+    joined_nhl_year = TEAM_FOUNDED.get(clean_abbr)
+    current_identity_since_year = None
+    total_nhl_seasons = 0
+    lineage: list[dict] = []
+
+    all_team_df = load_all_team_seasons()
+    if not all_team_df.empty and "SeasonYear" in all_team_df.columns:
+        team_history = all_team_df.copy()
+        if "gameTypeId" in team_history.columns:
+            team_history = team_history[team_history["gameTypeId"] == 2].copy()
+        if "FranchiseAbbrev" not in team_history.columns and "teamAbbrev" in team_history.columns:
+            team_history["FranchiseAbbrev"] = team_history["teamAbbrev"].apply(_canonical_team_abbrev)
+
+        franchise_rows = team_history[
+            team_history.get("FranchiseAbbrev", pd.Series(index=team_history.index, dtype="object")) == clean_abbr
+        ].copy()
+
+        if not franchise_rows.empty:
+            season_years = pd.to_numeric(franchise_rows["SeasonYear"], errors="coerce").dropna()
+            if not season_years.empty:
+                season_values = sorted({int(year) for year in season_years.tolist()})
+                total_nhl_seasons = len(season_values)
+                if joined_nhl_year is None:
+                    joined_nhl_year = season_values[0]
+
+            if "teamAbbrev" in franchise_rows.columns:
+                current_years = pd.to_numeric(
+                    franchise_rows.loc[
+                        franchise_rows["teamAbbrev"].astype(str).str.upper() == clean_abbr,
+                        "SeasonYear",
+                    ],
+                    errors="coerce",
+                ).dropna()
+                if not current_years.empty:
+                    current_identity_since_year = int(current_years.min())
+
+                for abbr, abbr_rows in franchise_rows.groupby("teamAbbrev", sort=False):
+                    clean_segment_abbr = str(abbr or "").strip().upper()
+                    if not clean_segment_abbr:
+                        continue
+                    segment_years = pd.to_numeric(abbr_rows["SeasonYear"], errors="coerce").dropna()
+                    if segment_years.empty:
+                        continue
+                    segment_name = ""
+                    if "teamFullName" in abbr_rows.columns:
+                        name_rows = abbr_rows[["SeasonYear", "teamFullName"]].dropna(subset=["teamFullName"])
+                        if not name_rows.empty:
+                            name_rows = name_rows.sort_values("SeasonYear", kind="stable")
+                            segment_name = str(name_rows.iloc[-1]["teamFullName"] or "").strip()
+                    if not segment_name:
+                        segment_name = ACTIVE_TEAMS.get(clean_segment_abbr, clean_segment_abbr)
+                    lineage.append(
+                        {
+                            "abbr": clean_segment_abbr,
+                            "name": segment_name,
+                            "start_year": int(segment_years.min()),
+                            "end_year": int(segment_years.max()),
+                        }
+                    )
+
+    if not lineage:
+        fallback_year = int(joined_nhl_year) if joined_nhl_year is not None else None
+        lineage = [
+            {
+                "abbr": clean_abbr,
+                "name": team_name,
+                "start_year": fallback_year,
+                "end_year": None,
+            }
+        ]
+
+    lineage.sort(
+        key=lambda segment: (
+            int(segment.get("start_year") or 0),
+            str(segment.get("abbr", "") or ""),
+        )
+    )
+    lineage_label = " -> ".join(
+        segment_text
+        for segment_text in (_format_lineage_segment(segment) for segment in lineage)
+        if segment_text
+    )
+
+    conference_name = ""
+    division_name = ""
+    standings_df = get_current_nhl_standings()
+    if not standings_df.empty and "teamAbbrev" in standings_df.columns:
+        team_rows = standings_df[standings_df["teamAbbrev"] == clean_abbr]
+        if not team_rows.empty:
+            standings_row = team_rows.iloc[0]
+            conference_name = str(standings_row.get("conferenceName", "") or "").strip()
+            division_name = str(standings_row.get("divisionName", "") or "").strip()
+
+    return {
+        "team_abbr": clean_abbr,
+        "team_name": team_name,
+        "joined_nhl_year": joined_nhl_year,
+        "joined_nhl_label": _format_season_span(joined_nhl_year),
+        "current_identity_since_year": current_identity_since_year,
+        "current_identity_since_label": _format_season_span(current_identity_since_year),
+        "conference_name": conference_name,
+        "division_name": division_name,
+        "lineage": lineage,
+        "lineage_label": lineage_label,
+        "total_nhl_seasons": total_nhl_seasons,
+    }
 
 
 def _fetch_team_game_summary_rows(team_id: int, season_id: int, game_type_id: int) -> list[dict]:
