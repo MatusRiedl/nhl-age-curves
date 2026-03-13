@@ -1,5 +1,6 @@
 """Chart click dialogs for season snapshots, projections, baselines, and help."""
 
+from datetime import datetime
 from html import escape
 
 import pandas as pd
@@ -28,6 +29,21 @@ _ERA_EXPLAINER_BANDS: tuple[tuple[str, int], ...] = (
 )
 
 _TEAM_LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbr}_light.svg"
+_DIALOG_WEEKDAY_ABBR = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_DIALOG_MONTH_ABBR = (
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+)
 _TEAM_SHORT_NAMES = {
     "ANA": "Ducks",
     "BOS": "Bruins",
@@ -80,6 +96,84 @@ def _get_team_short_name(team_abbr: str, fallback_name: str) -> str:
     if len(parts) <= 1:
         return clean_name
     return ' '.join(parts[-2:]) if clean_name in {"Blue Jackets", "Red Wings"} else parts[-1]
+
+
+def _parse_iso_date(value: str) -> datetime | None:
+    """Parse the leading ``YYYY-MM-DD`` portion of a date string when present."""
+    clean_value = str(value or "").strip()
+    if len(clean_value) < 10:
+        return None
+
+    try:
+        return datetime.strptime(clean_value[:10], "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _format_matchup_history_start_label(game: dict) -> str:
+    """Add a compact year suffix to matchup-history date labels."""
+    raw_label = str(game.get("start_label_cest", "") or "").strip()
+    parsed_game_date = _parse_iso_date(str(game.get("game_date", "") or ""))
+    parsed_label_date = _parse_iso_date(raw_label)
+
+    if parsed_label_date is not None:
+        year_suffix = f"'{parsed_game_date:%y}" if parsed_game_date is not None else f"'{parsed_label_date:%y}"
+        return (
+            f"{_DIALOG_WEEKDAY_ABBR[parsed_label_date.weekday()]} "
+            f"{parsed_label_date.day:02d} "
+            f"{_DIALOG_MONTH_ABBR[parsed_label_date.month - 1]} "
+            f"{year_suffix}"
+        )
+
+    if not raw_label or raw_label == "Time TBD":
+        if parsed_game_date is None:
+            return raw_label
+        return (
+            f"{_DIALOG_WEEKDAY_ABBR[parsed_game_date.weekday()]} "
+            f"{parsed_game_date.day:02d} "
+            f"{_DIALOG_MONTH_ABBR[parsed_game_date.month - 1]} "
+            f"'{parsed_game_date:%y}"
+        )
+
+    if parsed_game_date is not None:
+        year_suffix = f"'{parsed_game_date:%y}"
+        if year_suffix not in raw_label:
+            if ", " in raw_label:
+                label_head, label_tail = raw_label.split(", ", 1)
+                return f"{label_head} {year_suffix}, {label_tail}"
+            return f"{raw_label} {year_suffix}"
+
+    return raw_label
+
+
+def _format_matchup_history_status_label(status_label: str) -> str:
+    """Drop redundant ``Final`` labels while keeping OT/SO context."""
+    clean_label = str(status_label or "").strip()
+    if not clean_label:
+        return ""
+
+    upper_label = clean_label.upper()
+    if upper_label == "FINAL":
+        return ""
+    if upper_label.startswith("FINAL/"):
+        return clean_label.split("/", 1)[-1]
+    return clean_label
+
+
+def _matchup_history_sort_key(game: dict) -> tuple[str, int]:
+    """Return a descending-safe sort key for matchup-history cards."""
+    raw_game_date = str(game.get("game_date", "") or "").strip()
+    raw_start_label = str(game.get("start_label_cest", "") or "").strip()
+    sortable_date = raw_game_date
+    if not sortable_date and _parse_iso_date(raw_start_label) is not None:
+        sortable_date = raw_start_label[:10]
+
+    try:
+        game_id = int(game.get("game_id", 0) or 0)
+    except Exception:
+        game_id = 0
+
+    return sortable_date, game_id
 
 
 def _get_raw_player_df(raw_dfs_list: list, clean_name: str):
@@ -179,6 +273,152 @@ def _build_matchup_card_html(game: dict) -> str:
 
     detail_bits = [bit for bit in (game.get('status_label'), game.get('start_label_cest'), game.get('venue')) if bit]
     detail_html = escape(' • '.join(detail_bits)) if detail_bits else 'Matchup details unavailable'
+
+    return (
+        "<div style='background:#231f20;border:1px solid #343434;border-radius:14px;padding:14px 16px;margin:10px 0 12px 0;'>"
+        "<div style='display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:nowrap;'>"
+        f"{_team_block(away_abbr, away_short_name, away_logo, 'Away')}"
+        f"<div style='display:flex;align-items:center;gap:12px;flex:0 0 auto;padding:0 4px;'>{_score_html(away_score, away_won)}<div style='font-size:18px;color:#8b949e;font-weight:700;'>@</div>{_score_html(home_score, home_won)}</div>"
+        f"{_team_block(home_abbr, home_short_name, home_logo, 'Home', align='right')}"
+        "</div>"
+        f"<div style='margin-top:10px;font-size:13px;color:#b7bcc2;'>{detail_html}</div>"
+        "</div>"
+    )
+
+
+def _build_matchup_card_html(game: dict, compact_layout: bool = False) -> str:
+    """Render one matchup card, with an optional tighter history layout."""
+    away_abbr_raw = str(game.get('away_abbr', '') or '')
+    home_abbr_raw = str(game.get('home_abbr', '') or '')
+    away_name_raw = str(game.get('away_name', '') or away_abbr_raw)
+    home_name_raw = str(game.get('home_name', '') or home_abbr_raw)
+    away_abbr = escape(away_abbr_raw)
+    home_abbr = escape(home_abbr_raw)
+    away_name = escape(away_name_raw)
+    home_name = escape(home_name_raw)
+    away_short_name = escape(_get_team_short_name(away_abbr_raw, away_name_raw))
+    home_short_name = escape(_get_team_short_name(home_abbr_raw, home_name_raw))
+    away_logo = _TEAM_LOGO_URL.format(abbr=away_abbr_raw) if away_abbr_raw else ''
+    home_logo = _TEAM_LOGO_URL.format(abbr=home_abbr_raw) if home_abbr_raw else ''
+    away_score = game.get('away_score')
+    home_score = game.get('home_score')
+    away_won = away_score is not None and home_score is not None and away_score > home_score
+    home_won = away_score is not None and home_score is not None and home_score > away_score
+
+    def _team_block(abbr: str, short_name: str, logo: str, side_label: str, align: str = 'left') -> str:
+        """Render one team column with an explicit home/away label."""
+        text_align = 'right' if align == 'right' else 'left'
+        direction = 'row-reverse' if align == 'right' else 'row'
+        team_label = abbr or short_name
+        if compact_layout:
+            name_html = f"<div style='font-size:22px;font-weight:800;line-height:1.0;'>{team_label}</div>"
+        else:
+            name_html = (
+                f"<div style='display:flex;align-items:baseline;gap:7px;justify-content:{'flex-end' if align == 'right' else 'flex-start'};white-space:nowrap;'>"
+                f"<div style='font-size:19px;font-weight:800;line-height:1.0;'>{team_label}</div>"
+                f"<div style='font-size:14px;color:#b7bcc2;font-weight:600;line-height:1.0;overflow:hidden;text-overflow:ellipsis;'>{short_name}</div>"
+                "</div>"
+            )
+        return (
+            f"<div style='display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 0;flex-direction:{direction};overflow:hidden;'>"
+            f"<img src='{logo}' height='38'>"
+            f"<div style='text-align:{text_align};min-width:0;'>"
+            f"<div style='font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8b949e;font-weight:700;'>{side_label}</div>"
+            f"{name_html}"
+            "</div>"
+            "</div>"
+        )
+
+    def _score_html(value, did_win: bool) -> str:
+        """Return styled score markup with winner emphasis."""
+        color = '#ffffff' if did_win else '#8b949e'
+        return f"<div style='font-size:32px;font-weight:800;color:{color};line-height:1.0;'>{value if value is not None else 'â€”'}</div>"
+
+    if compact_layout:
+        detail_bits = [
+            bit
+            for bit in (
+                _format_matchup_history_status_label(str(game.get('status_label', '') or '')),
+                _format_matchup_history_start_label(game),
+                game.get('venue'),
+            )
+            if bit
+        ]
+    else:
+        detail_bits = [bit for bit in (game.get('status_label'), game.get('start_label_cest'), game.get('venue')) if bit]
+    detail_html = escape(' • '.join(detail_bits)) if detail_bits else 'Matchup details unavailable'
+
+    return (
+        "<div style='background:#231f20;border:1px solid #343434;border-radius:14px;padding:14px 16px;margin:10px 0 12px 0;'>"
+        "<div style='display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:nowrap;'>"
+        f"{_team_block(away_abbr, away_short_name, away_logo, 'Away')}"
+        f"<div style='display:flex;align-items:center;gap:12px;flex:0 0 auto;padding:0 4px;'>{_score_html(away_score, away_won)}<div style='font-size:18px;color:#8b949e;font-weight:700;'>@</div>{_score_html(home_score, home_won)}</div>"
+        f"{_team_block(home_abbr, home_short_name, home_logo, 'Home', align='right')}"
+        "</div>"
+        f"<div style='margin-top:10px;font-size:13px;color:#b7bcc2;'>{detail_html}</div>"
+        "</div>"
+    )
+
+
+def _build_matchup_card_html(game: dict, compact_layout: bool = False) -> str:
+    """Render one matchup card, with an optional tighter history layout."""
+    away_abbr_raw = str(game.get('away_abbr', '') or '')
+    home_abbr_raw = str(game.get('home_abbr', '') or '')
+    away_name_raw = str(game.get('away_name', '') or away_abbr_raw)
+    home_name_raw = str(game.get('home_name', '') or home_abbr_raw)
+    away_abbr = escape(away_abbr_raw)
+    home_abbr = escape(home_abbr_raw)
+    away_short_name = escape(_get_team_short_name(away_abbr_raw, away_name_raw))
+    home_short_name = escape(_get_team_short_name(home_abbr_raw, home_name_raw))
+    away_logo = _TEAM_LOGO_URL.format(abbr=away_abbr_raw) if away_abbr_raw else ''
+    home_logo = _TEAM_LOGO_URL.format(abbr=home_abbr_raw) if home_abbr_raw else ''
+    away_score = game.get('away_score')
+    home_score = game.get('home_score')
+    away_won = away_score is not None and home_score is not None and away_score > home_score
+    home_won = away_score is not None and home_score is not None and home_score > away_score
+
+    def _team_block(abbr: str, short_name: str, logo: str, side_label: str, align: str = 'left') -> str:
+        """Render one team column with an explicit home/away label."""
+        text_align = 'right' if align == 'right' else 'left'
+        direction = 'row-reverse' if align == 'right' else 'row'
+        team_label = abbr or short_name
+        if compact_layout:
+            name_html = f"<div style='font-size:22px;font-weight:800;line-height:1.0;'>{team_label}</div>"
+        else:
+            name_html = (
+                f"<div style='display:flex;align-items:baseline;gap:7px;justify-content:{'flex-end' if align == 'right' else 'flex-start'};white-space:nowrap;'>"
+                f"<div style='font-size:19px;font-weight:800;line-height:1.0;'>{team_label}</div>"
+                f"<div style='font-size:14px;color:#b7bcc2;font-weight:600;line-height:1.0;overflow:hidden;text-overflow:ellipsis;'>{short_name}</div>"
+                "</div>"
+            )
+        return (
+            f"<div style='display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 0;flex-direction:{direction};overflow:hidden;'>"
+            f"<img src='{logo}' height='38'>"
+            f"<div style='text-align:{text_align};min-width:0;'>"
+            f"<div style='font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8b949e;font-weight:700;'>{side_label}</div>"
+            f"{name_html}"
+            "</div>"
+            "</div>"
+        )
+
+    def _score_html(value, did_win: bool) -> str:
+        """Return styled score markup with winner emphasis."""
+        color = '#ffffff' if did_win else '#8b949e'
+        return f"<div style='font-size:32px;font-weight:800;color:{color};line-height:1.0;'>{value if value is not None else '-'}</div>"
+
+    if compact_layout:
+        detail_bits = [
+            bit
+            for bit in (
+                _format_matchup_history_status_label(str(game.get('status_label', '') or '')),
+                _format_matchup_history_start_label(game),
+                game.get('venue'),
+            )
+            if bit
+        ]
+    else:
+        detail_bits = [bit for bit in (game.get('status_label'), game.get('start_label_cest'), game.get('venue')) if bit]
+    detail_html = escape(' | '.join(detail_bits)) if detail_bits else 'Matchup details unavailable'
 
     return (
         "<div style='background:#231f20;border:1px solid #343434;border-radius:14px;padding:14px 16px;margin:10px 0 12px 0;'>"
@@ -889,9 +1129,11 @@ def show_matchup_history(
         st.info("No completed matchup history available right now.")
         return
 
+    history_games = sorted(history_games, key=_matchup_history_sort_key, reverse=True)
+
     summary = _build_matchup_history_summary(clean_away_abbr, clean_home_abbr, history_games)
     if summary:
         st.markdown(summary)
 
     for game in history_games:
-        st.markdown(_build_matchup_card_html(game), unsafe_allow_html=True)
+        st.markdown(_build_matchup_card_html(game, compact_layout=True), unsafe_allow_html=True)
