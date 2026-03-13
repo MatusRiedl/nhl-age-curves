@@ -1,13 +1,18 @@
 """Live schedule helpers for defaults, upcoming games, and featured players."""
 
-import pandas as pd
-import requests
-import streamlit as st
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from nhl.constants import ACTIVE_TEAMS, CURRENT_SEASON_YEAR
-from nhl.data_loaders import get_team_season_game_log, load_win_prob_weights
+import pandas as pd
+import requests
+import streamlit as st
+
+from nhl.constants import ACTIVE_TEAMS, CURRENT_SEASON_YEAR, TEAM_LINEAGES
+from nhl.data_loaders import (
+    get_team_available_nhl_seasons,
+    get_team_season_game_log,
+    load_win_prob_weights,
+)
 from nhl.win_prob import (
     MIN_GAMES_FOR_ESTIMATE,
     WIN_PROB_FEATURE_LABELS,
@@ -43,6 +48,11 @@ _MONTH_ABBR         = (
     "Nov",
     "Dec",
 )
+_TEAM_ALIAS_TO_ACTIVE = {
+    alias: active_abbr
+    for active_abbr, aliases in TEAM_LINEAGES.items()
+    for alias in aliases
+}
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +136,66 @@ def get_game_details(game_date: str, game_id: int) -> dict:
         return _extract_game_details_from_payload(resp.json(), int(game_id), clean_date)
     except Exception:
         return {}
+
+
+@st.cache_data(ttl=3600)
+def get_matchup_history(away_abbr: str, home_abbr: str, limit: int = 10) -> list[dict]:
+    """Return the most recent completed meetings for one away/home franchise pair."""
+    clean_away_abbr = _canonical_team_abbr(away_abbr)
+    clean_home_abbr = _canonical_team_abbr(home_abbr)
+    try:
+        limit_int = max(0, int(limit))
+    except Exception:
+        limit_int = 10
+
+    if (
+        limit_int <= 0
+        or not clean_away_abbr
+        or not clean_home_abbr
+        or clean_away_abbr == clean_home_abbr
+    ):
+        return []
+
+    base_team_abbr = clean_away_abbr
+    opponent_team_abbr = clean_home_abbr
+    seasons = get_team_available_nhl_seasons(base_team_abbr)
+    if not seasons:
+        base_team_abbr = clean_home_abbr
+        opponent_team_abbr = clean_away_abbr
+        seasons = get_team_available_nhl_seasons(base_team_abbr)
+
+    history_rows: list[dict] = []
+    for season_year in seasons:
+        season_games = get_team_season_game_log(base_team_abbr, int(season_year))
+        if season_games.empty or "OpponentAbbrev" not in season_games.columns:
+            continue
+
+        season_games = season_games.copy()
+        season_games["_OpponentCanonical"] = season_games["OpponentAbbrev"].map(_canonical_team_abbr)
+        filtered_games = season_games[season_games["_OpponentCanonical"] == opponent_team_abbr]
+        if filtered_games.empty:
+            continue
+
+        history_rows.extend(filtered_games.to_dict("records"))
+        history_rows.sort(
+            key=lambda row: (
+                str(row.get("GameDate", "") or ""),
+                int(row.get("GameId", 0) or 0),
+            ),
+            reverse=True,
+        )
+        if len(history_rows) >= limit_int:
+            history_rows = history_rows[:limit_int]
+            break
+
+    history_games: list[dict] = []
+    for row in history_rows[:limit_int]:
+        score_details = get_game_details(
+            str(row.get("GameDate", "") or ""),
+            int(row.get("GameId", 0) or 0),
+        )
+        history_games.append(_build_matchup_history_game(row, score_details))
+    return history_games
 
 
 @st.cache_data(ttl=3600)
@@ -229,6 +299,78 @@ def get_game_win_probabilities(away_abbr: str, home_abbr: str) -> dict | None:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _canonical_team_abbr(team_abbr: str | None) -> str:
+    """Return the active-team abbreviation for a historical franchise alias."""
+    clean_abbr = str(team_abbr or "").strip().upper()
+    if not clean_abbr:
+        return ""
+    return _TEAM_ALIAS_TO_ACTIVE.get(clean_abbr, clean_abbr)
+
+
+def _coerce_optional_int(value) -> int | None:
+    """Return an integer when possible, else ``None``."""
+    try:
+        return int(round(float(value)))
+    except Exception:
+        return None
+
+
+def _coalesce_non_empty(*values):
+    """Return the first value that is neither ``None`` nor an empty string."""
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return None
+
+
+def _build_matchup_history_game(game_row: dict, score_details: dict) -> dict:
+    """Merge season-log metadata with score-endpoint details for history cards."""
+    team_abbr = _canonical_team_abbr(game_row.get("TeamAbbrev", ""))
+    opponent_abbr = _canonical_team_abbr(game_row.get("OpponentAbbrev", ""))
+    home_road_flag = str(game_row.get("HomeRoadFlag", "") or "").strip().upper()
+    team_name = ACTIVE_TEAMS.get(team_abbr, str(game_row.get("TeamName", "") or team_abbr).strip())
+    opponent_name = ACTIVE_TEAMS.get(opponent_abbr, str(game_row.get("OpponentName", "") or opponent_abbr).strip())
+    goals_for = _coerce_optional_int(game_row.get("Goals"))
+    goals_against = _coerce_optional_int(game_row.get("GoalsAgainst"))
+
+    if home_road_flag == "H":
+        fallback_away_abbr, fallback_away_name = opponent_abbr, opponent_name
+        fallback_home_abbr, fallback_home_name = team_abbr, team_name
+        fallback_away_score, fallback_home_score = goals_against, goals_for
+    else:
+        fallback_away_abbr, fallback_away_name = team_abbr, team_name
+        fallback_home_abbr, fallback_home_name = opponent_abbr, opponent_name
+        fallback_away_score, fallback_home_score = goals_for, goals_against
+
+    game_type_value = _coalesce_non_empty(score_details.get("game_type"), game_row.get("gameTypeId"))
+    if game_type_value is None:
+        game_type_label = str(game_row.get("GameType", "") or "").strip().lower()
+        game_type_value = 3 if game_type_label == "playoffs" else 2 if game_type_label == "regular" else 0
+
+    return {
+        "game_id": _coalesce_non_empty(score_details.get("game_id"), _coerce_optional_int(game_row.get("GameId"))) or 0,
+        "game_date": str(_coalesce_non_empty(score_details.get("game_date"), game_row.get("GameDate")) or ""),
+        "game_type": int(game_type_value or 0),
+        "away_abbr": str(_coalesce_non_empty(score_details.get("away_abbr"), fallback_away_abbr) or ""),
+        "away_name": str(_coalesce_non_empty(score_details.get("away_name"), fallback_away_name) or ""),
+        "away_score": _coalesce_non_empty(score_details.get("away_score"), fallback_away_score),
+        "home_abbr": str(_coalesce_non_empty(score_details.get("home_abbr"), fallback_home_abbr) or ""),
+        "home_name": str(_coalesce_non_empty(score_details.get("home_name"), fallback_home_name) or ""),
+        "home_score": _coalesce_non_empty(score_details.get("home_score"), fallback_home_score),
+        "venue": str(_coalesce_non_empty(score_details.get("venue"), "") or ""),
+        "start_label_cest": str(
+            _coalesce_non_empty(
+                score_details.get("start_label_cest"),
+                game_row.get("GameDate"),
+            ) or ""
+        ),
+        "status_label": str(_coalesce_non_empty(score_details.get("status_label"), "Final") or ""),
+    }
+
 
 def _find_game_from_url(url: str, reverse_dates: bool = False) -> tuple[str, str] | None:
     """Fetches a NHL score endpoint and returns (home_abbr, away_abbr) of a

@@ -352,8 +352,28 @@ _CSS = """
         }
 
         /* === Unified matchup cards === */
+        .live-game-card-shell {
+            position: relative;
+        }
+        .live-game-card-link {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            display: block;
+            border-radius: 10px;
+            color: inherit !important;
+            text-decoration: none !important;
+        }
+        .live-game-card-link:hover,
+        .live-game-card-link:focus,
+        .live-game-card-link:focus-visible {
+            color: inherit !important;
+            text-decoration: none !important;
+            outline: none;
+        }
         .live-game-card {
             position: relative;
+            z-index: 1;
             background:
                 linear-gradient(
                     105deg,
@@ -368,9 +388,14 @@ _CSS = """
             margin-bottom: 0.55rem;
             padding: 0.55rem 0.65rem 0.45rem;
             box-sizing: border-box;
-            cursor: default;
+            cursor: pointer;
+            pointer-events: none;
             transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
         }
+        .live-game-card-shell:hover .live-game-card,
+        .live-game-card-shell:focus-within .live-game-card,
+        .live-game-card-link:focus + .live-game-card,
+        .live-game-card-link:focus-visible + .live-game-card,
         .live-game-card:hover,
         .live-game-card:focus-within,
         .live-game-card:focus {
@@ -425,6 +450,10 @@ _CSS = """
             pointer-events: none;
             transition: opacity 140ms ease, visibility 140ms ease, transform 140ms ease;
         }
+        .live-game-card-shell:hover .lgc-meta-popover,
+        .live-game-card-shell:focus-within .lgc-meta-popover,
+        .live-game-card-link:focus + .live-game-card .lgc-meta-popover,
+        .live-game-card-link:focus-visible + .live-game-card .lgc-meta-popover,
         .live-game-card:hover .lgc-meta-popover,
         .live-game-card:focus-within .lgc-meta-popover,
         .live-game-card:focus .lgc-meta-popover {

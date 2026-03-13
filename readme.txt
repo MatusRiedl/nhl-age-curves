@@ -22,6 +22,11 @@ The JSON weight artifact powers pregame win probability in the right-rail predic
 The Streamlit app never trains that model at runtime; it only loads frozen weights and scores
 current matchups.
 
+Those prediction cards are now clickable matchup-context surfaces. A normal click opens a
+`Matchup History` modal with the last 10 head-to-head meetings, a plain-text win summary,
+and stacked matchup cards. The primary trigger is a small JS bridge mounted through
+`st.components.v2.component()`; the old `mh=AWY,HOME` query-param path stays as fallback.
+
 `app.py` is the session-state coordinator and render pass. It:
 - loads URL params once
 - seeds session state
@@ -53,11 +58,11 @@ Top level:
 - `team_pipeline.py` - team processing path
 - `controls.py` - top controls expander
 - `sidebar.py` - sidebar UI and add/remove flows
-- `dialog.py` - chart click dialogs
+- `dialog.py` - chart click dialogs and matchup-history modal
 - `chart.py` - Plotly render, baseline overlay, share link, click dispatch
-- `comparison.py` - Overview / Trophies tabs plus the right-rail chart-season picker and predictions panel
+- `comparison.py` - Overview / Trophies tabs plus the right-rail chart-season picker and clickable predictions panel
 - `url_params.py` - compact share-link encode/decode
-- `schedule.py` - live defaults, upcoming games, featured players, and runtime win-prob inference
+- `schedule.py` - live defaults, upcoming games, featured players, matchup-history loading, and runtime win-prob inference
 - `async_preloader.py` - background cache warming for non-active categories
 
 SECTION 3 - EXTERNAL API ENDPOINTS
@@ -130,6 +135,8 @@ One-shot guards:
 - `_url_loaded`
 - `_default_loaded`
 - `_preloaded`
+- `_pending_matchup_history`
+- `_last_matchup_history_trigger_nonce`
 
 Season-mode memory:
 - `_pre_season_chart_x_axis_mode`
@@ -300,6 +307,7 @@ Hourly cache (`ttl=3600`):
 - `get_player_available_nhl_seasons()`
 - `get_team_available_nhl_seasons()`
 - `get_team_season_game_log()`
+- `get_matchup_history()`
 - `get_team_season_summary()`
 - `get_team_all_time_stats()`
 - `get_season_leaderboard()`
@@ -336,7 +344,17 @@ Runtime rules:
 - load frozen weights once through `load_win_prob_weights()`
 - fetch only the current season game logs for the two teams in the upcoming matchup
 - rebuild the same feature vector, score the base probability, then apply the capped goalie Save% proxy
-- surface the result in the read-only predictions cards only; there is no quick-add action
+- surface the result in clickable predictions cards; there is still no quick-add action
+- clicking a card should open the matchup-history modal, not mutate the player/team board
+
+Matchup-history runtime rules:
+- `schedule.get_matchup_history()` walks backward through franchise-aware team seasons, not raw
+  single-season opponent strings
+- the modal shows the latest 10 meetings across regular season and playoffs, newest first
+- `comparison.py` mounts a JS click bridge with `st.components.v2.component()` and intercepts
+  prediction-card clicks before navigation so the modal feels in-app instead of like a full refresh
+- the old `mh=AWY,HOME` query-param contract remains as a no-JS fallback
+- `dialog.show_matchup_history()` adds a plain-text summary of wins by each team above the cards
 
 Current feature set:
 - season-to-date points %
@@ -400,16 +418,18 @@ Module responsibilities:
 - `team_pipeline.py` - end-to-end team pipeline, including selected-season team season-progress mode
 - `controls.py` - top control surface; returns `(metric, do_cumul)`
 - `sidebar.py` - player/team add flows plus sidebar status widgets
-- `dialog.py` - player clicks, team game snapshot clicks, projection, and baseline dialogs
+- `dialog.py` - player clicks, team game snapshot clicks, matchup-history modal, projection, and baseline dialogs
 - `chart.py` - figure assembly, baseline overlay, share-link button, player/team click dispatch
-- `comparison.py` - season-aware Overview / Trophies tabs plus the right-rail chart-season picker and read-only predictions panel
+- `comparison.py` - season-aware Overview / Trophies tabs plus the right-rail chart-season picker, JS click bridge, and clickable predictions panel
 - `url_params.py` - compact share-link encoder/decoder with legacy link support
-- `schedule.py` - live/recent matchup detection, upcoming games, featured players, and runtime pregame win-prob inference
+- `schedule.py` - live/recent matchup detection, upcoming games, featured players, matchup history, and runtime pregame win-prob inference
 - `async_preloader.py` - background warming of non-active category caches
 
 Key integration notes:
 - `schedule.py` only auto-seeds the board on first session load and only if a shared URL did not already populate players or teams
 - `comparison.py` stores tab memory per category via `panel_tab_skater`, `panel_tab_goalie`, and `panel_tab_team`
+- `comparison.py` now prefers a JS trigger from `st.components.v2.component()` for prediction-card
+  clicks and falls back to the `mh` query param only when the JS bridge does not fire
 - Team all-time cards and team season discovery must use franchise lineage (`TEAM_LINEAGES` /
   `FranchiseAbbrev`), not raw historical `teamAbbrev` fragments.
 - `train_win_prob.py` is the only place that should import `scikit-learn` for this feature; runtime scoring must stay numpy/pandas only

@@ -28,9 +28,11 @@ https://nhl-age-curves.streamlit.app/
 
 * **Season Snapshot:** In single-season mode, click any game to see the exact matchup card with both teams, logos, final score, venue/time when available, plus the player or team one-game stat line. Age-mode and projection clicks still keep the broader season/career context.
 
-* **Upcoming Games Predictions Panel:** A dedicated right-rail panel lists the next 6 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and keeps the cards read-only so they function as matchup context instead of a quick-add workflow.
+* **Upcoming Games Predictions Panel:** A dedicated right-rail panel lists the next 5 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and keeps the cards focused on matchup context instead of a quick-add workflow.
 
 * **Pregame Win Probability:** The right-rail predictions panel also shows a pregame away/home win estimate for each upcoming matchup. The base probability comes from an offline-trained logistic regression on the last 5 completed NHL regular seasons, then a capped goalie Save% proxy is layered on top at runtime.
+
+* **Matchup History Modal:** Click any prediction card to open a `Matchup History` modal with the last 10 meetings between those two teams, rendered as stacked season-snapshot style matchup cards plus a plain-text win summary so you can see who has taken more of the recent head-to-head without counting manually.
 
 * **Shareable URLs:** Click the chart's **Copy link** control to copy a compact exact-state URL only when you want to share it. Player and team names are omitted from the query string, default values are skipped, and the browser URL stays clean while you explore.
 
@@ -66,11 +68,11 @@ nhl/
     team_pipeline.py     team comparison pipeline
     controls.py          Category/Metric and View Options expanders
     sidebar.py           player and team sidebar UI
-    dialog.py            season-detail popup dialog
+    dialog.py            season-detail and matchup-history dialogs
     chart.py             Plotly chart rendering, share link, and JS pan-clamp
-    comparison.py        Overview/Trophies detail tabs plus the right-rail chart-season picker and predictions panel
+    comparison.py        Overview/Trophies detail tabs plus the right-rail chart-season picker and clickable predictions panel
     url_params.py        URL query param encode/decode for shareable links and chart season state
-    schedule.py          live defaults, upcoming games, featured-player helpers, and runtime matchup inference
+    schedule.py          live defaults, upcoming games, featured-player helpers, matchup history, and runtime matchup inference
     async_preloader.py   background cache warming for Goalie/Team categories
 scraper.py               standalone script to refresh the parquet file
 train_win_prob.py        standalone script to train and export pregame win-probability weights

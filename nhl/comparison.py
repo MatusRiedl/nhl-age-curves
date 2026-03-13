@@ -4,6 +4,7 @@ import colorsys
 from dataclasses import dataclass
 from html import escape
 from typing import Callable
+from urllib.parse import urlencode
 
 import pandas as pd
 import streamlit as st
@@ -21,6 +22,7 @@ from nhl.data_loaders import (
     get_team_all_time_stats,
     get_team_trophy_summary,
 )
+from nhl.dialog import show_matchup_history
 from nhl.schedule import get_upcoming_games
 
 _TEAM_LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbr}_light.svg"
@@ -68,6 +70,47 @@ _CATEGORY_TAB_KEYS = {
     "Goalie": "panel_tab_goalie",
     "Team": "panel_tab_team",
 }
+_MATCHUP_HISTORY_QUERY_KEY = "mh"
+_PENDING_MATCHUP_HISTORY_SESSION_KEY = "_pending_matchup_history"
+_LAST_MATCHUP_HISTORY_TRIGGER_NONCE_SESSION_KEY = "_last_matchup_history_trigger_nonce"
+_MATCHUP_HISTORY_CLICK_BRIDGE_JS = """
+export default function(component) {
+    const { setTriggerValue } = component;
+
+    const onClick = (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+
+        const link = target.closest('.live-game-card-link[data-nhl-matchup-history="1"]');
+        if (!link) {
+            return;
+        }
+
+        const matchup = String(link.getAttribute('data-matchup-history') || '').trim();
+        if (!matchup) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const nonce = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+        setTriggerValue('clicked', `${matchup}|${nonce}`);
+    };
+
+    document.addEventListener('click', onClick, true);
+
+    return () => {
+        document.removeEventListener('click', onClick, true);
+    };
+}
+"""
+_MATCHUP_HISTORY_CLICK_BRIDGE = st.components.v2.component(
+    "comparison_matchup_history_click_bridge",
+    js=_MATCHUP_HISTORY_CLICK_BRIDGE_JS,
+)
 
 
 def _normalize_probability_color(hex_color: str) -> str:
@@ -733,14 +776,133 @@ def render_detail_tabs(
                 )
 
 
-def render_predictions_panel() -> None:
+def _coerce_query_param_scalar(value) -> str:
+    """Return one string value from Streamlit query-param storage."""
+    if isinstance(value, (list, tuple)):
+        return str(value[0] if value else "")
+    return str(value or "")
+
+
+def _noop_matchup_history_click_change() -> None:
+    """Provide a stable callback for the JS trigger component."""
+
+
+def _mount_matchup_history_click_bridge():
+    """Mount the JS click bridge and return the latest trigger payload."""
+    result = _MATCHUP_HISTORY_CLICK_BRIDGE(
+        key="comparison_matchup_history_click_bridge",
+        on_clicked_change=_noop_matchup_history_click_change,
+    )
+    return getattr(result, "clicked", None)
+
+
+def _parse_matchup_history_request(value) -> tuple[str, str] | None:
+    """Validate one matchup-history query-param payload."""
+    raw_value = _coerce_query_param_scalar(value).strip().upper()
+    if not raw_value:
+        return None
+
+    parts = [part.strip().upper() for part in raw_value.split(",")]
+    if len(parts) != 2:
+        return None
+
+    away_abbr, home_abbr = parts
+    if away_abbr not in ACTIVE_TEAMS or home_abbr not in ACTIVE_TEAMS or away_abbr == home_abbr:
+        return None
+    return away_abbr, home_abbr
+
+
+def _parse_matchup_history_trigger(value) -> tuple[str, str, str] | None:
+    """Validate one JS trigger payload of the form ``AWY,HOME|nonce``."""
+    raw_value = _coerce_query_param_scalar(value).strip()
+    if not raw_value or "|" not in raw_value:
+        return None
+
+    matchup_value, nonce = raw_value.split("|", 1)
+    parsed_request = _parse_matchup_history_request(matchup_value)
+    clean_nonce = str(nonce or "").strip()
+    if parsed_request is None or not clean_nonce:
+        return None
+
+    away_abbr, home_abbr = parsed_request
+    return away_abbr, home_abbr, clean_nonce
+
+
+def _show_matchup_history_from_trigger(value) -> bool:
+    """Open matchup history once for each unique JS trigger nonce."""
+    parsed_trigger = _parse_matchup_history_trigger(value)
+    if parsed_trigger is None:
+        return False
+
+    away_abbr, home_abbr, nonce = parsed_trigger
+    try:
+        if st.session_state.get(_LAST_MATCHUP_HISTORY_TRIGGER_NONCE_SESSION_KEY) == nonce:
+            return False
+        st.session_state[_LAST_MATCHUP_HISTORY_TRIGGER_NONCE_SESSION_KEY] = nonce
+    except Exception:
+        pass
+
+    show_matchup_history(
+        away_abbr=away_abbr,
+        home_abbr=home_abbr,
+    )
+    return True
+
+
+def _consume_matchup_history_request() -> None:
+    """Capture and clear one pending matchup-history request from the URL."""
+    try:
+        raw_value = dict(st.query_params).get(_MATCHUP_HISTORY_QUERY_KEY)
+    except Exception:
+        raw_value = None
+
+    if raw_value is None:
+        return
+
+    parsed_request = _parse_matchup_history_request(raw_value)
+    if parsed_request is not None:
+        try:
+            st.session_state[_PENDING_MATCHUP_HISTORY_SESSION_KEY] = parsed_request
+        except Exception:
+            pass
+
+    try:
+        del st.query_params[_MATCHUP_HISTORY_QUERY_KEY]
+    except Exception:
+        pass
+
+
+def _show_pending_matchup_history_dialog() -> None:
+    """Open the pending matchup-history dialog exactly once."""
+    try:
+        pending_request = st.session_state.pop(_PENDING_MATCHUP_HISTORY_SESSION_KEY, None)
+    except Exception:
+        pending_request = None
+
+    if not pending_request:
+        return
+
+    away_abbr, home_abbr = pending_request
+    show_matchup_history(
+        away_abbr=away_abbr,
+        home_abbr=home_abbr,
+    )
+
+
+def render_predictions_panel(share_params: dict | None = None) -> None:
     """Render the dedicated Predictions panel in the desktop right rail."""
+    trigger_value = _mount_matchup_history_click_bridge()
     st.markdown("<div id='comparison-predictions-panel'></div>", unsafe_allow_html=True)
     st.markdown(
         "<div class='comparison-panel-heading comparison-panel-heading--rail-title comparison-panel-heading--predictions'>Next matches prediction</div>",
         unsafe_allow_html=True,
     )
-    _render_live_games_tab()
+    _render_live_games_tab(share_params=share_params)
+    if _show_matchup_history_from_trigger(trigger_value):
+        return
+
+    _consume_matchup_history_request()
+    _show_pending_matchup_history_dialog()
 
 
 
@@ -890,7 +1052,7 @@ def _build_live_game_card_html(game: dict) -> str:
     home_short_esc = escape(home_short_name)
 
     return (
-        f"<div class='live-game-card live-game-card--{panel_state}' style='{card_style}' tabindex='0'>"
+        f"<div class='live-game-card live-game-card--{panel_state}' style='{card_style}'>"
         "<div class='lgc-header'>"
         "<div class='lgc-header__main'>"
         "<div class='lgc-matchup'>"
@@ -909,6 +1071,42 @@ def _build_live_game_card_html(game: dict) -> str:
     )
 
 
+def _build_live_game_card_href(game: dict, share_params: dict | None = None) -> str:
+    """Build one self-link that preserves current shared app state."""
+    away_abbr = str(game.get("away_abbr", "") or "").strip().upper()
+    home_abbr = str(game.get("home_abbr", "") or "").strip().upper()
+    if not away_abbr or not home_abbr:
+        return "#"
+
+    query_items: list[tuple[str, str]] = []
+    for key, value in (share_params or {}).items():
+        clean_key = str(key or "").strip()
+        if not clean_key or value is None:
+            continue
+        query_items.append((clean_key, str(value)))
+    query_items.append((_MATCHUP_HISTORY_QUERY_KEY, f"{away_abbr},{home_abbr}"))
+    return f"?{urlencode(query_items)}"
+
+
+def _build_live_game_card_link_html(game: dict, share_params: dict | None = None) -> str:
+    """Wrap one prediction card in a full-card history link."""
+    away_abbr = str(game.get("away_abbr", "") or "").strip().upper()
+    home_abbr = str(game.get("home_abbr", "") or "").strip().upper()
+    away_name = str(game.get("away_name", "") or game.get("away_abbr", "") or "").strip()
+    home_name = str(game.get("home_name", "") or game.get("home_abbr", "") or "").strip()
+    href = escape(_build_live_game_card_href(game, share_params=share_params), quote=True)
+    title = escape(f"Open matchup history for {away_name} at {home_name}", quote=True)
+    matchup_value = escape(f"{away_abbr},{home_abbr}", quote=True)
+    return (
+        "<div class='live-game-card-shell'>"
+        f"<a class='live-game-card-link' href='{href}' aria-label='{title}' title='{title}' "
+        "data-nhl-matchup-history='1' "
+        f"data-matchup-history='{matchup_value}'></a>"
+        f"{_build_live_game_card_html(game)}"
+        "</div>"
+    )
+
+
 def _get_team_short_name(team_abbr: str, fallback_name: str) -> str:
     """Return the short display name for a team.
 
@@ -922,7 +1120,7 @@ def _get_team_short_name(team_abbr: str, fallback_name: str) -> str:
     return _TEAM_SHORT_NAMES.get(team_abbr, ACTIVE_TEAMS.get(team_abbr, fallback_name))
 
 
-def _render_live_games_tab() -> None:
+def _render_live_games_tab(share_params: dict | None = None) -> None:
     """Render the shared right-rail predictions cards for upcoming games."""
     upcoming_games = get_upcoming_games(limit=6)
     if not upcoming_games:
@@ -930,7 +1128,7 @@ def _render_live_games_tab() -> None:
         return
 
     for game in upcoming_games:
-        card_html = _build_live_game_card_html(game)
+        card_html = _build_live_game_card_link_html(game, share_params=share_params)
         st.markdown(card_html, unsafe_allow_html=True)
 
 

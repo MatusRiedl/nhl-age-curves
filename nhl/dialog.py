@@ -8,7 +8,7 @@ import streamlit as st
 from nhl.constants import ACTIVE_TEAMS, NHLE_DEFAULT_MULTIPLIER, NHLE_MULTIPLIERS
 from nhl.data_loaders import get_all_time_rank
 from nhl.era import get_era_multiplier
-from nhl.schedule import get_game_details
+from nhl.schedule import get_game_details, get_matchup_history
 
 
 BASELINE_LABEL_TO_KEY = {
@@ -190,6 +190,51 @@ def _build_matchup_card_html(game: dict) -> str:
         f"<div style='margin-top:10px;font-size:13px;color:#b7bcc2;'>{detail_html}</div>"
         "</div>"
     )
+
+
+def _build_matchup_history_summary(
+    away_abbr: str,
+    home_abbr: str,
+    history_games: list[dict],
+) -> str | None:
+    """Return a plain-text summary of wins across the displayed matchup history."""
+    clean_away_abbr = str(away_abbr or "").strip().upper()
+    clean_home_abbr = str(home_abbr or "").strip().upper()
+    away_wins = 0
+    home_wins = 0
+    ties = 0
+
+    for game in history_games:
+        away_score = game.get("away_score")
+        home_score = game.get("home_score")
+        try:
+            away_score_int = int(away_score)
+            home_score_int = int(home_score)
+        except Exception:
+            continue
+
+        if away_score_int > home_score_int:
+            if str(game.get("away_abbr", "") or "").strip().upper() == clean_away_abbr:
+                away_wins += 1
+            elif str(game.get("away_abbr", "") or "").strip().upper() == clean_home_abbr:
+                home_wins += 1
+        elif home_score_int > away_score_int:
+            if str(game.get("home_abbr", "") or "").strip().upper() == clean_away_abbr:
+                away_wins += 1
+            elif str(game.get("home_abbr", "") or "").strip().upper() == clean_home_abbr:
+                home_wins += 1
+        else:
+            ties += 1
+
+    total_counted = away_wins + home_wins + ties
+    if total_counted == 0:
+        return None
+
+    summary = f"{clean_away_abbr} won {away_wins}, {clean_home_abbr} won {home_wins}"
+    if ties:
+        summary += f", with {ties} tie" if ties == 1 else f", with {ties} ties"
+    summary += f" in the last {total_counted} meetings shown."
+    return summary
 
 
 def _format_game_toi(total_toi_mins: float) -> str:
@@ -822,3 +867,31 @@ def show_team_game_details(
         hide_index=True,
         use_container_width=True,
     )
+
+
+@st.dialog("Matchup History")
+def show_matchup_history(
+    away_abbr: str,
+    home_abbr: str,
+    limit: int = 10,
+) -> None:
+    """Render the latest head-to-head meetings for one upcoming matchup."""
+    clean_away_abbr = str(away_abbr or "").strip().upper()
+    clean_home_abbr = str(home_abbr or "").strip().upper()
+    st.markdown(f"### {clean_away_abbr} at {clean_home_abbr} - Last {int(limit)} meetings")
+
+    history_games = get_matchup_history(
+        away_abbr=clean_away_abbr,
+        home_abbr=clean_home_abbr,
+        limit=limit,
+    )
+    if not history_games:
+        st.info("No completed matchup history available right now.")
+        return
+
+    summary = _build_matchup_history_summary(clean_away_abbr, clean_home_abbr, history_games)
+    if summary:
+        st.markdown(summary)
+
+    for game in history_games:
+        st.markdown(_build_matchup_card_html(game), unsafe_allow_html=True)
