@@ -89,6 +89,25 @@ def _format_season_span(season_year: int | None) -> str:
     return f"{year}-{str(year + 1)[2:]}"
 
 
+def _format_season_id_span(season_id: int | None) -> str:
+    """Format one NHL seasonId like ``20242025`` into ``2024-25``."""
+    if season_id is None:
+        return ""
+    try:
+        raw_value = int(season_id)
+    except Exception:
+        return ""
+
+    raw_text = str(raw_value)
+    start_year = raw_value
+    if len(raw_text) >= 8:
+        try:
+            start_year = int(raw_text[:4])
+        except Exception:
+            return ""
+    return _format_season_span(start_year)
+
+
 def _parse_iso_date(value: str) -> datetime | None:
     """Parse a ``YYYY-MM-DD`` date string when possible."""
     clean_value = str(value or "").strip()
@@ -977,7 +996,14 @@ def get_team_trophy_summary() -> dict:
         records.nhl.com franchise-season-results
 
     Returns:
-        Dict of {triCode: {'stanley_cups': int, 'latest_cup_season': int | None}}
+        Dict of {
+            triCode: {
+                'stanley_cups': int,
+                'latest_cup_season': int | None,
+                'cup_seasons': list[int],
+                'cup_labels': list[str],
+            }
+        }
         for active NHL teams.
         Returns {} on failure.
     """
@@ -1000,7 +1026,12 @@ def get_team_trophy_summary() -> dict:
                 cups_int = int(cups) if cups is not None else 0
             except Exception:
                 cups_int = 0
-            result[tri] = {"stanley_cups": cups_int, "latest_cup_season": None}
+            result[tri] = {
+                "stanley_cups": cups_int,
+                "latest_cup_season": None,
+                "cup_seasons": [],
+                "cup_labels": [],
+            }
 
         # Derive latest Stanley Cup season per team from SCF-winning rows.
         # Some seasons appear twice (gameTypeId 2 and 3), so dedupe by seasonId.
@@ -1027,7 +1058,14 @@ def get_team_trophy_summary() -> dict:
         for tri, data in result.items():
             seasons = cup_seasons.get(tri)
             if seasons:
-                data["latest_cup_season"] = max(seasons)
+                ordered_seasons = sorted({int(season_id) for season_id in seasons}, reverse=True)
+                data["cup_seasons"] = ordered_seasons
+                data["cup_labels"] = [
+                    label
+                    for label in (_format_season_id_span(season_id) for season_id in ordered_seasons)
+                    if label
+                ]
+                data["latest_cup_season"] = max(ordered_seasons)
         return result
     except Exception:
         return {}
@@ -1233,6 +1271,17 @@ def get_team_identity_summary(team_abbr: str) -> dict:
 
     conference_name = ""
     division_name = ""
+    team_trophies = get_team_trophy_summary().get(clean_abbr, {})
+    stanley_cup_seasons = [
+        int(season_id)
+        for season_id in (team_trophies.get("cup_seasons", []) or [])
+        if str(season_id).strip()
+    ]
+    stanley_cup_labels = [
+        str(label or "").strip()
+        for label in (team_trophies.get("cup_labels", []) or [])
+        if str(label or "").strip()
+    ]
     standings_df = get_current_nhl_standings()
     if not standings_df.empty and "teamAbbrev" in standings_df.columns:
         team_rows = standings_df[standings_df["teamAbbrev"] == clean_abbr]
@@ -1250,6 +1299,9 @@ def get_team_identity_summary(team_abbr: str) -> dict:
         "current_identity_since_label": _format_season_span(current_identity_since_year),
         "conference_name": conference_name,
         "division_name": division_name,
+        "stanley_cup_count": int(team_trophies.get("stanley_cups", 0) or 0),
+        "stanley_cup_seasons": stanley_cup_seasons,
+        "stanley_cup_labels": stanley_cup_labels,
         "lineage": lineage,
         "lineage_label": lineage_label,
         "total_nhl_seasons": total_nhl_seasons,

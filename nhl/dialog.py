@@ -1202,22 +1202,38 @@ def show_team_identity_details(team_abbr: str) -> None:
 
     total_nhl_seasons = summary.get("total_nhl_seasons")
     total_nhl_seasons_label = str(int(total_nhl_seasons)) if total_nhl_seasons else ""
+    stanley_cup_count = int(summary.get("stanley_cup_count", 0) or 0)
+    stanley_cup_count_label = str(stanley_cup_count) if stanley_cup_count > 0 else ""
 
     rows = [
         ("Joined NHL", joined_label),
         ("Current identity since", current_identity_label),
         ("Conference / division", conference_division),
         ("Total NHL seasons", total_nhl_seasons_label),
+        ("Stanley Cups", stanley_cup_count_label),
     ]
     rendered_rows = _render_identity_rows(rows, columns=2)
 
     lineage_label = str(summary.get("lineage_label", "") or "").strip()
+    stanley_cup_labels = [
+        str(label or "").strip()
+        for label in (summary.get("stanley_cup_labels", []) or [])
+        if str(label or "").strip()
+    ]
+    stanley_cup_years_text = " | ".join(stanley_cup_labels)
     if lineage_label:
         if rendered_rows:
             st.markdown("---")
         st.markdown(f"**Franchise lineage**  \n{lineage_label}")
+        rendered_rows = True
 
-    if not rendered_rows and not lineage_label:
+    if stanley_cup_years_text:
+        if rendered_rows:
+            st.markdown("---")
+        st.markdown(f"**Stanley Cup wins**  \n{stanley_cup_years_text}")
+        rendered_rows = True
+
+    if not rendered_rows and not lineage_label and not stanley_cup_years_text:
         st.info("Team details unavailable right now.")
 
 

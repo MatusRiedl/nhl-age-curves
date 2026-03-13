@@ -914,6 +914,191 @@ _CSS = """
             margin: 0 auto 0.42rem;
             padding: 0.18rem 0 0.16rem;
         }
+        .stanley-cup-board-shell {
+            margin: 0.2rem 0 0.85rem 0;
+        }
+        .stanley-cup-board-meta {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.55rem 1rem;
+            margin: 0 0 0.55rem 0;
+            color: rgba(229, 237, 249, 0.84);
+            font-size: 0.82rem;
+            line-height: 1.3;
+        }
+        .stanley-cup-board-summary {
+            margin: 0 0 0.75rem 0;
+            padding: 0.6rem 0.8rem;
+            border: 1px solid rgba(71, 85, 105, 0.42);
+            border-radius: 14px;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.78) 0%, rgba(17, 24, 39, 0.94) 100%);
+            color: rgba(226, 232, 240, 0.88);
+            font-size: 0.84rem;
+            line-height: 1.35;
+        }
+        .stanley-cup-board-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.95rem;
+        }
+        .stanley-cup-division-window {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(70, 84, 122, 0.52);
+            border-radius: 18px;
+            background: linear-gradient(
+                160deg,
+                var(--division-accent-soft, rgba(96, 165, 250, 0.08)) 0%,
+                rgba(12, 18, 33, 0.94) 34%,
+                rgba(8, 12, 22, 0.98) 100%
+            );
+            box-shadow:
+                inset 0 0 72px var(--division-accent-soft, transparent),
+                0 12px 24px rgba(0, 0, 0, 0.18);
+        }
+        .stanley-cup-division-window::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--division-accent, #60a5fa) 0%, var(--division-accent-glow, rgba(96, 165, 250, 0.28)) 100%);
+        }
+        .stanley-cup-division-header {
+            padding: 0.9rem 1rem 0.7rem 1rem;
+        }
+        .stanley-cup-division-kicker {
+            margin: 0 0 0.18rem 0;
+            color: rgba(191, 219, 254, 0.74);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+        }
+        .stanley-cup-division-heading {
+            color: #f8fafc;
+            font-size: 1.18rem;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+        .stanley-cup-table-head,
+        .stanley-cup-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1.85fr) repeat(5, minmax(32px, 0.42fr));
+            gap: 0.35rem;
+            align-items: center;
+        }
+        .stanley-cup-table-head {
+            padding: 0 1rem 0.5rem 1rem;
+            color: rgba(203, 213, 225, 0.76);
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .stanley-cup-table-head__team {
+            text-align: left;
+        }
+        .stanley-cup-row {
+            margin: 0 0.55rem;
+            padding: 0.74rem 0.45rem;
+            border-top: 1px solid rgba(71, 85, 105, 0.34);
+            color: #e5edf9;
+            transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+        }
+        .stanley-cup-row-shell {
+            display: block;
+            cursor: pointer;
+            outline: none;
+        }
+        .stanley-cup-row:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .stanley-cup-row-shell:hover .stanley-cup-row,
+        .stanley-cup-row-shell:focus .stanley-cup-row,
+        .stanley-cup-row-shell:focus-visible .stanley-cup-row,
+        .stanley-cup-row-shell:focus-within .stanley-cup-row {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(148, 163, 184, 0.42);
+            transform: translateY(-2px);
+        }
+        .stanley-cup-row--favorite {
+            border-color: var(--favorite-accent, #22c55e);
+            border-radius: 12px;
+            background: linear-gradient(
+                135deg,
+                var(--favorite-accent-soft, rgba(34, 197, 94, 0.16)) 0%,
+                rgba(15, 23, 42, 0.92) 100%
+            );
+            box-shadow:
+                inset 0 0 44px var(--favorite-accent-soft, rgba(34, 197, 94, 0.12)),
+                0 0 0 1px var(--favorite-accent, #22c55e),
+                0 12px 24px rgba(0, 0, 0, 0.16);
+            transform: translateY(-1px);
+        }
+        .stanley-cup-row-team {
+            display: flex;
+            align-items: center;
+            gap: 0.62rem;
+            min-width: 0;
+        }
+        .stanley-cup-team-logo {
+            width: 26px;
+            height: 26px;
+            object-fit: contain;
+            flex: 0 0 26px;
+        }
+        .stanley-cup-row-team-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 0.96rem;
+            font-weight: 700;
+        }
+        .stanley-cup-row-badge {
+            margin-left: auto;
+            padding: 0.18rem 0.46rem;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #f8fafc;
+            font-size: 0.67rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .stanley-cup-row-value {
+            color: rgba(241, 245, 249, 0.9);
+            font-size: 0.92rem;
+            font-weight: 600;
+            text-align: center;
+        }
+        .stanley-cup-row-value--pts {
+            color: #ffffff;
+            font-weight: 800;
+        }
+        .stanley-cup-favorite-button-anchor {
+            display: inline-flex;
+            align-items: center;
+            margin-right: 0.45rem;
+        }
+        .stanley-cup-favorite-button-anchor::before {
+            content: "Cup pick";
+            display: inline-flex;
+            align-items: center;
+            padding: 0.18rem 0.46rem;
+            border: 1px solid rgba(250, 204, 21, 0.34);
+            border-radius: 999px;
+            background: rgba(250, 204, 21, 0.12);
+            color: rgba(254, 240, 138, 0.98);
+            font-size: 0.66rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
         .comparison-panel-heading--season {
             margin: 0 auto 0.2rem;
             padding: 0.18rem 0 0.08rem;
@@ -1052,7 +1237,7 @@ _CSS = """
             transition: box-shadow 0.3s ease, background 0.3s ease;
         }
         div.element-container:has(#comparison-detail-layout) {
-            margin: -1.65rem 0 0 0 !important;
+            margin: -2.2rem 0 0 0 !important;
             line-height: 0 !important;
         }
         div.element-container:has(#comparison-detail-layout) + div.element-container {
@@ -1061,11 +1246,11 @@ _CSS = """
 
         /* Comparison tab row (native st.tabs) */
         div.element-container:has(#comparison-tabs) {
-            margin: 0 !important;
+            margin: -0.3rem 0 0 0 !important;
             line-height: 0 !important;
         }
         div.element-container:has(#comparison-tabs) + div.element-container {
-            margin-top: -0.2rem !important;
+            margin-top: -0.45rem !important;
         }
         div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] {
             margin-top: 0 !important;
@@ -1105,6 +1290,15 @@ _CSS = """
             padding-top: 0.1rem !important;
         }
         @media (max-width: 768px) {
+            div.element-container:has(#comparison-detail-layout) {
+                margin-top: -1.6rem !important;
+            }
+            div.element-container:has(#comparison-tabs) {
+                margin-top: -0.12rem !important;
+            }
+            div.element-container:has(#comparison-tabs) + div.element-container {
+                margin-top: -0.2rem !important;
+            }
             div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] button[role="tab"] {
                 padding: 3px 8px !important;
             }
@@ -1177,6 +1371,40 @@ _CSS = """
             }
             .comparison-player-card__image--team-logo {
                 padding: 0.3rem;
+            }
+            .stanley-cup-board-grid {
+                grid-template-columns: 1fr;
+                gap: 0.8rem;
+            }
+            .stanley-cup-division-header {
+                padding: 0.8rem 0.85rem 0.62rem 0.85rem;
+            }
+            .stanley-cup-table-head,
+            .stanley-cup-row {
+                grid-template-columns: minmax(0, 1.7fr) repeat(5, minmax(28px, 0.42fr));
+                gap: 0.28rem;
+            }
+            .stanley-cup-table-head {
+                padding: 0 0.85rem 0.44rem 0.85rem;
+                font-size: 0.69rem;
+            }
+            .stanley-cup-row {
+                margin: 0 0.38rem;
+                padding: 0.66rem 0.36rem;
+            }
+            .stanley-cup-team-logo {
+                width: 22px;
+                height: 22px;
+                flex-basis: 22px;
+            }
+            .stanley-cup-row-team-name {
+                font-size: 0.88rem;
+            }
+            .stanley-cup-row-badge {
+                display: none;
+            }
+            .stanley-cup-board-meta {
+                font-size: 0.76rem;
             }
             .comparison-trace-toggle {
                 gap: 0.45rem;

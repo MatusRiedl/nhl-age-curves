@@ -11,6 +11,7 @@ import streamlit as st
 
 from nhl.constants import ACTIVE_TEAMS, RATE_STATS, TEAM_BRAND_COLORS, TEAM_FOUNDED, TEAM_RATE_STATS
 from nhl.data_loaders import (
+    get_current_nhl_standings,
     get_player_awards,
     get_player_career_rank,
     get_player_current_team,
@@ -21,6 +22,7 @@ from nhl.data_loaders import (
     get_team_season_summary,
     get_team_all_time_stats,
     get_team_trophy_summary,
+    load_win_prob_weights,
 )
 from nhl.dialog import (
     show_matchup_history,
@@ -28,6 +30,7 @@ from nhl.dialog import (
     show_team_identity_details,
 )
 from nhl.schedule import get_upcoming_games
+from nhl.stanley_cup import build_stanley_cup_board
 
 _TEAM_LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbr}_light.svg"
 _TEAM_SHORT_NAMES = {
@@ -73,6 +76,12 @@ _CATEGORY_TAB_KEYS = {
     "Skater": "panel_tab_skater",
     "Goalie": "panel_tab_goalie",
     "Team": "panel_tab_team",
+}
+_STANDINGS_WINDOW_COLORS = {
+    "Atlantic": "#3b82f6",
+    "Metropolitan": "#14b8a6",
+    "Central": "#f97316",
+    "Pacific": "#facc15",
 }
 _MATCHUP_HISTORY_QUERY_KEY = "mh"
 _PENDING_MATCHUP_HISTORY_SESSION_KEY = "_pending_matchup_history"
@@ -1886,6 +1895,165 @@ def _render_trophies_teams(
     )
 
 
+@st.cache_data(ttl=3600)
+def get_stanley_cup_board() -> dict:
+    """Return one cached live current-standings board with a Cup favorite."""
+    return build_stanley_cup_board(
+        standings_df=get_current_nhl_standings(),
+        artifact=load_win_prob_weights(),
+        goalie_proxy_by_team=None,
+    )
+
+
+def _build_current_standings_board_markup(board: dict) -> str:
+    """Return the league-wide standings board markup."""
+    generated_at_label = escape(str(board.get("generated_at_label", "") or "").strip())
+    favorite_team = board.get("favorite_team", {}) if isinstance(board, dict) else {}
+    favorite_name = escape(str(favorite_team.get("team_name", "") or "").strip())
+    favorite_summary = escape(str(favorite_team.get("summary_text", "") or "").strip())
+    favorite_rank = favorite_team.get("rank")
+
+    meta_bits: list[str] = []
+    if generated_at_label:
+        meta_bits.append(f"<span>{generated_at_label}</span>")
+    if favorite_name:
+        label_suffix = f" (model rank #{int(favorite_rank)})" if favorite_rank else ""
+        meta_bits.append(
+            "<span>"
+            "<span class='stanley-cup-favorite-button-anchor'></span>"
+            f"Cup pick: <strong>{favorite_name}</strong>{escape(label_suffix)}"
+            "</span>"
+        )
+
+    division_markup: list[str] = []
+    for division in board.get("divisions", []):
+        division_name = str(division.get("division_name", "") or "").strip()
+        conference_name = escape(str(division.get("conference_name", "") or "").strip())
+        accent = _resolve_chart_accent_color(_STANDINGS_WINDOW_COLORS.get(division_name, "#60a5fa"))
+        accent_soft = _hex_to_rgba(accent, 0.14)
+        accent_glow = _hex_to_rgba(accent, 0.28)
+        safe_division_name = escape(division_name)
+
+        row_markup: list[str] = []
+        for team in division.get("teams", []):
+            team_abbr = str(team.get("team_abbr", "") or "").strip().upper()
+            team_logo = escape(str(team.get("team_logo", "") or _TEAM_LOGO_URL.format(abbr=team_abbr)), quote=True)
+            team_name = escape(str(team.get("team_common_name") or team.get("team_name") or team_abbr).strip())
+            primary_brand = TEAM_BRAND_COLORS.get(team_abbr, ("#4f46e5", "#1d4ed8"))[0]
+            favorite_style = ""
+            favorite_badge = ""
+            row_classes = "stanley-cup-row"
+            if team.get("is_favorite"):
+                row_classes = f"{row_classes} stanley-cup-row--favorite"
+                favorite_style = escape(
+                    (
+                        f"--favorite-accent:{primary_brand};"
+                        f"--favorite-accent-soft:{_hex_to_rgba(primary_brand, 0.18)};"
+                        f"--favorite-accent-glow:{_hex_to_rgba(primary_brand, 0.34)};"
+                    ),
+                    quote=True,
+                )
+                favorite_badge = "<span class='stanley-cup-row-badge'>Cup pick</span>"
+
+            row_markup.append(
+                "<div class='comparison-card-shell comparison-card-shell--clickable "
+                "stanley-cup-row-shell' "
+                "data-nhl-identity-card='1' "
+                f"data-identity-card='team:{escape(team_abbr, quote=True)}' "
+                f"aria-label='Open team details for {escape(str(team.get('team_name') or team_abbr), quote=True)}' "
+                f"title='Open team details for {escape(str(team.get('team_name') or team_abbr), quote=True)}' "
+                "role='button' tabindex='0'>"
+                f"<div class='{row_classes}' style='{favorite_style}'>"
+                "<div class='stanley-cup-row-team'>"
+                f"<img class='stanley-cup-team-logo' src='{team_logo}' alt='{team_abbr} logo' loading='lazy'>"
+                f"<span class='stanley-cup-row-team-name'>{team_name}</span>"
+                f"{favorite_badge}"
+                "</div>"
+                f"<div class='stanley-cup-row-value'>{int(team.get('games_played', 0) or 0)}</div>"
+                f"<div class='stanley-cup-row-value'>{int(team.get('wins', 0) or 0)}</div>"
+                f"<div class='stanley-cup-row-value'>{int(team.get('losses', 0) or 0)}</div>"
+                f"<div class='stanley-cup-row-value'>{int(team.get('ot_losses', 0) or 0)}</div>"
+                f"<div class='stanley-cup-row-value stanley-cup-row-value--pts'>{int(team.get('points', 0) or 0)}</div>"
+                "</div>"
+                "</div>"
+            )
+
+        division_markup.append(
+            "<section class='stanley-cup-division-window' "
+            f"style='--division-accent:{escape(accent, quote=True)};"
+            f"--division-accent-soft:{escape(accent_soft, quote=True)};"
+            f"--division-accent-glow:{escape(accent_glow, quote=True)};'>"
+            "<div class='stanley-cup-division-header'>"
+            f"<div class='stanley-cup-division-kicker'>{conference_name} Conference</div>"
+            f"<div class='stanley-cup-division-heading'>{safe_division_name} Division</div>"
+            "</div>"
+            "<div class='stanley-cup-table-head'>"
+            "<div class='stanley-cup-table-head__team'>Team</div>"
+            "<div>GP</div>"
+            "<div>W</div>"
+            "<div>L</div>"
+            "<div>OTL</div>"
+            "<div>Pts</div>"
+            "</div>"
+            f"{''.join(row_markup)}"
+            "</section>"
+        )
+
+    summary_markup = (
+        f"<div class='stanley-cup-board-summary'>{favorite_summary}</div>"
+        if favorite_summary
+        else ""
+    )
+
+    return (
+        "<div class='stanley-cup-board-shell'>"
+        f"<div class='stanley-cup-board-meta'>{''.join(meta_bits)}</div>"
+        f"{summary_markup}"
+        "<div class='stanley-cup-board-grid'>"
+        f"{''.join(division_markup)}"
+        "</div>"
+        "</div>"
+    )
+
+
+def _render_current_standings_shared() -> None:
+    """Render the shared four-window live standings board."""
+    board = get_stanley_cup_board()
+    if not board.get("divisions"):
+        st.info("Current NHL standings are unavailable right now.")
+        return
+
+    st.markdown(_build_current_standings_board_markup(board), unsafe_allow_html=True)
+
+
+def _render_current_standings_players(
+    processed_dfs: list,
+    players: dict,
+    peak_info: dict,
+    metric: str,
+    stat_category: str,
+    season_type: str,
+    selected_season: str | int = "All",
+    do_cumul: bool = False,
+) -> None:
+    """Current standings tab for skater/goalie categories."""
+    del processed_dfs, players, peak_info, metric, stat_category, season_type, selected_season, do_cumul
+    _render_current_standings_shared()
+
+
+def _render_current_standings_teams(
+    active_teams: dict,
+    processed_dfs: list,
+    metric: str,
+    season_type: str = "Regular",
+    selected_season: str | int = "All",
+    do_cumul: bool = False,
+) -> None:
+    """Current standings tab for team category."""
+    del active_teams, processed_dfs, metric, season_type, selected_season, do_cumul
+    _render_current_standings_shared()
+
+
 _DETAIL_PANEL_TABS = (
     PanelTabSpec(
         id="overview",
@@ -1898,5 +2066,11 @@ _DETAIL_PANEL_TABS = (
         label="Trophies",
         render_player=_render_trophies_players,
         render_team=_render_trophies_teams,
+    ),
+    PanelTabSpec(
+        id="current-standings",
+        label="Current Standings",
+        render_player=_render_current_standings_players,
+        render_team=_render_current_standings_teams,
     ),
 )
