@@ -72,6 +72,7 @@ _DEFAULT_PLAYER_RANK_COLOR = "#4caf50"
 _CARD_CONTEXT_TEXT_COLOR = "#b3b3b3"
 _PROBABILITY_BAR_LIGHTNESS = 0.36
 _PROBABILITY_BAR_SATURATION = 0.68
+_PREDICTIONS_PANEL_MATCH_LIMIT = 14
 _CATEGORY_TAB_KEYS = {
     "Skater": "panel_tab_skater",
     "Goalie": "panel_tab_goalie",
@@ -1314,7 +1315,7 @@ def _get_team_short_name(team_abbr: str, fallback_name: str) -> str:
 
 def _render_live_games_tab(share_params: dict | None = None) -> None:
     """Render the shared right-rail predictions cards for upcoming games."""
-    upcoming_games = get_upcoming_games(limit=6)
+    upcoming_games = get_upcoming_games(limit=_PREDICTIONS_PANEL_MATCH_LIMIT)
     if not upcoming_games:
         st.info("No upcoming NHL games found right now.")
         return
