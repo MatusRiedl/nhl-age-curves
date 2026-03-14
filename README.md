@@ -70,7 +70,7 @@ nhl/
     sidebar.py           player and team sidebar UI
     dialog.py            season-detail and matchup-history dialogs
     chart.py             Plotly chart rendering, share link, and JS pan-clamp
-    comparison.py        Overview/Trophies detail tabs plus the right-rail chart-season picker and clickable predictions panel
+    comparison.py        Overview/Current Standings detail tabs plus the right-rail chart-season picker and clickable predictions panel
     url_params.py        URL query param encode/decode for shareable links and chart season state
     schedule.py          live defaults, upcoming games, featured-player helpers, matchup history, and runtime matchup inference
     async_preloader.py   background cache warming for Goalie/Team categories

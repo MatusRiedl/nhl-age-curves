@@ -1,4 +1,4 @@
-"""Comparison panel rendering for chart details, trophies, and predictions."""
+"""Comparison panel rendering for chart details, current standings, and predictions."""
 
 import colorsys
 from dataclasses import dataclass
@@ -12,7 +12,6 @@ import streamlit as st
 from nhl.constants import ACTIVE_TEAMS, RATE_STATS, TEAM_BRAND_COLORS, TEAM_FOUNDED, TEAM_RATE_STATS
 from nhl.data_loaders import (
     get_current_nhl_standings,
-    get_player_awards,
     get_player_career_rank,
     get_player_current_team,
     get_player_headshot,
@@ -21,7 +20,6 @@ from nhl.data_loaders import (
     get_player_roster_info,
     get_team_season_summary,
     get_team_all_time_stats,
-    get_team_trophy_summary,
     load_win_prob_weights,
 )
 from nhl.dialog import (
@@ -848,7 +846,7 @@ def render_detail_tabs(
     selected_season: str | int = "All",
     do_cumul: bool = False,
 ) -> None:
-    """Render the full-width Overview/Trophies detail tabs below the chart."""
+    """Render the full-width Overview/Current Standings detail tabs below the chart."""
     identity_trigger_value = _mount_identity_card_click_bridge()
     tab_lookup = {tab.id: tab for tab in _DETAIL_PANEL_TABS}
     tab_key = _get_category_tab_key(stat_category)
@@ -1707,198 +1705,6 @@ def _render_overview_teams(
             _get_empty_detail_message("teams", True, "overview details"),
         )
 
-
-def _summarize_player_awards(awards: list[dict]) -> list[dict]:
-    """Aggregate raw landing-page awards list by trophy name."""
-    summary: dict[str, dict] = {}
-    for award in awards:
-        if not isinstance(award, dict):
-            continue
-        trophy_field = award.get("trophy")
-        if isinstance(trophy_field, dict):
-            trophy_name = trophy_field.get("default") or trophy_field.get("fr")
-        else:
-            trophy_name = str(trophy_field or "").strip()
-        if not trophy_name:
-            continue
-
-        seasons = award.get("seasons")
-        if not isinstance(seasons, list):
-            seasons = []
-        season_ids: list[int] = []
-        for season in seasons:
-            if not isinstance(season, dict):
-                continue
-            sid = season.get("seasonId")
-            if sid is None:
-                continue
-            try:
-                season_ids.append(int(sid))
-            except Exception:
-                continue
-
-        wins_here = len(season_ids) if season_ids else 1
-        item = summary.setdefault(trophy_name, {"count": 0, "latest": None})
-        item["count"] += wins_here
-        if season_ids:
-            latest = max(season_ids)
-            if item["latest"] is None or latest > item["latest"]:
-                item["latest"] = latest
-
-    rows = [
-        {"trophy": trophy, "count": data["count"], "latest": data["latest"]}
-        for trophy, data in summary.items()
-    ]
-    rows.sort(key=lambda x: (-x["count"], -(x["latest"] or 0), x["trophy"]))
-    return rows
-
-
-def _render_trophies_players(
-    processed_dfs: list,
-    players: dict,
-    peak_info: dict,
-    metric: str,
-    stat_category: str,
-    season_type: str,
-    selected_season: str | int = "All",
-    do_cumul: bool = False,
-) -> None:
-    """Trophies tab for skater/goalie categories."""
-    del peak_info, metric, stat_category, season_type, selected_season, do_cumul
-
-    visible_players = _get_visible_player_entries(processed_dfs, players)
-    player_colors = _get_player_chart_colors()
-
-    def _render_trophy_card(pid, name, _proc_df) -> None:
-        """Render one player trophy summary card."""
-        headshot_url = get_player_headshot(int(pid))
-        team_abbr = get_player_current_team(int(pid))
-        player_color = player_colors.get(name)
-        logo_html = (
-            f"<img src='{_TEAM_LOGO_URL.format(abbr=team_abbr)}' "
-            f"height='18' style='vertical-align:middle;margin-left:6px;opacity:0.9;'>"
-            if team_abbr
-            else ""
-        )
-
-        roster_info = get_player_roster_info(int(pid))
-        name_markup = _build_colored_card_name(name, player_color)
-        if roster_info:
-            pos = escape(str(roster_info["position"]))
-            num = escape(str(roster_info["sweater_number"]))
-            name_html = (
-                f"<span style='color:#aaa;font-size:13px;'>[{pos}]</span> "
-                f"{name_markup} "
-                f"<span style='color:#aaa;font-size:13px;'>#{num}</span>"
-            )
-        else:
-            name_html = name_markup
-
-        awards = get_player_awards(int(pid))
-        award_rows = _summarize_player_awards(awards)
-
-        lines: list[str] = []
-        for row in award_rows[:8]:
-            latest = row["latest"]
-            latest_str = (
-                f" (latest {_season_span_label_from_id(latest)})"
-                if latest is not None
-                else ""
-            )
-            lines.append(
-                f"<span style='font-size:14px;color:#ddd;'>"
-                f"{row['trophy']}: <strong>x{row['count']}</strong>{latest_str}"
-                f"</span>"
-            )
-        if not lines:
-            lines.append(
-                "<span style='font-size:14px;color:#999;font-weight:bold;'>"
-                "No trophy data available."
-                "</span>"
-            )
-
-        _render_player_media_card(
-            headshot_url,
-            "<div style='line-height:1.5;margin:0;padding:0;'>"
-            f"{name_html}{logo_html}<br>"
-            f"{'<br>'.join(lines)}"
-            "</div>",
-            player_color=player_color,
-        )
-
-    _render_player_card_grid(
-        visible_players=visible_players,
-        render_card=_render_trophy_card,
-        empty_message=_get_empty_detail_message("players", bool(players), "trophy details"),
-    )
-
-
-def _render_trophies_teams(
-    active_teams: dict,
-    processed_dfs: list,
-    metric: str,
-    season_type: str = "Regular",
-    selected_season: str | int = "All",
-    do_cumul: bool = False,
-) -> None:
-    """Trophies tab for team category (v1: Stanley Cups)."""
-    del processed_dfs, metric, season_type, selected_season, do_cumul
-    trophy_summary = get_team_trophy_summary()
-    chart_colors = _get_player_chart_colors()
-
-    if not active_teams:
-        st.info(_get_empty_detail_message("teams", False, "trophy details"))
-        return
-
-    trophy_entries = list(active_teams.items())
-
-    def _render_team_trophy_card(abbr: str, full_name: str) -> None:
-        """Render one team trophy summary card."""
-        founded = TEAM_FOUNDED.get(abbr, "")
-        logo_url = _TEAM_LOGO_URL.format(abbr=abbr)
-        team_name_markup = _build_colored_card_name(full_name, chart_colors.get(full_name))
-        team_trophies = trophy_summary.get(abbr, {})
-        cup_count = team_trophies.get("stanley_cups")
-        latest_cup = team_trophies.get("latest_cup_season")
-
-        if cup_count is None:
-            cups_row = (
-                "<span style='font-size:14px;color:#999;font-weight:bold;'>"
-                "No trophy data available."
-                "</span>"
-            )
-        else:
-            latest_str = ""
-            if int(cup_count) > 0 and latest_cup is not None:
-                latest_str = f" (latest { _season_span_label_from_id(latest_cup) })"
-            cups_row = (
-                "<span style='font-size:16px;color:#f0c04a;font-weight:bold;'>"
-                f"Stanley Cups: {int(cup_count)}{latest_str}"
-                "</span>"
-            )
-
-        team_name_html = (
-            f"{team_name_markup}"
-            f" <span style='color:#aaa;font-size:13px;'>{escape(str(founded))}</span>"
-            if founded
-            else team_name_markup
-        )
-        _render_team_media_card(
-            logo_url,
-            "<div style='line-height:1.5;margin:0;padding:0;'>"
-            f"{team_name_html}<br>"
-            f"{cups_row}"
-            "</div>",
-            player_color=chart_colors.get(full_name),
-        )
-
-    _render_card_grid(
-        trophy_entries,
-        _render_team_trophy_card,
-        _get_empty_detail_message("teams", True, "trophy details"),
-    )
-
-
 @st.cache_data(ttl=3600)
 def get_stanley_cup_board() -> dict:
     """Return one cached live current-standings board with a Cup favorite."""
@@ -2064,12 +1870,6 @@ _DETAIL_PANEL_TABS = (
         label="Overview",
         render_player=_render_overview_players,
         render_team=_render_overview_teams,
-    ),
-    PanelTabSpec(
-        id="trophies",
-        label="Trophies",
-        render_player=_render_trophies_players,
-        render_team=_render_trophies_teams,
     ),
     PanelTabSpec(
         id="current-standings",

@@ -350,7 +350,7 @@ elif active_players:
 # Chart rendering (shared by both pipelines)
 # Keep the predictions panel visible even on an empty board so live games can
 # seed players and teams without forcing the user through the sidebar.
-# Overview and Trophies render directly under the chart inside the left column.
+# Overview and Current Standings render directly under the chart inside the left column.
 # =============================================================================
 with sub_col1:
     render_chart_season_picker(chart_season_options)

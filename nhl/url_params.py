@@ -36,7 +36,11 @@ _METRIC_DEFAULTS = {
     "team_metric": "Points",
 }
 
-_VALID_PANEL_TABS = {"overview", "trophies"}
+_VALID_PANEL_TABS = {"overview", "current-standings"}
+_LEGACY_PANEL_TAB_ALIASES = {
+    "trophies": "overview",
+    "stanley_cup": "current-standings",
+}
 
 
 def _sanitize_panel_tab(value: str) -> str:
@@ -57,6 +61,7 @@ def _sanitize_panel_tab(value: str) -> str:
         return "overview"
     if not re.fullmatch(r"[a-z0-9_-]+", v):
         return "overview"
+    v = _LEGACY_PANEL_TAB_ALIASES.get(v, v)
     if v not in _VALID_PANEL_TABS:
         return "overview"
     return v

@@ -60,7 +60,7 @@ Top level:
 - `sidebar.py` - sidebar UI and add/remove flows
 - `dialog.py` - chart click dialogs and matchup-history modal
 - `chart.py` - Plotly render, baseline overlay, share link, click dispatch
-- `comparison.py` - Overview / Trophies tabs plus the right-rail chart-season picker and clickable predictions panel
+- `comparison.py` - Overview / Current Standings tabs plus the right-rail chart-season picker and clickable predictions panel
 - `url_params.py` - compact share-link encode/decode
 - `schedule.py` - live defaults, upcoming games, featured players, matchup-history loading, and runtime win-prob inference
 - `async_preloader.py` - background cache warming for non-active categories
@@ -420,7 +420,7 @@ Module responsibilities:
 - `sidebar.py` - player/team add flows plus sidebar status widgets
 - `dialog.py` - player clicks, team game snapshot clicks, matchup-history modal, projection, and baseline dialogs
 - `chart.py` - figure assembly, baseline overlay, share-link button, player/team click dispatch
-- `comparison.py` - season-aware Overview / Trophies tabs plus the right-rail chart-season picker, JS click bridge, and clickable predictions panel
+- `comparison.py` - season-aware Overview / Current Standings tabs plus the right-rail chart-season picker, JS click bridge, and clickable predictions panel
 - `url_params.py` - compact share-link encoder/decoder with legacy link support
 - `schedule.py` - live/recent matchup detection, upcoming games, featured players, matchup history, and runtime pregame win-prob inference
 - `async_preloader.py` - background warming of non-active category caches

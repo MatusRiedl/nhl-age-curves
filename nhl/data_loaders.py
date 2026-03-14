@@ -777,6 +777,56 @@ def get_player_awards(player_id: int) -> list:
     return awards if isinstance(awards, list) else []
 
 
+def _summarize_player_awards(awards: list[dict]) -> list[dict]:
+    """Aggregate raw landing-page awards into one trophy summary list."""
+    summary: dict[str, dict[str, int | None]] = {}
+    for award in awards:
+        if not isinstance(award, dict):
+            continue
+
+        trophy_name = _payload_text(award.get("trophy"))
+        if not trophy_name:
+            continue
+
+        season_ids: list[int] = []
+        seasons = award.get("seasons")
+        if isinstance(seasons, list):
+            for season in seasons:
+                if not isinstance(season, dict):
+                    continue
+                try:
+                    season_ids.append(int(season.get("seasonId")))
+                except Exception:
+                    continue
+
+        wins_here = len(season_ids) if season_ids else 1
+        item = summary.setdefault(trophy_name, {"count": 0, "latest": None})
+        item["count"] = int(item.get("count", 0) or 0) + wins_here
+        if season_ids:
+            latest_season = max(season_ids)
+            current_latest = item.get("latest")
+            if current_latest is None or latest_season > int(current_latest):
+                item["latest"] = latest_season
+
+    rows = [
+        {
+            "trophy": trophy_name,
+            "count": int(data.get("count", 0) or 0),
+            "latest": data.get("latest"),
+            "latest_label": _format_season_id_span(data.get("latest")),
+        }
+        for trophy_name, data in summary.items()
+    ]
+    rows.sort(
+        key=lambda row: (
+            -int(row.get("count", 0) or 0),
+            -int(row.get("latest", 0) or 0),
+            str(row.get("trophy", "") or ""),
+        )
+    )
+    return rows
+
+
 @st.cache_data(ttl=3600)
 def get_player_identity_summary(player_id: int) -> dict:
     """Return normalized player identity details for the overview-card modal."""
@@ -855,6 +905,7 @@ def get_player_identity_summary(player_id: int) -> dict:
         honors.append("Hockey Hall of Fame")
     if bool(payload.get("inTop100AllTime")):
         honors.append("NHL Top 100")
+    trophies = _summarize_player_awards(get_player_awards(clean_player_id))
 
     return {
         "player_id": clean_player_id,
@@ -878,6 +929,7 @@ def get_player_identity_summary(player_id: int) -> dict:
         "first_nhl_season_label": _format_season_span(first_nhl_season),
         "debut_team": debut_team,
         "honors": honors,
+        "trophies": trophies,
     }
 
 

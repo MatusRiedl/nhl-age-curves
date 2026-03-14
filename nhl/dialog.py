@@ -1164,16 +1164,39 @@ def show_player_identity_details(player_id: int) -> None:
         ("First NHL season", str(summary.get("first_nhl_season_label", "") or "").strip()),
         ("Debut team", str(summary.get("debut_team", "") or "").strip()),
     ]
-    rendered_rows = _render_identity_rows(rows, columns=2)
+    has_content = _render_identity_rows(rows, columns=2)
 
     honors = summary.get("honors", []) or []
     honors_text = " | ".join(str(item or "").strip() for item in honors if str(item or "").strip())
     if honors_text:
-        if rendered_rows:
+        if has_content:
             st.markdown("---")
         st.markdown(f"**Honors**  \n{honors_text}")
+        has_content = True
 
-    if not rendered_rows and not honors_text:
+    trophy_lines: list[str] = []
+    for trophy_row in summary.get("trophies", []) or []:
+        if not isinstance(trophy_row, dict):
+            continue
+        trophy_name = str(trophy_row.get("trophy", "") or "").strip()
+        if not trophy_name:
+            continue
+        try:
+            count = int(trophy_row.get("count", 0) or 0)
+        except Exception:
+            count = 0
+        if count <= 0:
+            continue
+        latest_label = str(trophy_row.get("latest_label", "") or "").strip()
+        latest_suffix = f" (latest {latest_label})" if latest_label else ""
+        trophy_lines.append(f"- {trophy_name}: x{count}{latest_suffix}")
+    if trophy_lines:
+        if has_content:
+            st.markdown("---")
+        st.markdown("**Trophies**  \n" + "  \n".join(trophy_lines))
+        has_content = True
+
+    if not has_content:
         st.info("Player details unavailable right now.")
 
 
