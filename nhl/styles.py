@@ -17,8 +17,10 @@ import streamlit as st
 
 _CSS = """
     <style>
-        .block-container { padding-top: 0.65rem !important; padding-bottom: 0rem !important; }
+        /* DESKTOP — main content area: top/bottom/left/right edge padding */
+        .block-container { padding-top: 2.65rem !important; padding-bottom: 0rem !important; padding-left: 2rem !important; padding-right: 2rem !important; }
 
+        /* DESKTOP — sidebar logo container: centers the brand image horizontally */
         [data-testid="stSidebar"] .sidebar-brand {
             display: flex;
             align-items: center;
@@ -27,6 +29,7 @@ _CSS = """
             margin: 0 0 0.65rem 0;
         }
 
+        /* DESKTOP — sidebar logo image: full-width with glow drop-shadow */
         [data-testid="stSidebar"] .sidebar-brand__image {
             display: block;
             width: 100%;
@@ -36,27 +39,32 @@ _CSS = """
             filter: drop-shadow(0 8px 18px rgba(43, 113, 199, 0.16)) drop-shadow(0 6px 20px rgba(255, 255, 255, 0.22));
         }
 
+        /* DESKTOP — trims the gap below the sidebar logo wrapper */
         div.element-container:has(.sidebar-brand) {
             margin-bottom: 0.55rem !important;
         }
 
+        /* DESKTOP — removes default top margin on all expander widgets */
         [data-testid="stExpander"] {
             margin-top: 0 !important;
         }
 
+        /* MOBILE — tighter block-container padding (top/left/right); logo width override */
         @media (max-width: 768px) {
             .block-container {
-                padding-top: 0.35rem !important;
-                padding-left: 0.35rem !important;
-                padding-right: 0.35rem !important;
+                padding-top: 0.7rem !important;
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
             }
             [data-testid="stSidebar"] .sidebar-brand__image {
-                width: 100%;
+                width: 500%;
             }
         }
 
+        /* DESKTOP — makes all Streamlit buttons fill their container width */
         .stButton button { width: 100%; }
 
+        /* DESKTOP — Ko-fi support button: pill shape, amber gradient, layout */
         [data-testid="stSidebar"] .sidebar-support-link {
             display: flex;
             align-items: center;
@@ -74,18 +82,21 @@ _CSS = """
             transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
         }
 
+        /* DESKTOP — Ko-fi button hover: slight lift + brightness */
         [data-testid="stSidebar"] .sidebar-support-link:hover {
             transform: translateY(-1px);
             filter: brightness(1.02);
             box-shadow: 0 8px 18px rgba(88, 49, 24, 0.2);
         }
 
+        /* DESKTOP — Ko-fi button keyboard focus ring */
         [data-testid="stSidebar"] .sidebar-support-link:focus,
         [data-testid="stSidebar"] .sidebar-support-link:focus-visible {
             outline: 2px solid rgba(255, 255, 255, 0.8);
             outline-offset: 2px;
         }
 
+        /* DESKTOP — Ko-fi button emoji badge: circular, fixed size */
         [data-testid="stSidebar"] .sidebar-support-link__emoji {
             display: inline-flex;
             align-items: center;
@@ -100,6 +111,7 @@ _CSS = """
             font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
         }
 
+        /* DESKTOP — Ko-fi button text column: stacks label + sublabel */
         [data-testid="stSidebar"] .sidebar-support-link__text {
             display: flex;
             flex-direction: column;
@@ -107,12 +119,14 @@ _CSS = """
             min-width: 0;
         }
 
+        /* DESKTOP — Ko-fi button main label: bold, slightly larger */
         [data-testid="stSidebar"] .sidebar-support-link__label {
             font-weight: 700;
             font-size: 0.9rem;
             line-height: 1.08;
         }
 
+        /* DESKTOP — Ko-fi button sublabel: smaller, dimmer */
         [data-testid="stSidebar"] .sidebar-support-link__sublabel {
             margin-top: 0.08rem;
             font-size: 0.73rem;
@@ -120,6 +134,7 @@ _CSS = """
             color: rgba(255, 247, 240, 0.86);
         }
 
+        /* DESKTOP — sidebar player row: shrinks add/remove buttons to auto-width, floats right */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] div.stButton button {
             width: auto !important;
             min-width: 0 !important;
@@ -127,7 +142,7 @@ _CSS = """
             float: right;
         }
 
-        /* Remove button styling - transparent background with white X */
+        /* DESKTOP — sidebar X (remove) button: transparent, white icon, fixed 24x32 px */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button[kind="secondary"][data-testid="stBaseButton-secondary"] {
             background-color: transparent !important;
             border: none !important;
@@ -143,37 +158,38 @@ _CSS = """
             align-items: center !important;
             justify-content: center !important;
         }
+        /* DESKTOP — sidebar X button hover: subtle tint + blue icon */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button[kind="secondary"][data-testid="stBaseButton-secondary"]:hover {
             background-color: rgba(255, 255, 255, 0.1) !important;
             color: #2596be !important;
         }
 
-        /* Stretch columns to equal height, then center content within each */
+        /* DESKTOP — sidebar player row columns: equal height, content centered vertically */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
             align-items: stretch !important;
             gap: 0 !important;
         }
 
-        /* Each column becomes a flex container so its inner block can be centered */
+        /* DESKTOP — sidebar row: each column is a flex container for vertical centering */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
             display: flex !important;
             align-items: center !important;
         }
 
-        /* The inner vertical block — centered, no margin leakage */
+        /* DESKTOP — sidebar row: inner vertical block stretches full width */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"] {
             width: 100% !important;
             justify-content: center !important;
         }
 
-        /* Zero out all margins inside these rows */
+        /* DESKTOP — sidebar row: zero margins/padding on inner element-containers */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] .element-container {
             margin: 0 !important;
             padding: 0 !important;
         }
 
-        /* Tighten sidebar vertical spacing */
+        /* DESKTOP — sidebar: tighten vertical spacing on hr, element-container, h3, widget labels */
         [data-testid="stSidebar"] .stMarkdown hr {
             margin-top: 4px !important;
             margin-bottom: 4px !important;
@@ -189,17 +205,17 @@ _CSS = """
             margin-bottom: 0.18rem !important;
         }
 
-        /* Remove gap above Global Search to match Top 50 spacing */
+        /* DESKTOP — sidebar: removes top margin above Global Search widget label */
         [data-testid="stSidebar"] .element-container:has(> div > div > label[data-testid="stWidgetLabel"]:nth-child(1)) {
             margin-top: 0 !important;
         }
-        /* Target the first text input after the category divider to remove top margin */
+        /* DESKTOP — sidebar: removes top margin/padding on first text input after a divider */
         [data-testid="stSidebar"] hr + .element-container .stTextInput label {
             margin-top: 0 !important;
             padding-top: 0 !important;
         }
 
-        /* Normalize the first Team dropdown so it matches Global Search spacing and sizing */
+        /* DESKTOP — sidebar: normalizes first Team dropdown (size, radius, padding) to match search */
         [data-testid="stSidebar"] hr + .element-container .stSelectbox label {
             margin-top: 0 !important;
             padding-top: 0 !important;
@@ -223,13 +239,13 @@ _CSS = """
             width: 18px !important;
             height: 18px !important;
         }
-        /* Dim sidebar selectbox value text to match text-input muted tone */
+        /* DESKTOP — sidebar: dims selected value text in dropdowns to a muted grey */
         [data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] > div > div:first-child,
         [data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] > div > div:first-child * {
             color: rgba(250, 250, 250, 0.55) !important;
         }
 
-        /* Compact header and controls expander — reduce vertical whitespace */
+        /* DESKTOP — expander summary: compact padding, centered bold title */
         [data-testid="stExpander"] details summary {
             padding-top: 0.4rem !important;
             padding-bottom: 0.4rem !important;
@@ -262,11 +278,12 @@ _CSS = """
             gap: 0.25rem !important;
         }
 
-        /* Metric Selections popover — widen so all dropdown labels are fully visible */
+        /* DESKTOP — Metric Selections popover: fixed 640px wide so all labels fit */
         [data-testid="stPopoverBody"] {
             width: 640px !important;
             min-width: 640px !important;
         }
+        /* MOBILE — Metric Selections popover: stretches to 94% of viewport width */
         @media (max-width: 768px) {
             [data-testid="stPopoverBody"] {
                 width: 94vw !important;
@@ -274,7 +291,7 @@ _CSS = """
             }
         }
 
-        /* Controls toolbar: muted unavailable pills */
+        /* DESKTOP — controls toolbar: muted pill row for unavailable metric options */
         .controls-toolbar-muted {
             display: flex;
             flex-wrap: wrap;
@@ -305,6 +322,7 @@ _CSS = """
             color: #7f8aa3;
         }
 
+        /* DESKTOP — sidebar player name: single line, ellipsis on overflow */
         .player-name {
             font-size: 15px;
             white-space: nowrap;
@@ -313,14 +331,14 @@ _CSS = """
             line-height: 32px !important;
         }
 
-        /* Center the markdown wrapper itself */
+        /* DESKTOP — sidebar row: vertically centers the markdown element inside its column */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stMarkdown"] {
             display: flex !important;
             align-items: center !important;
             margin: 0 !important;
         }
 
-        /* Center the button wrapper */
+        /* DESKTOP — sidebar row: right-aligns and vertically centers the button column */
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stButton"],
         [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] .stButton {
             display: flex !important;
@@ -329,6 +347,7 @@ _CSS = """
             margin: 0 !important;
         }
 
+        /* DESKTOP — blue-btn-anchor: styles the next button as solid blue */
         div.element-container:has(.blue-btn-anchor) + div.element-container button {
             background-color: #2b71c7 !important;
             border-color: #2b71c7 !important;
@@ -339,6 +358,7 @@ _CSS = """
             border-color: #1a569d !important;
         }
 
+        /* DESKTOP — faq-btn-anchor: styles the next button as a ghost blue button */
         div.element-container:has(.faq-btn-anchor) + div.element-container button {
             background: rgba(43, 113, 199, 0.16) !important;
             border: 1px solid rgba(103, 168, 255, 0.28) !important;
@@ -351,7 +371,7 @@ _CSS = """
             color: #ffffff !important;
         }
 
-        /* === Unified matchup cards === */
+        /* DESKTOP — live game cards: shell, link overlay, card base styles */
         .live-game-card-shell {
             position: relative;
         }
@@ -590,13 +610,14 @@ _CSS = """
             margin-bottom: 0.55rem !important;
         }
 
+        /* TABLET (≤1200px) — live game card hover tooltip: narrows max-width */
         @media (max-width: 1200px) {
             .lgc-meta {
                 max-width: min(250px, calc(100vw - 4rem));
             }
         }
 
-        /* Controls dropdowns: stack one per row on mobile */
+        /* MOBILE — live game cards: disables hover lift; shows stat tooltip inline instead of floating */
         @media (hover: none), (max-width: 768px) {
             .live-game-card {
                 transform: none !important;
@@ -628,7 +649,7 @@ _CSS = """
             }
         }
 
-        /* Main chart toolbar */
+        /* DESKTOP — main chart toolbar: layout, title, and share button base styles */
         div.element-container:has(.nhl-chart-toolbar) {
             margin: 0 !important;
             line-height: 0 !important;
@@ -683,6 +704,7 @@ _CSS = """
             height: 15px;
             display: block;
         }
+        /* TABLET (≤900px) — chart toolbar: tighter gaps, smaller title and share button font */
         @media (max-width: 900px) {
             .nhl-chart-toolbar {
                 gap: 0.5rem;
@@ -695,6 +717,7 @@ _CSS = """
                 font-size: 0.76rem;
             }
         }
+        /* MOBILE — chart toolbar: even tighter sizing; top margin pushes toolbar below Streamlit header */
         @media (max-width: 768px) {
             .nhl-chart-toolbar {
                 gap: 0.4rem;
@@ -716,12 +739,12 @@ _CSS = """
             }
         }
 
-        /* Match column gap between side-by-side player cards to prediction card gap */
+        /* DESKTOP — comparison panel: matches column gap between player cards to prediction gap */
         [data-baseweb="tab-panel"] [data-testid="stHorizontalBlock"]:has(.comparison-player-card) {
             column-gap: 1.1rem !important;
         }
 
-        /* Comparison panel cards */
+        /* DESKTOP — comparison panel cards: base padding and typography */
         .comparison-card {
             padding: 0.5rem 0.25rem;
         }
@@ -1165,13 +1188,14 @@ _CSS = """
             padding: 0.28rem 0.64rem;
             font-size: 0.74rem;
         }
+        /* MOBILE — comparison player card: disables hover lift on touch devices */
         @media (hover: none), (max-width: 768px) {
             .comparison-card-shell--clickable .comparison-player-card {
                 transform: none !important;
             }
         }
 
-        /* Chart season selector moved into the comparison panel */
+        /* DESKTOP — season filter anchor: collapses the zero-height anchor div spacing */
         div:has(> #comparison-season-filter) {
             margin: 0 !important;
             line-height: 0 !important;
@@ -1193,6 +1217,7 @@ _CSS = """
             color: rgba(255, 255, 255, 0.80) !important;
             letter-spacing: 0.01em !important;
         }
+        /* DESKTOP — controls panel anchor: collapses anchor div; pulls Metric Selections button up */
         div:has(> #comparison-controls-panel) {
             margin: 0 !important;
             line-height: 0 !important;
@@ -1208,25 +1233,41 @@ _CSS = """
             padding-top: 0.3rem !important;
             padding-bottom: 0.3rem !important;
         }
-        /* Reduce gap between chart and controls row — negative bottom margin on chart_placeholder */
-        div:has(> #main-chart-layout) + div [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child > [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"]:has(#comparison-main-plotly) {
-            margin-bottom: -0.9rem !important;
+        /* MOBILE — Metric Selections: pulls the whole stacked column up toward the chart */
+        @media (max-width: 768px) {
+            [data-testid="stColumn"]:has(#comparison-controls-panel) {
+                margin-top: -1.7rem !important;
+            }
         }
-        div:has(> #comparison-predictions-panel) {
+        /* DESKTOP — Whole career / Metric Selections row: negative pull closes gap below chart */
+        [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
+            margin-top: -2.2rem !important;
+        }
+        /* MOBILE — Whole career / Metric Selections row: stronger pull + removes side padding */
+        @media (max-width: 768px) {
+            [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
+                margin-top: -2.7rem !important;
+                padding-left: 0rem !important;
+                padding-right: 0rem !important;
+            }
+        }
+        /* DESKTOP — predictions panel anchor: collapses zero-height anchor spacing */
+        div.element-container:has(#comparison-predictions-panel) {
             margin: 0 !important;
             line-height: 0 !important;
         }
-        div:has(> #comparison-predictions-panel) + div {
-            margin-top: -0.34rem !important;
+        div.element-container:has(#comparison-predictions-panel) + div.element-container {
+            margin-top: 0 !important;
         }
-        /* Collapse right-rail anchor — pulls predictions panel to top of right column */
+        /* DESKTOP — right-rail anchor: collapses anchor, pulls predictions panel to top of column */
         div.element-container:has(#comparison-right-rail) {
             margin: 0 !important;
             line-height: 0 !important;
         }
         div.element-container:has(#comparison-right-rail) + div {
-            margin-top: -0.7rem !important;
+            margin-top: -2.4rem !important;
         }
+        /* DESKTOP — main Plotly chart anchor: collapses anchor + removes bottom gap under chart */
         div.element-container:has(#comparison-main-plotly) {
             margin: 0 !important;
             line-height: 0 !important;
@@ -1241,22 +1282,23 @@ _CSS = """
             padding-bottom: 0 !important;
             line-height: normal !important;
         }
-        /* === Main chart window base styles === */
+        /* DESKTOP — main Plotly chart: border, radius, overflow, transition */
         div[data-testid="stPlotlyChart"] {
             border: 1px solid rgba(70, 84, 122, 0.5);
             border-radius: 14px;
             overflow: hidden;
             transition: box-shadow 0.3s ease, background 0.3s ease;
         }
+        /* DESKTOP — detail layout anchor: negative top margin pulls detail section up under chart */
         div.element-container:has(#comparison-detail-layout) {
-            margin: -2.2rem 0 0 0 !important;
+            margin: -3.7rem 0 0 0 !important;
             line-height: 0 !important;
         }
         div.element-container:has(#comparison-detail-layout) + div.element-container {
             margin-top: 0 !important;
         }
 
-        /* Comparison tab row (native st.tabs) */
+        /* DESKTOP — Overview / Current Standings tab row: styles, spacing, pill tab buttons */
         div.element-container:has(#comparison-tabs) {
             margin: -0.3rem 0 0 0 !important;
             line-height: 0 !important;
@@ -1301,22 +1343,23 @@ _CSS = """
         div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] [data-baseweb="tab-panel"] {
             padding-top: 0.1rem !important;
         }
+        /* MOBILE — tabs section: stronger pull on detail-layout anchor; tighter tab spacing + padding */
         @media (max-width: 768px) {
             div.element-container:has(#comparison-detail-layout) {
-                margin-top: -1.6rem !important;
+                margin-top: -4.4rem !important;  /* adjust to move Overview/Current Standings up/down */
             }
             div.element-container:has(#comparison-tabs) {
-                margin-top: -0.12rem !important;
+                margin-top: -0.12rem !important;  /* adjust gap above the tab anchor itself */
             }
             div.element-container:has(#comparison-tabs) + div.element-container {
-                margin-top: -0.2rem !important;
+                margin-top: -0.2rem !important;  /* adjust gap above the tab bar */
             }
             div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] button[role="tab"] {
-                padding: 3px 8px !important;
+                padding: 3px 8px !important;  /* adjust inner padding of each tab pill */
             }
         }
 
-        /* Main content split — controls + chart on the left, comparison panel on the right */
+        /* DESKTOP — main layout anchor: collapses anchor + pulls chart/panel row up */
         div:has(> #main-chart-layout) {
             margin: 0 !important;
             line-height: 0 !important;
@@ -1324,9 +1367,16 @@ _CSS = """
         div:has(> #main-chart-layout) + div {
             margin-top: -0.45rem !important;
         }
+        /* MOBILE — main layout: cancels desktop negative pull so toolbar clears Streamlit header */
+        @media (max-width: 768px) {
+            div:has(> #main-chart-layout) + div {
+                margin-top: 0rem !important;
+            }
+        }
         div:has(> #main-chart-layout) + div [data-testid="stHorizontalBlock"] {
             align-items: flex-start !important;
         }
+        /* TABLET (≤1280px) — main layout: chart and comparison panel stack vertically */
         @media screen and (max-width: 1280px) {
             div:has(> #main-chart-layout) + div [data-testid="stHorizontalBlock"] {
                 flex-wrap: wrap !important;
@@ -1338,7 +1388,7 @@ _CSS = """
             }
         }
 
-        /* Responsive: stack chart and stats panel vertically on mobile */
+        /* MOBILE — full responsive block: stacks all columns, resizes cards, standings grid */
         @media screen and (max-width: 768px) {
             .main .block-container {
                 padding-left: 0.5rem !important;
@@ -1433,7 +1483,7 @@ _CSS = """
             }
         }
 
-        /* Plotly modebar — always visible, fit on one row */
+        /* DESKTOP — Plotly modebar: always visible, pinned top-right, flat style */
         .js-plotly-plot .plotly .modebar {
             opacity: 1 !important;
             top: 8px !important;
@@ -1476,6 +1526,7 @@ _CSS = """
             width: 18px !important;
             height: 18px !important;
         }
+        /* MOBILE — Plotly modebar: smaller icons and tighter padding */
         @media (max-width: 768px) {
             .js-plotly-plot .plotly .modebar {
                 top: 4px !important;
@@ -1491,7 +1542,7 @@ _CSS = """
             }
         }
 
-        /* Early overlay sidebar mode — stop reflow on foldables / cramped widths */
+        /* TABLET/FOLDABLE (≤1400px or narrow aspect ratio) — sidebar becomes fixed overlay to prevent layout reflow */
         @media screen and (max-width: 1400px), screen and (max-width: 1600px) and (max-aspect-ratio: 11/10) {
             :root {
                 --pp-overlay-sidebar-top: calc(env(safe-area-inset-top, 0px) + 3.75rem);
@@ -1527,7 +1578,7 @@ _CSS = """
             }
         }
 
-        /* ── Sidebar toggle: always visible ────────────────────────────── */
+        /* DESKTOP — sidebar toggle button: always visible (Streamlit hides it by default on hover) */
         [data-testid="stSidebarCollapseButton"] button,
         [data-testid="collapsedControl"] {
             opacity: 1 !important;
