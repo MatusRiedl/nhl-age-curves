@@ -191,6 +191,7 @@ SECTION 6 - DATA PIPELINE (PER PLAYER, PER RENDER)
 9. If allowed, project to age 40.
    - KNN path uses `run_knn_projection()`.
    - Fallback path uses `run_linear_fallback()`.
+   - `TOI` is the exception: it is now KNN-only for skaters and never uses the linear fallback.
    - Current in-progress seasons are pace-adjusted inside the KNN step before clone matching.
 10. Apply cumulative mode in Age mode only.
 11. Apply 3-season rolling smoothing when enabled.
@@ -203,6 +204,8 @@ Projection gate:
 - max age is below 40
 - metric is not in `NO_PROJECTION_METRICS`
 - thin-data guard passes minimum seasons and GP thresholds
+- `TOI` also requires modern TOI-bearing history: at least 3 usable `1997+` seasons with nonzero
+  `TotalTOIMins`, at least 120 GP across those seasons, and a usable TOI row at the player's latest age
 
 Split behavior:
 - real trace uses `Age <= max_age`
@@ -239,7 +242,13 @@ Projection behavior:
 
 GP note:
 - the engine still contains a 4-phase durability fallback for GP
-- normal app flow suppresses GP projection via `NO_PROJECTION_METRICS = {'GP', 'SH%', 'TOI'}`
+- normal app flow suppresses GP and SH% projection via `NO_PROJECTION_METRICS = {'GP', 'SH%'}`
+- `TOI` is now handled through a separate KNN-only projection policy instead of the blanket suppression list
+
+TOI note:
+- historical TOI projection coverage starts in `1997`
+- the historical TOI KNN pool ignores zero-TOI rows and requires at least 40 GP in a season
+- goalie TOI is still out of scope because the parquet does not carry usable goalie TOI history
 
 SECTION 8 - BASELINE ENGINE
 ---------------------------
@@ -460,6 +469,8 @@ Module responsibilities:
 - `knn_engine.py` - clone matching, hybrid-delta projection, stat caps, fallback projection
 - `win_prob.py` - leak-safe pregame team features, artifact validation, and dot-product scoring
 - `player_pipeline.py` - end-to-end player pipeline and peak metadata
+- `player_pipeline.py` now owns the extra TOI projection gate and the modern-coverage filtering that
+  keeps zero-TOI historical rows out of clone matching
 - `team_pipeline.py` - end-to-end team pipeline, including selected-season team season-progress mode
 - `controls.py` - top control surface; returns `(metric, do_cumul)`
 - `sidebar.py` - player/team add flows plus sidebar status widgets

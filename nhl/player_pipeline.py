@@ -3,6 +3,7 @@
 import pandas as pd
 
 from nhl.constants import (
+    KNN_ONLY_PROJECTION_METRICS,
     ML_SUPPORTED_METRICS,
     NHLE_DEFAULT_MULTIPLIER,
     NHLE_MULTIPLIERS,
@@ -18,6 +19,69 @@ from nhl.knn_engine import run_knn_projection, run_linear_fallback
 MIN_SEASONS_FOR_PROJ = 2
 MIN_CAREER_GP_FOR_PROJ_SKATER = 82   # < full season => no projection
 MIN_CAREER_GP_FOR_PROJ_GOALIE = 25
+TOI_PROJECTION_COVERAGE_START_YEAR = 1997
+MIN_TOI_SEASONS_FOR_PROJ = 3
+MIN_TOI_GP_FOR_PROJ = 120
+MIN_TOI_HIST_GP = 40
+
+
+def _filter_toi_projection_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Return the modern TOI-bearing age rows eligible for clone matching."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+    required_cols = {"SeasonYear", "TotalTOIMins", "GP"}
+    if not required_cols.issubset(df.columns):
+        return pd.DataFrame()
+
+    d = df.copy()
+    season_year = pd.to_numeric(d["SeasonYear"], errors="coerce")
+    total_toi = pd.to_numeric(d["TotalTOIMins"], errors="coerce").fillna(0.0)
+    gp = pd.to_numeric(d["GP"], errors="coerce").fillna(0.0)
+    return d[
+        season_year.ge(TOI_PROJECTION_COVERAGE_START_YEAR)
+        & total_toi.gt(0)
+        & gp.gt(0)
+    ].copy()
+
+
+def _can_project_toi(df: pd.DataFrame, stat_category: str) -> bool:
+    """Return whether the active curve has enough modern TOI history to forecast."""
+    if stat_category != "Skater":
+        return False
+
+    usable = _filter_toi_projection_rows(df)
+    if usable.empty:
+        return False
+
+    all_ages = pd.to_numeric(df.get("Age"), errors="coerce")
+    usable_ages = pd.to_numeric(usable.get("Age"), errors="coerce")
+    if all_ages.dropna().empty or usable_ages.dropna().empty:
+        return False
+    if int(usable_ages.max()) != int(all_ages.max()):
+        return False
+
+    usable_seasons = int(pd.to_numeric(usable.get("SeasonYear"), errors="coerce").dropna().nunique())
+    usable_gp = float(pd.to_numeric(usable.get("GP"), errors="coerce").fillna(0.0).sum())
+    return usable_seasons >= MIN_TOI_SEASONS_FOR_PROJ and usable_gp >= MIN_TOI_GP_FOR_PROJ
+
+
+def _filter_toi_knn_hist(hist_df: pd.DataFrame) -> pd.DataFrame:
+    """Return the historical skater TOI pool with modern nonzero coverage only."""
+    if hist_df is None or hist_df.empty:
+        return pd.DataFrame()
+    required_cols = {"SeasonYear", "TotalTOIMins", "GP"}
+    if not required_cols.issubset(hist_df.columns):
+        return pd.DataFrame()
+
+    d = hist_df.copy()
+    season_year = pd.to_numeric(d["SeasonYear"], errors="coerce")
+    total_toi = pd.to_numeric(d["TotalTOIMins"], errors="coerce").fillna(0.0)
+    gp = pd.to_numeric(d["GP"], errors="coerce").fillna(0.0)
+    return d[
+        season_year.ge(TOI_PROJECTION_COVERAGE_START_YEAR)
+        & total_toi.gt(0)
+        & gp.ge(MIN_TOI_HIST_GP)
+    ].copy()
 
 
 def process_players(
@@ -324,9 +388,11 @@ def process_players(
             and max_age < 40
             and metric not in NO_PROJECTION_METRICS
         )
+        if can_project and metric == "TOI":
+            can_project = _can_project_toi(df, stat_category)
 
         # Thin‑data guard: no projection if career is too short
-        if can_project:
+        if can_project and metric != "TOI":
             seasons  = int(df['Age'].nunique()) if 'Age' in df.columns else 0
             total_gp = float(df['GP'].sum()) if 'GP' in df.columns else 0
             min_gp   = MIN_CAREER_GP_FOR_PROJ_GOALIE if is_goalie else MIN_CAREER_GP_FOR_PROJ_SKATER
@@ -334,10 +400,13 @@ def process_players(
                 can_project = False
 
         if can_project:
-            career_df = df.copy()
+            career_df = _filter_toi_projection_rows(df) if metric == "TOI" else df.copy()
             player_knn_hist = hist_df_goalie if is_goalie else hist_df_skater
+            if metric == "TOI":
+                player_knn_hist = _filter_toi_knn_hist(player_knn_hist)
             player_pos_code = 'G' if is_goalie else pos_code
             use_ml    = not player_knn_hist.empty and metric in ML_SUPPORTED_METRICS
+            proj_rows = []
 
             if use_ml:
                 proj_rows, clone_names = run_knn_projection(
@@ -356,13 +425,15 @@ def process_players(
                     use_ml = False
                 else:
                     ml_clones_dict[base_name] = clone_names
-            if not use_ml:
+            if not use_ml and metric not in KNN_ONLY_PROJECTION_METRICS:
                 proj_rows = run_linear_fallback(
                     career_df  = career_df,
                     metric     = metric,
                     max_age    = int(max_age),
                     stat_category = stat_category,
                 )
+                ml_clones_dict[base_name] = []
+            elif not use_ml:
                 ml_clones_dict[base_name] = []
 
             if proj_rows:

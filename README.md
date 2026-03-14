@@ -10,6 +10,8 @@ https://nhl-age-curves.streamlit.app/
 
 * **Hybrid KNN Projections:** Projects player performance to age 40 from the 10 nearest historical matches using L1 distance, equal-weight top-10 clone influence, a fixed 80/20 blend, and late-age stabilization when clone data gets thin.
 
+* **TOI Forecast for Eligible Skaters:** `TOI` now uses the same KNN projection engine as the main skater metrics, but only when the player has enough modern `1997+` TOI-bearing history. It stays KNN-only and never falls back to the generic linear extrapolator.
+
 * **Era-Adjusted Scoring:** Normalizes Points, Goals, and Assists independently across 8 NHL eras (the high-scoring 80s, the Dead Puck era, the modern game, etc.) using historical goals-per-game data so comparisons across generations are apples-to-apples.
 
 * **75th Percentile Historical Baselines:** Toggle aggregate Skater and Goalie reference curves built from historical parquet data, with classic survivorship shaping and the preserved late-tail fixes.

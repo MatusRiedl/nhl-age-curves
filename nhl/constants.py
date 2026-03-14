@@ -140,20 +140,31 @@ TEAM_METRICS = ["Points", "Wins", "Win%", "Goals", "GF/G", "GA/G", "PP%", "PPG"]
 
 ML_SUPPORTED_METRICS = [
     'Points', 'Goals', 'Assists', '+/-', 'PPG',
-    'PIM', 'Wins', 'Shutouts', 'Saves', 'Save %', 'GAA',
+    'PIM', 'TOI', 'Wins', 'Shutouts', 'Saves', 'Save %', 'GAA',
 ]
 """
 Metrics the KNN engine can project.
 GP is intentionally excluded — survivorship bias makes KNN unreliable for games played.
 GP projection uses the dedicated 4-phase durability curve instead.
+TOI is supported only through the KNN path because the historical parquet now
+has additive time-on-ice coverage, but the linear fallback remains intentionally
+disabled for that metric.
 """
 
-NO_PROJECTION_METRICS = {'GP', 'SH%', 'TOI'}
+KNN_ONLY_PROJECTION_METRICS = {'TOI'}
+"""
+Metrics that may project only through the KNN engine.
+If clone matching cannot produce a credible forecast, the app hides the
+projection instead of falling back to the generic linear extrapolator.
+"""
+
+NO_PROJECTION_METRICS = {'GP', 'SH%'}
 """
 Metrics for which the Forecast projection line is suppressed entirely.
 Neither KNN nor the linear fallback runs for these metrics.
 GP: survivorship bias corrupts both skater and goalie projections.
-SH%/TOI: linear extrapolation yields implausible results for skaters.
+SH%: linear extrapolation yields implausible results for skaters and the app
+does not currently maintain a separate KNN-only path for it.
 """
 
 # ---------------------------------------------------------------------------
