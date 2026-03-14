@@ -20,7 +20,7 @@ https://nhl-age-curves.streamlit.app/
 
 * **Games Played X-Axis Mode:** Switch the X-axis from Age to career Games Played. Every player shares a common (0, 0) origin so you can compare players at the same point in career experience instead of pretending missed seasons never happened.
 
-* **Single-Season Game-Log Mode:** Use the right-rail `Chart season` picker above the predictions panel to switch skaters, goalies, or teams from the default `All` history view into one real NHL season. Picking `2024-25`, `2023-24`, etc. forces the X-axis to individual games and plots actual game-log rows instead of season aggregates.
+* **Single-Season Game-Log Mode:** Use the `Chart season` picker above the main chart to switch skaters, goalies, or teams from the default `All` history view into one real NHL season. Picking `2024-25`, `2023-24`, etc. forces the X-axis to individual games and plots actual game-log rows instead of season aggregates.
 
 * **Franchise-Aware Team History:** Team season pickers and all-time overview cards aggregate relocated and renamed clubs under the active franchise abbreviation, so `UTA` includes the old `WIN` / `PHX` / `ARI` history and overview cards reflect franchise totals instead of raw abbreviation fragments.
 
@@ -32,13 +32,13 @@ https://nhl-age-curves.streamlit.app/
 
 * **Age Rarity in Season Snapshot:** Historical NHL regular-season age clicks now show percentile, exact rank, optional skater role split, and a compact top-5 leaderboard from the same comparison pool, so fans can see how unusual that season was at that exact age.
 
-* **Upcoming Games Predictions Panel:** A dedicated right-rail panel lists the next 5 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and keeps the cards focused on matchup context instead of a quick-add workflow.
+* **Upcoming Games Predictions Panel:** A dedicated right-rail panel lists up to the next 8 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and keeps the cards focused on matchup context instead of a quick-add workflow.
 
 * **Pregame Win Probability:** The right-rail predictions panel also shows a pregame away/home win estimate for each upcoming matchup. The base probability comes from an offline-trained logistic regression on the last 5 completed NHL regular seasons, then a capped goalie Save% proxy is layered on top at runtime.
 
 * **Matchup History Modal:** Click any prediction card to open a `Matchup History` modal with the last 10 meetings between those two teams, rendered as stacked season-snapshot style matchup cards plus a plain-text win summary so you can see who has taken more of the recent head-to-head without counting manually.
 
-* **Shareable URLs:** Click the chart's **Copy link** control to copy a compact exact-state URL only when you want to share it. Player and team names are omitted from the query string, default values are skipped, and the browser URL stays clean while you explore.
+* **Shareable URLs:** Click the chart's **Copy link** control to copy a compact exact-state URL only when you want to share it. Player and team names are omitted from the query string, default values are skipped, legacy URL-provided display names are sanitized on load, and the browser URL stays clean while you explore.
 
 * **Dynamic Search:** Type a player's first or last name to get live results. Selecting a match immediately adds them to the chart, no separate button required.
 
@@ -75,7 +75,8 @@ nhl/
     sidebar.py           player and team sidebar UI
     dialog.py            season-detail and matchup-history dialogs
     chart.py             Plotly chart rendering, share link, and JS pan-clamp
-    comparison.py        Overview/Current Standings detail tabs plus the right-rail chart-season picker and clickable predictions panel
+    comparison.py        Overview/Current Standings detail tabs, chart-season picker helper, clickable predictions panel, and live standings wrapper
+    stanley_cup.py       standings-board and Cup-pick builder
     url_params.py        URL query param encode/decode for shareable links and chart season state
     schedule.py          live defaults, upcoming games, featured-player helpers, matchup history, and runtime matchup inference
     async_preloader.py   background cache warming for Goalie/Team categories

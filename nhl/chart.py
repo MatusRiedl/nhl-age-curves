@@ -1607,20 +1607,14 @@ def render_chart(
 
     function bindShareButton(parent) {{
         var btn = parent.document.getElementById(SHARE_BUTTON_ID);
-        if (!btn || btn.dataset.bound === '1') return;
-        btn.dataset.bound = '1';
+        if (!btn) return;
         var label = btn.querySelector('.nhl-chart-share-btn__label');
-
-        function encodeShareValue(value) {{
-            return encodeURIComponent(String(value))
-                .replace(/%3B/gi, ';')
-                .replace(/%2C/gi, ',');
-        }}
 
         function buildShareUrl(parent) {{
             var UrlCtor = parent.URL || URL;
+            var SearchParamsCtor = parent.URLSearchParams || URLSearchParams;
             var url = new UrlCtor(parent.location.href);
-            var parts = [];
+            var searchParams = new SearchParamsCtor();
 
             Object.entries(SHARE_PARAMS).forEach(function(entry) {{
                 var key = entry[0];
@@ -1628,40 +1622,82 @@ def render_chart(
                 if (value === null || value === undefined) return;
                 var clean = String(value);
                 if (!clean.length) return;
-                parts.push(encodeURIComponent(key) + '=' + encodeShareValue(clean));
+                searchParams.set(String(key), clean);
             }});
 
-            url.search = parts.length ? ('?' + parts.join('&')) : '';
+            url.search = searchParams.toString();
             return url.toString();
         }}
 
-        btn.addEventListener('click', function() {{
+        function fallbackCopy(parent, url) {{
+            var textArea = parent.document.createElement('textarea');
+            textArea.value = url;
+            textArea.setAttribute('readonly', '');
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-9999px';
+            parent.document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            var copied = false;
+            try {{
+                copied = parent.document.execCommand('copy');
+            }} catch (err) {{
+                copied = false;
+            }}
+            parent.document.body.removeChild(textArea);
+            return copied;
+        }}
+
+        function showCopiedState() {{
+            btn.classList.add('is-copied');
+            if (label) label.textContent = 'Copied';
+            setTimeout(function() {{
+                btn.classList.remove('is-copied');
+                if (label) label.textContent = 'Copy link';
+            }}, 1400);
+        }}
+
+        function showCopyFailure() {{
+            btn.classList.remove('is-copied');
+            if (label) label.textContent = 'Copy failed';
+            setTimeout(function() {{
+                if (label) label.textContent = 'Copy link';
+            }}, 1600);
+        }}
+
+        btn.onclick = function() {{
             var url = buildShareUrl(parent);
-            var succeed = function() {{
-                btn.classList.add('is-copied');
-                if (label) label.textContent = 'Copied';
-                setTimeout(function() {{
-                    btn.classList.remove('is-copied');
-                    if (label) label.textContent = 'Copy link';
-                }}, 1400);
+            var syncUrl = function() {{
+                if (parent.history && parent.history.replaceState) {{
+                    parent.history.replaceState(null, '', url);
+                }}
             }};
-            if (parent.history && parent.history.replaceState) {{
-                parent.history.replaceState(null, '', url);
-            }}
-            if (parent.navigator && parent.navigator.clipboard) {{
+            var succeed = function() {{
+                syncUrl();
+                showCopiedState();
+            }};
+            var fail = function() {{
+                syncUrl();
+                showCopyFailure();
+            }};
+
+            if (parent.navigator && parent.navigator.clipboard && parent.navigator.clipboard.writeText) {{
                 parent.navigator.clipboard.writeText(url).then(succeed).catch(function() {{
-                    var t = parent.document.createElement('input');
-                    t.value = url; parent.document.body.appendChild(t);
-                    t.select(); parent.document.execCommand('copy');
-                    parent.document.body.removeChild(t); succeed();
+                    if (fallbackCopy(parent, url)) {{
+                        succeed();
+                        return;
+                    }}
+                    fail();
                 }});
-            }} else {{
-                var t = parent.document.createElement('input');
-                t.value = url; parent.document.body.appendChild(t);
-                t.select(); parent.document.execCommand('copy');
-                parent.document.body.removeChild(t); succeed();
+                return;
             }}
-        }});
+
+            if (fallbackCopy(parent, url)) {{
+                succeed();
+                return;
+            }}
+            fail();
+        }};
     }}
 
     function getChartTraceToggleState(parent) {{

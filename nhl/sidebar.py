@@ -612,6 +612,7 @@ def _render_player_sidebar() -> dict:
             c_name, c_btn = st.columns([8, 1], vertical_alignment="center", gap="small")
             with c_name:
                 headshot = get_player_headshot(pid)
+                safe_name = escape(str(name or ""))
                 img_html = (
                     f"<img src='{headshot}' style='width:32px;height:32px;"
                     f"border-radius:50%;object-fit:cover;flex-shrink:0;'>"
@@ -620,7 +621,7 @@ def _render_player_sidebar() -> dict:
                 st.markdown(
                     f"<div style='display:flex;align-items:center;gap:8px;margin:0;'>"
                     f"{img_html}"
-                    f"<div class='player-name'>{name}</div>"
+                    f"<div class='player-name'>{safe_name}</div>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
@@ -700,11 +701,12 @@ def _render_team_sidebar() -> dict:
             c_name, c_btn = st.columns([5, 1], vertical_alignment="center", gap="small")
             with c_name:
                 _logo_url = f"https://assets.nhle.com/logos/nhl/svg/{_abbr}_light.svg"
+                safe_team_name = escape(str(_name or ""))
                 st.markdown(
                     f"<div style='display:flex;align-items:center;gap:8px;margin:0;'>"
                     f"<img src='{_logo_url}' style='width:32px;height:32px;"
                     f"object-fit:contain;flex-shrink:0;'>"
-                    f"<div class='player-name'>{_name}</div>"
+                    f"<div class='player-name'>{safe_team_name}</div>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )

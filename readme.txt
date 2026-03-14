@@ -38,7 +38,7 @@ and stacked matchup cards. The primary trigger is a small JS bridge mounted thro
 - auto-loads a live or recent game once per session when appropriate
 - renders sidebar and controls
 - dispatches to `process_players()` or `process_teams()`
-- renders the chart, the right-rail `Chart season` / predictions area, and the comparison panel
+- renders the chart-column `Chart season` picker, the right-rail predictions area, and the comparison panel
 
 SECTION 2 - FILE STRUCTURE
 --------------------------
@@ -66,8 +66,9 @@ Top level:
 - `sidebar.py` - sidebar UI and add/remove flows
 - `dialog.py` - chart click dialogs and matchup-history modal
 - `chart.py` - Plotly render, baseline overlay, share link, click dispatch
-- `comparison.py` - Overview / Current Standings tabs plus the right-rail chart-season picker and clickable predictions panel
-- `url_params.py` - compact share-link encode/decode
+- `comparison.py` - Overview / Current Standings tabs, the chart-season picker renderer, clickable predictions panel, and live standings board markup
+- `stanley_cup.py` - current-standings / Cup-pick board builder
+- `url_params.py` - compact share-link encode/decode with legacy-link sanitization and canonicalization
 - `schedule.py` - live defaults, upcoming games, featured players, matchup-history loading, and runtime win-prob inference
 - `async_preloader.py` - background cache warming for non-active categories
 
@@ -111,6 +112,25 @@ Records APIs:
 
 All are undocumented. All are wrapped in try/except. Keep the fallbacks.
 
+SECTION 3A - PUBLIC INTERFACES
+------------------------------
+Stable external surfaces for this repo:
+- Streamlit entrypoint: `streamlit run app.py`
+- Compact share-link query params handled by `url_params.py`:
+  `cat`, `sk_m`, `go_m`, `tm_m`, `sp`, `cs`, `xm`, `lg`, `sm`, `pr`, `era`,
+  `cu`, `bl`, `pf`, `pt_s`, `pt_g`, `pt_t`, `pl`, `tm`
+- Legacy shared-link params remain supported for backward compatibility:
+  `sk`, `go`, and `mh`
+
+Behavior contract:
+- outbound share links stay compact and ID-based (`pl` player IDs, `tm` team abbreviations)
+- inbound legacy `id|name` / `abbr|name` values are sanitized at ingest
+- known player IDs and team abbreviations are canonicalized to trusted display names before render
+
+Non-public surfaces:
+- request / loader helpers inside `data_loaders.py`, `schedule.py`, and related modules are
+  internal implementation details, not stable public APIs
+
 SECTION 4 - SESSION STATE
 -------------------------
 `app.py` seeds these persistent keys up front:
@@ -152,6 +172,8 @@ Season-mode memory:
 Notes:
 - URL params are applied once, before defaults settle.
 - Shared links can carry compact player IDs and team abbreviations.
+- Legacy shared-link display names are sanitized at ingest, and known players / teams are
+  canonicalized before the sidebar renders them.
 - Missing URL params leave defaults alone.
 - Extra widget keys like metric selectors are created later by Streamlit widgets.
 - `do_cumul` is derived per render, not stored.
@@ -294,8 +316,9 @@ Chart duties handled in `chart.py`:
 - dispatch click data into `show_season_details()`
 - offer a Copy link control using compact URL params
 
-`comparison.py` owns the right-rail `Chart season` picker and keeps it synced with the canonical
-`st.session_state["chart_season"]` value.
+`comparison.py` defines `render_chart_season_picker()` and keeps it synced with the canonical
+`st.session_state["chart_season"]` value, but `app.py` places that picker in the left chart column
+immediately above the main chart. The right rail is reserved for predictions and detail panels.
 
 Games Played mode chart specifics:
 - x-axis uses `CumGP`
@@ -397,7 +420,8 @@ Runtime rules:
 - load frozen weights once through `load_win_prob_weights()`
 - fetch only the current season game logs for the two teams in the upcoming matchup
 - rebuild the same feature vector, score the base probability, then apply the capped goalie Save% proxy
-- surface the result in clickable predictions cards; there is still no quick-add action
+- surface the result in clickable predictions cards for up to 8 upcoming games; there is still no
+  quick-add action
 - clicking a card should open the matchup-history modal, not mutate the player/team board
 
 Matchup-history runtime rules:
@@ -477,8 +501,9 @@ Module responsibilities:
 - `dialog.py` - player clicks, team game snapshot clicks, matchup-history modal, projection, and baseline dialogs
 - `dialog.py` now inserts the rarity callout directly under `Career Subtotals` in player age snapshots
 - `chart.py` - figure assembly, baseline overlay, share-link button, player/team click dispatch
-- `comparison.py` - season-aware Overview / Current Standings tabs plus the right-rail chart-season picker, JS click bridge, and clickable predictions panel
-- `url_params.py` - compact share-link encoder/decoder with legacy link support
+- `comparison.py` - season-aware Overview / Current Standings tabs, the chart-season picker renderer, JS click bridge, clickable predictions panel, and live standings board wrapper
+- `stanley_cup.py` - standings-board assembly and Cup-pick summarization
+- `url_params.py` - compact share-link encoder/decoder with legacy-link sanitization and canonicalization
 - `schedule.py` - live/recent matchup detection, upcoming games, featured players, matchup history, and runtime pregame win-prob inference
 - `async_preloader.py` - background warming of non-active category caches
 
@@ -487,13 +512,17 @@ Key integration notes:
 - `comparison.py` stores tab memory per category via `panel_tab_skater`, `panel_tab_goalie`, and `panel_tab_team`
 - `comparison.py` now prefers a JS trigger from `st.components.v2.component()` for prediction-card
   clicks and falls back to the `mh` query param only when the JS bridge does not fire
+- `comparison.py` renders the predictions rail, but `app.py` owns the visible placement of the
+  chart-season picker above the main chart
 - Team all-time cards and team season discovery must use franchise lineage (`TEAM_LINEAGES` /
   `FranchiseAbbrev`), not raw historical `teamAbbrev` fragments.
 - `train_win_prob.py` is the only place that should import `scikit-learn` for this feature; runtime scoring must stay numpy/pandas only
 - selected-season Overview cards prefer league-wide season rank text from the summary endpoints and fall back to the old game-log scope label if rank data is unavailable
 - Team chart-season options now come from `load_all_team_seasons()` history for the selected franchises, not from player landing payloads.
 - Team selected-season share links now rely on the same forced-games-mode URL logic as skater and goalie season mode.
-- `url_params.py` supports compact ID-only links, legacy `id|name` / `abbr|name` links, and the right-rail `chart_season` selector without redundantly encoding forced games mode
+- `url_params.py` supports compact ID-only links, legacy `id|name` / `abbr|name` links, sanitizes
+  legacy display names at ingest, and handles the chart-season selector without redundantly
+  encoding forced games mode
 - `scraper.py` must keep the historical parquet additive-only; `Shots` and `TotalTOIMins` are now required for full rarity coverage, but old baseline / KNN columns must keep their meaning
 - age-rarity top-5 names intentionally reuse cached player landing data through `get_player_identity_summary()` instead of scraping a second historical names artifact
 

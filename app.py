@@ -27,11 +27,16 @@ from nhl.sidebar import render_sidebar
 from nhl.styles import get_favicon_path, inject_css, inject_mobile_dropdown_fix
 from nhl.team_pipeline import process_teams
 from nhl.schedule import get_featured_players, get_live_or_recent_game
-from nhl.url_params import apply_params_to_state, encode_state_to_params
+from nhl.url_params import (
+    _resolve_shared_player_names as _canonicalize_shared_player_names,
+    _resolve_shared_team_names as _canonicalize_shared_team_names,
+    apply_params_to_state,
+    encode_state_to_params,
+)
 
 
 def _resolve_shared_player_names(players: dict[str, str]) -> dict[str, str]:
-    """Replace compact shared-link player IDs with display names when possible."""
+    """Replace shared-link player display names with canonical NHL names when possible."""
     if not players:
         return {}
 
@@ -40,18 +45,7 @@ def _resolve_shared_player_names(players: dict[str, str]) -> dict[str, str]:
         for category in ("Skater", "Goalie")
         for pid, name in get_id_to_name_map(category).items()
     }
-    resolved_players = {}
-    for player_id, display_name in players.items():
-        clean_player_id = str(player_id).strip()
-        clean_display_name = str(display_name or "").strip()
-        if clean_display_name and clean_display_name != clean_player_id:
-            resolved_players[clean_player_id] = clean_display_name
-            continue
-        resolved_players[clean_player_id] = id_to_name_lookup.get(
-            clean_player_id,
-            f"Unknown (ID {clean_player_id})",
-        )
-    return resolved_players
+    return _canonicalize_shared_player_names(players, id_to_name_lookup)
 
 
 def _resolve_shared_team_names(teams: dict[str, str]) -> dict[str, str]:
@@ -65,16 +59,7 @@ def _resolve_shared_team_names(teams: dict[str, str]) -> dict[str, str]:
     """
     if not teams:
         return {}
-
-    resolved_teams = {}
-    for team_abbr, display_name in teams.items():
-        clean_team_abbr = str(team_abbr).strip().upper()
-        clean_display_name = str(display_name or "").strip()
-        if clean_display_name and clean_display_name != clean_team_abbr:
-            resolved_teams[clean_team_abbr] = clean_display_name
-            continue
-        resolved_teams[clean_team_abbr] = ACTIVE_TEAMS.get(clean_team_abbr, clean_team_abbr)
-    return resolved_teams
+    return _canonicalize_shared_team_names(teams, ACTIVE_TEAMS)
 
 
 def _restore_pre_season_state() -> None:
@@ -403,7 +388,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.99.3 -- 9,921 lines of Python<br>"
+    "Created by Iksperial. v0.99.4 -- 9,994 lines of Python<br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

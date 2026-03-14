@@ -2,6 +2,8 @@
 
 import re
 
+from nhl.constants import ACTIVE_TEAMS
+
 _VALID_SKATER_METRICS = {"Points", "Goals", "Assists", "+/-", "GP", "PPG", "SH%", "PIM", "TOI"}
 _VALID_GOALIE_METRICS = {"Save %", "GAA", "Shutouts", "Wins", "GP", "Saves"}
 _VALID_TEAM_METRICS   = {"Points", "Wins", "Win%", "Goals", "GF/G", "GA/G", "PP%", "PPG"}
@@ -41,6 +43,10 @@ _LEGACY_PANEL_TAB_ALIASES = {
     "trophies": "overview",
     "stanley_cup": "current-standings",
 }
+
+_PLAYER_ID_PATTERN = re.compile(r"[0-9]{1,12}")
+_TEAM_ABBR_PATTERN = re.compile(r"[A-Z]{2,4}")
+_MAX_SHARED_DISPLAY_NAME_LENGTH = 120
 
 
 def _sanitize_panel_tab(value: str) -> str:
@@ -101,6 +107,93 @@ def _sanitize_chart_season(value) -> str | int:
     return year
 
 
+def _coerce_player_param_key(value: object) -> str | None:
+    """Return one normalized player ID string when the shared-link key is valid."""
+    clean_value = str(value or "").strip()
+    if not _PLAYER_ID_PATTERN.fullmatch(clean_value):
+        return None
+    try:
+        numeric_value = int(clean_value)
+    except ValueError:
+        return None
+    if numeric_value <= 0:
+        return None
+    return str(numeric_value)
+
+
+def _coerce_team_param_key(value: object) -> str | None:
+    """Return one normalized team abbreviation when the shared-link key is valid."""
+    clean_value = str(value or "").strip().upper()
+    if not _TEAM_ABBR_PATTERN.fullmatch(clean_value):
+        return None
+    return clean_value
+
+
+def _sanitize_shared_display_name(value: object) -> str:
+    """Normalize untrusted shared-link display text into inert plain text.
+
+    The shared-link query string can contain legacy ``pid|name`` and
+    ``abbr|name`` payloads. These display names are treated as untrusted input,
+    so control characters are removed, HTML tags are stripped, and whitespace is
+    normalized before the value is stored in session state.
+    """
+    raw_value = str(value or "")
+    filtered_value = "".join(ch for ch in raw_value if ch.isprintable() or ch.isspace())
+    filtered_value = re.sub(r"<[^>]*>", "", filtered_value)
+    filtered_value = filtered_value.replace("<", "").replace(">", "")
+    filtered_value = re.sub(r"\s+", " ", filtered_value).strip()
+    return filtered_value[:_MAX_SHARED_DISPLAY_NAME_LENGTH]
+
+
+def _resolve_shared_player_names(
+    players: dict[str, str],
+    id_to_name_lookup: dict[str, str],
+) -> dict[str, str]:
+    """Resolve shared-link player state to canonical or sanitized display names."""
+    resolved_players: dict[str, str] = {}
+    for player_id, display_name in (players or {}).items():
+        clean_player_id = _coerce_player_param_key(player_id)
+        if not clean_player_id:
+            continue
+
+        canonical_name = str(id_to_name_lookup.get(clean_player_id, "") or "").strip()
+        if canonical_name:
+            resolved_players[clean_player_id] = canonical_name
+            continue
+
+        fallback_name = _sanitize_shared_display_name(display_name)
+        if fallback_name and fallback_name != clean_player_id:
+            resolved_players[clean_player_id] = fallback_name
+            continue
+
+        resolved_players[clean_player_id] = f"Unknown (ID {clean_player_id})"
+
+    return resolved_players
+
+
+def _resolve_shared_team_names(
+    teams: dict[str, str],
+    active_teams: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Resolve shared-link team state to canonical or sanitized display names."""
+    active_team_lookup = active_teams or ACTIVE_TEAMS
+    resolved_teams: dict[str, str] = {}
+    for team_abbr, display_name in (teams or {}).items():
+        clean_team_abbr = _coerce_team_param_key(team_abbr)
+        if not clean_team_abbr:
+            continue
+
+        canonical_name = str(active_team_lookup.get(clean_team_abbr, "") or "").strip()
+        if canonical_name:
+            resolved_teams[clean_team_abbr] = canonical_name
+            continue
+
+        fallback_name = _sanitize_shared_display_name(display_name)
+        resolved_teams[clean_team_abbr] = fallback_name or clean_team_abbr
+
+    return resolved_teams
+
+
 def _parse_player_params(raw_value: str) -> dict[str, str]:
     """Parse short or legacy player query params into session-state shape.
 
@@ -118,11 +211,14 @@ def _parse_player_params(raw_value: str) -> dict[str, str]:
             continue
         if "|" in clean_entry:
             pid, name = clean_entry.split("|", 1)
-            pid = pid.strip()
-            if pid:
-                players[pid] = name.strip() or pid
+            clean_player_id = _coerce_player_param_key(pid)
+            if clean_player_id:
+                sanitized_name = _sanitize_shared_display_name(name)
+                players[clean_player_id] = sanitized_name or clean_player_id
             continue
-        players[clean_entry] = clean_entry
+        clean_player_id = _coerce_player_param_key(clean_entry)
+        if clean_player_id:
+            players[clean_player_id] = clean_player_id
     return players
 
 
@@ -143,11 +239,14 @@ def _parse_team_params(raw_value: str) -> dict[str, str]:
             continue
         if "|" in clean_entry:
             abbr, name = clean_entry.split("|", 1)
-            abbr = abbr.strip().upper()
-            if abbr:
-                teams[abbr] = name.strip() or abbr
+            clean_team_abbr = _coerce_team_param_key(abbr)
+            if clean_team_abbr:
+                sanitized_name = _sanitize_shared_display_name(name)
+                teams[clean_team_abbr] = sanitized_name or clean_team_abbr
             continue
-        teams[clean_entry.upper()] = clean_entry.upper()
+        clean_team_abbr = _coerce_team_param_key(clean_entry)
+        if clean_team_abbr:
+            teams[clean_team_abbr] = clean_team_abbr
     return teams
 
 
