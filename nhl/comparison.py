@@ -72,7 +72,10 @@ _DEFAULT_PLAYER_RANK_COLOR = "#4caf50"
 _CARD_CONTEXT_TEXT_COLOR = "#b3b3b3"
 _PROBABILITY_BAR_LIGHTNESS = 0.36
 _PROBABILITY_BAR_SATURATION = 0.68
-_PREDICTIONS_PANEL_MATCH_LIMIT = 14
+# Keep the right-rail prediction batch modest. Cold loads above this count
+# trigger noticeably more NHL API rate-limit fallbacks, which surface as
+# "Estimate unavailable." cards near the bottom of the list.
+_PREDICTIONS_PANEL_MATCH_LIMIT = 8
 _CATEGORY_TAB_KEYS = {
     "Skater": "panel_tab_skater",
     "Goalie": "panel_tab_goalie",
