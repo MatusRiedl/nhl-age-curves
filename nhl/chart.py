@@ -531,6 +531,17 @@ def _build_chart_axis_cue_annotations(
             showarrow=False,
             font=dict(size=15, family="Arial Black", color=X_AXIS_CUE_COLOR),
         ),
+        dict(
+            x=0.5,
+            y=1.017,
+            xref="paper",
+            yref="paper",
+            xanchor="center",
+            yanchor="top",
+            text="Click on chart for details",
+            showarrow=False,
+            font=dict(size=15, family="Arial", color=Y_AXIS_CUE_COLOR),
+        ),
     ]
 
 
@@ -1176,7 +1187,13 @@ def render_chart(
         margin      = dict(l=6, r=6, t=18, b=6 if not team_mode else 14),
         height      = 430,
         font        = dict(size=16),
-        hoverlabel  = dict(font_size=16, font_family="Arial"),
+        hoverlabel  = dict(
+            bgcolor     = "rgba(8, 13, 21, 0.94)",
+            bordercolor = "rgba(255, 255, 255, 0.13)",
+            font        = dict(size=16, family="Arial", color="rgba(255, 255, 255, 0.90)"),
+            align       = "left",
+            namelength  = 0,
+        ),
         modebar     = dict(bgcolor="rgba(0,0,0,0)"),
         annotations = chart_axis_cues,
         title       = dict(text=""),
@@ -1208,7 +1225,7 @@ def render_chart(
             marker         = dict(size=8),
             hovertemplate  = (
                 f"<b>%{{customdata[1]}}</b><br>Season %{{customdata[2]}}<br>"
-                f"{metric}: %{{y:{_val_fmt}}}<extra></extra>"
+                f"%{{y:{_val_fmt}}} {metric}<extra></extra>"
             ),
         )
         fig.update_xaxes(
@@ -1231,10 +1248,10 @@ def render_chart(
                     line=dict(width=1.6, color=SEASON_MARKER_OUTLINE),
                 ),
                 hovertemplate = (
-                    f"<b>Click for details</b><br>"
+                    f"<b>Click for details</b><br><br>"
                     f"<b>%{{customdata[1]}}</b><br>"
                     f"{games_hover_label if not team_mode else 'Season GP'} %{{x}}<br>"
-                    f"Value: %{{y:{_val_fmt}}}<extra></extra>"
+                    f"%{{y:{_val_fmt}}} {metric}<extra></extra>"
                 ),
             )
             if is_single_season_lollipop_mode:
@@ -1248,13 +1265,13 @@ def render_chart(
                     line=dict(width=1.6, color=SEASON_MARKER_OUTLINE),
                 ),
                 hovertemplate = (
-                    "<b>Click for details</b><br>"
+                    "<b>Click for details</b><br><br>"
                     "<b>%{customdata[1]}</b><br>"
                     "%{customdata[2]} · %{customdata[3]}<br>"
                     "Opponent: %{customdata[5]} (%{customdata[6]})<br>"
                     "Result: %{customdata[7]} %{customdata[8]:.0f}-%{customdata[9]:.0f}<br>"
                     f"{games_hover_label} %{{x}}<br>"
-                    f"Value: %{{y:{_val_fmt}}}<extra></extra>"
+                    f"%{{y:{_val_fmt}}} {metric}<extra></extra>"
                 ),
             )
         else:
@@ -1265,7 +1282,7 @@ def render_chart(
                 hovertemplate  = (
                     f"<b>%{{customdata[1]}}</b><br>"
                     f"{games_hover_label if not team_mode else 'Season GP'} %{{x}}<br>"
-                    f"Value: %{{y:{_val_fmt}}}<extra></extra>"
+                    f"%{{y:{_val_fmt}}} {metric}<extra></extra>"
                 ),
             )
         fig.update_xaxes(
@@ -1284,8 +1301,8 @@ def render_chart(
                 line=dict(width=1.35, color=CLICKABLE_AGE_MARKER_OUTLINE),
             ),
             hovertemplate  = (
-                f"<b>Click for details</b><br><b>%{{customdata[1]}}</b><br>Age %{{x}}<br>"
-                f"Value: %{{y:{_val_fmt}}}<extra></extra>"
+                f"<b>Click for details</b><br><br><b>%{{customdata[1]}}</b><br>Age %{{x}}<br>"
+                f"%{{y:{_val_fmt}}} {metric}<extra></extra>"
             ),
         )
         fig.update_xaxes(
@@ -1309,18 +1326,18 @@ def render_chart(
         if team_mode and not games_mode:
             fig.update_traces(
                 hovertemplate=(
-                    f"<b>%{{customdata[1]}}</b><br>Season %{{customdata[2]}}<br>%{{y:.1f}}%<extra></extra>"
+                    f"<b>%{{customdata[1]}}</b><br>Season %{{customdata[2]}}<br>%{{y:.1f}}% {metric}<extra></extra>"
                 )
             )
         elif is_single_season_team_games:
             fig.update_traces(
                 hovertemplate=(
-                    "<b>Click for details</b><br>"
+                    "<b>Click for details</b><br><br>"
                     "<b>%{customdata[1]}</b><br>"
                     "%{customdata[2]} · %{customdata[3]}<br>"
                     "Opponent: %{customdata[5]} (%{customdata[6]})<br>"
                     "Result: %{customdata[7]} %{customdata[8]:.0f}-%{customdata[9]:.0f}<br>"
-                    "Game %{x}<br>%{y:.1f}%<extra></extra>"
+                    f"Game %{{x}}<br>%{{y:.1f}}% {metric}<extra></extra>"
                 )
             )
         else:
@@ -1328,9 +1345,9 @@ def render_chart(
             fig.update_traces(
                 hovertemplate=(
                     (
-                        f"<b>Click for details</b><br><b>%{{customdata[1]}}</b><br>{x_label} %{{x}}<br>%{{y:.1f}}%<extra></extra>"
+                        f"<b>Click for details</b><br><br><b>%{{customdata[1]}}</b><br>{x_label} %{{x}}<br>%{{y:.1f}}% {metric}<extra></extra>"
                         if is_single_season_player_games or is_clickable_age_chart
-                        else f"<b>%{{customdata[1]}}</b><br>{x_label} %{{x}}<br>%{{y:.1f}}%<extra></extra>"
+                        else f"<b>%{{customdata[1]}}</b><br>{x_label} %{{x}}<br>%{{y:.1f}}% {metric}<extra></extra>"
                     )
                 )
             )
@@ -1376,6 +1393,14 @@ def render_chart(
     }
 
     st.markdown("<div id='comparison-main-plotly'></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<style>"
+        ".js-plotly-plot .hoverlayer .hovertext {"
+        "  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.62));"
+        "}"
+        "</style>",
+        unsafe_allow_html=True,
+    )
 
     event = st.plotly_chart(
         fig,
@@ -1755,6 +1780,29 @@ def render_chart(
         }}
     }}
 
+    function patchHoverLabelRects(targetPlot) {{
+        if (!targetPlot || targetPlot._hoverRectObserver) return;
+        var hoverLayer = targetPlot.querySelector('.hoverlayer');
+        if (!hoverLayer) return;
+        var observer = new MutationObserver(function(mutations) {{
+            mutations.forEach(function(m) {{
+                m.addedNodes.forEach(function(node) {{
+                    if (!node.querySelectorAll) return;
+                    node.querySelectorAll('rect').forEach(function(r) {{
+                        r.setAttribute('rx', '18');
+                        r.setAttribute('ry', '18');
+                    }});
+                    if (node.tagName && node.tagName.toLowerCase() === 'rect') {{
+                        node.setAttribute('rx', '18');
+                        node.setAttribute('ry', '18');
+                    }}
+                }});
+            }});
+        }});
+        observer.observe(hoverLayer, {{ childList: true, subtree: true }});
+        targetPlot._hoverRectObserver = observer;
+    }}
+
     function init() {{
         var parent = window.parent;
         var Plotly = parent.Plotly;
@@ -1765,6 +1813,7 @@ def render_chart(
         bindShareButton(parent);
         var targetPlot = getCurrentTargetPlot(parent);
         if (!targetPlot) {{ setTimeout(init, 200); return; }}
+        patchHoverLabelRects(targetPlot);
         if (ENABLE_PLAYER_TRACE_TOGGLES) {{
             applyStoredPlayerTraceVisibility(parent, Plotly, targetPlot).then(function() {{
                 bindPlayerTraceToggleButtons(parent, Plotly);
