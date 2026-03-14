@@ -1208,12 +1208,24 @@ _CSS = """
             padding-top: 0.3rem !important;
             padding-bottom: 0.3rem !important;
         }
+        /* Reduce gap between chart and controls row — negative bottom margin on chart_placeholder */
+        div:has(> #main-chart-layout) + div [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child > [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"]:has(#comparison-main-plotly) {
+            margin-bottom: -0.9rem !important;
+        }
         div:has(> #comparison-predictions-panel) {
             margin: 0 !important;
             line-height: 0 !important;
         }
         div:has(> #comparison-predictions-panel) + div {
             margin-top: -0.34rem !important;
+        }
+        /* Collapse right-rail anchor — pulls predictions panel to top of right column */
+        div.element-container:has(#comparison-right-rail) {
+            margin: 0 !important;
+            line-height: 0 !important;
+        }
+        div.element-container:has(#comparison-right-rail) + div {
+            margin-top: -0.7rem !important;
         }
         div.element-container:has(#comparison-main-plotly) {
             margin: 0 !important;
