@@ -74,6 +74,10 @@ def process_players(
         if stat_category == "Goalie" and not is_goalie:
             continue
 
+        if 'PlayerID' not in raw_df.columns:
+            raw_df['PlayerID'] = int(pid)
+        raw_df['PlayerID'] = pd.to_numeric(raw_df['PlayerID'], errors='coerce').fillna(int(pid)).astype(int)
+        raw_df['PositionCode'] = str(pos_code or ('G' if is_goalie else 'S'))
         raw_df['BaseName'] = base_name
         raw_dfs_cache.append(raw_df.copy())
 

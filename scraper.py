@@ -125,7 +125,7 @@ def _collapse_traded_seasons(df: pd.DataFrame) -> pd.DataFrame:
 
     agg_cols = [
         'GP', 'Points', 'Goals', 'Assists', 'PIM', '+/-', 'Wins', 'Shutouts',
-        'Saves', 'GoalsAgainst', 'WeightedGAA',
+        'Saves', 'GoalsAgainst', 'WeightedGAA', 'Shots', 'TotalTOIMins',
     ]
     collapsed = (
         df.groupby(['PlayerID', 'SeasonYear', 'Age', 'Position'], as_index=False)[agg_cols]
@@ -139,6 +139,17 @@ def _collapse_traded_seasons(df: pd.DataFrame) -> pd.DataFrame:
     ).fillna(0.0)
 
     return collapsed.drop(columns=['GoalsAgainst', 'WeightedGAA'])
+
+
+def _toi_to_minutes(toi_str: str) -> float:
+    """Convert an ``MM:SS`` TOI string into decimal minutes."""
+    try:
+        parts = str(toi_str or '0:00').split(':')
+        if len(parts) != 2:
+            return 0.0
+        return int(parts[0]) + int(parts[1]) / 60.0
+    except Exception:
+        return 0.0
 
 
 def get_all_season_ids():
@@ -238,6 +249,7 @@ def fetch_player_data(player_id):
                 season_year = int(season_str[:4]) if len(season_str) >= 4 else 2000
                 age         = season_year - birth_year
                 gp          = max(s.get('gamesPlayed', 1), 1)
+                toi_mins    = _toi_to_minutes(str(s.get('avgToi', '0:00')))
                 shots_against = max(float(s.get('shotsAgainst', 0) or 0), 0.0)
                 goals_against = max(float(s.get('goalsAgainst', 0) or 0), 0.0)
                 raw_saves = s.get('saves', None)
@@ -267,6 +279,8 @@ def fetch_player_data(player_id):
                     "Assists":    s.get('assists', 0),
                     "PIM":        s.get('pim', 0) or s.get('penaltyMinutes', 0),
                     "+/-":        s.get('plusMinus', 0),
+                    "Shots":      s.get('shots', 0) or 0,
+                    "TotalTOIMins": toi_mins * gp,
                     "Wins":       s.get('wins', 0),
                     "Shutouts":   s.get('shutouts', 0),
                     "Saves":      saves,
@@ -312,7 +326,7 @@ def main():
 
     # Save as highly-compressed Parquet
     df.to_parquet("nhl_historical_seasons.parquet", index=False, compression="snappy")
-    print("✅ Saved to nhl_historical_seasons.parquet")
+    print("Saved to nhl_historical_seasons.parquet")
 
 
 if __name__ == "__main__":

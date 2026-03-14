@@ -13,6 +13,7 @@ from nhl.data_loaders import (
     get_team_identity_summary,
 )
 from nhl.era import get_era_multiplier
+from nhl.rarity import collapse_player_snapshot_rows, get_age_rarity_summary
 from nhl.schedule import get_game_details, get_matchup_history
 
 
@@ -186,6 +187,108 @@ def _get_raw_player_df(raw_dfs_list: list, clean_name: str):
         if not df.empty and 'BaseName' in df.columns and df['BaseName'].iloc[0] == clean_name:
             return df
     return None
+
+
+def _format_snapshot_metric_value(metric: str, value: float | int | None) -> str:
+    """Format one Season Snapshot metric value for rarity copy."""
+    if value is None or pd.isna(value):
+        return "?"
+
+    numeric_value = float(value)
+    if metric in {"Save %", "SH%"}:
+        return f"{numeric_value:.2f}%"
+    if metric in {"PPG", "GAA", "TOI"}:
+        return f"{numeric_value:.2f}"
+    if numeric_value.is_integer():
+        return f"{int(numeric_value):,}"
+    return f"{numeric_value:.2f}"
+
+
+def _format_percentile_label(percentile: float | int | None) -> str:
+    """Format percentile text without rounding sub-100 values up to 100.0."""
+    if percentile is None or pd.isna(percentile):
+        return "?"
+
+    bounded = max(0.0, min(100.0, float(percentile)))
+    if bounded >= 100.0:
+        return "100.0"
+
+    for decimals in range(1, 5):
+        rounded = round(bounded, decimals)
+        if rounded < 100.0:
+            return f"{rounded:.{decimals}f}"
+
+    return "99.9999"
+
+
+def _render_age_rarity_callout(rarity_summary: dict) -> None:
+    """Render the age-rarity callout block under career subtotals."""
+    if not rarity_summary:
+        return
+
+    unavailable_reason = str(rarity_summary.get("unavailable_reason", "") or "").strip()
+    if unavailable_reason:
+        st.caption(unavailable_reason)
+        return
+
+    metric = str(rarity_summary.get("metric", "") or "").strip()
+    season_label = str(rarity_summary.get("season_label", "") or "").strip()
+    age = int(rarity_summary.get("age", 0) or 0)
+    value_label = escape(_format_snapshot_metric_value(metric, rarity_summary.get("value")))
+    percentile = float(rarity_summary.get("percentile", 0.0) or 0.0)
+    percentile_label = _format_percentile_label(percentile)
+    rank = int(rarity_summary.get("rank", 0) or 0)
+    sample_size = int(rarity_summary.get("sample_size", 0) or 0)
+    role_label = str(rarity_summary.get("role_label", "") or "").strip()
+    is_era_adjusted = bool(rarity_summary.get("is_era_adjusted", False))
+
+    heading = "Era-adjusted age rarity" if is_era_adjusted else "Age rarity"
+    main_line = (
+        f"{value_label} {escape(metric)} in {escape(season_label)} was a "
+        f"{percentile_label}th-percentile NHL age-{age} season "
+        f"(#{rank:,} of {sample_size:,})."
+    )
+
+    role_line = ""
+    if role_label:
+        role_percentile = float(rarity_summary.get("role_percentile", 0.0) or 0.0)
+        role_percentile_label = _format_percentile_label(role_percentile)
+        role_rank = int(rarity_summary.get("role_rank", 0) or 0)
+        role_sample_size = int(rarity_summary.get("role_sample_size", 0) or 0)
+        role_line = (
+            f"Among {escape(role_label)}: {role_percentile_label}th percentile "
+            f"(#{role_rank:,} of {role_sample_size:,})."
+        )
+
+    top_seasons = rarity_summary.get("top_seasons", []) or []
+    top_rows_html = ""
+    if top_seasons:
+        top_lines = []
+        for row in top_seasons:
+            display_rank = int(row.get("display_rank", 0) or 0)
+            player_name = escape(str(row.get("player_name", "") or "").strip())
+            top_season_label = escape(str(row.get("season_label", "") or "").strip())
+            top_value = escape(_format_snapshot_metric_value(metric, row.get("value")))
+            top_lines.append(
+                f"{display_rank}. {player_name} ({top_season_label}) - {top_value} {escape(metric)}"
+            )
+        if top_lines:
+            top_rows_html = (
+                "<div style='margin-top:8px;'>"
+                f"<b>Top NHL age-{age} seasons in this pool:</b><br>"
+                f"{'<br>'.join(top_lines)}"
+                "</div>"
+            )
+
+    body_html = (
+        f"<div style='background-color:#2b2442;border-left:4px solid #a477ff;"
+        f"padding:10px 14px;border-radius:4px;margin-bottom:8px;'>"
+        f"<b>{escape(heading)}:</b> {main_line}"
+        f"{f'<br>{role_line}' if role_line else ''}"
+        f"{top_rows_html}"
+        "</div>"
+    )
+    st.markdown(body_html, unsafe_allow_html=True)
 
 
 def _resolve_real_game_row(df, age: int, s_type: str, game_id: int | None, game_date: str | None, clicked_game_type: str | None):
@@ -820,6 +923,7 @@ def show_season_details(
     ml_clones_dict: dict,
     historical_baselines: dict,
     stat_category: str,
+    do_era: bool,
     game_id: int | None = None,
     game_date: str | None = None,
     clicked_game_type: str | None = None,
@@ -953,16 +1057,36 @@ def show_season_details(
         season_data = player_raw_df[player_raw_df['Age'] == age]
         if s_type != "Both":
             season_data = season_data[season_data['GameType'] == s_type]
-        if not season_data.empty:
-            cols_to_show = (
-                ['SeasonYear', 'GameType', 'GP', 'Points', 'Goals', 'Assists', '+/-']
-                if stat_category == "Skater"
-                else ['SeasonYear', 'GameType', 'GP', 'Wins', 'Saves', 'Shutouts']
+        season_snapshot_df = collapse_player_snapshot_rows(season_data)
+
+        if not season_snapshot_df.empty:
+            rarity_row_df = season_snapshot_df[
+                season_snapshot_df['League'].astype(str).str.upper().eq('NHL')
+                & season_snapshot_df['GameType'].astype(str).eq('Regular')
+            ]
+            rarity_summary = (
+                get_age_rarity_summary(
+                    season_row=rarity_row_df.iloc[0].to_dict(),
+                    metric=metric,
+                    stat_category=stat_category,
+                    do_era=do_era,
+                )
+                if not rarity_row_df.empty
+                else {
+                    "unavailable_reason": "Age rarity is shown only for NHL regular-season rows.",
+                }
             )
-            display_df = season_data[cols_to_show].copy()
+            _render_age_rarity_callout(rarity_summary)
+
+            cols_to_show = (
+                ['SeasonYear', 'League', 'GameType', 'GP', 'Points', 'Goals', 'Assists', '+/-']
+                if stat_category == "Skater"
+                else ['SeasonYear', 'League', 'GameType', 'GP', 'Wins', 'Saves', 'Shutouts']
+            )
+            display_df = season_snapshot_df[cols_to_show].copy()
             for col in display_df.columns:
-                if col not in ['SeasonYear', 'GameType']:
-                    display_df[col] = display_df[col].astype(int)
+                if col not in ['SeasonYear', 'League', 'GameType']:
+                    display_df[col] = pd.to_numeric(display_df[col], errors='coerce').fillna(0).astype(int)
             st.dataframe(display_df, hide_index=True, use_container_width=True)
         return  # End of real data click
 

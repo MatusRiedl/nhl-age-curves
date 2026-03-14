@@ -15,8 +15,13 @@ The app has three data sources/artifacts:
 - LOCAL: `nhl_historical_seasons.parquet`
 - LOCAL: `win_prob_weights.json`
 
-The parquet file powers KNN projection and historical baselines. Without it, the app still
-renders real data, but projection and baseline features degrade.
+The parquet file powers KNN projection, historical baselines, and Season Snapshot age-rarity
+comparisons. Without it, the app still renders real data, but projection, baseline, and rarity
+features degrade.
+
+The rarity layer now depends on additive parquet columns `Shots` and `TotalTOIMins` so clicked
+season snapshots can support `SH%`, `TOI`, percentile ranking, and top-age leaderboards without
+changing the old projection/baseline columns or row semantics.
 
 The JSON weight artifact powers pregame win probability in the right-rail predictions panel.
 The Streamlit app never trains that model at runtime; it only loads frozen weights and scores
@@ -51,6 +56,7 @@ Top level:
 - `styles.py` - CSS injection helpers
 - `era.py` - era multipliers and historical adjustment helpers
 - `data_loaders.py` - cached API fetchers and parquet loaders
+- `rarity.py` - historical age-rarity ranking, role splits, and top-season leaderboard payloads
 - `baselines.py` - historical and team baseline builders
 - `knn_engine.py` - KNN projection and fallback logic
 - `win_prob.py` - shared pregame feature engineering and runtime scoring math
@@ -288,6 +294,41 @@ Games Played mode chart specifics:
 - single-season click payload stores `Age`, `GameId`, `GameDate`, and `GameType` so the dialog can resolve the exact game
 - selected-season mode keeps peak highlights anchored to the real game number, not age
 
+SECTION 9A - SEASON SNAPSHOT AGE RARITY
+---------------------------------------
+Scope:
+- player age-clicks only
+- historical NHL regular-season rows only
+- never projection clicks
+- never baseline clicks
+- never exact one-game snapshot clicks
+
+Flow:
+1. `chart.py` passes `do_era` into `dialog.show_season_details()`.
+2. `dialog.py` resolves the clicked age snapshot and collapses traded stints with
+   `rarity.collapse_player_snapshot_rows()`.
+3. The dialog picks the collapsed `NHL + Regular` row for the rarity target.
+4. `rarity.get_age_rarity_summary()` loads the historical parquet, rebuilds rate stats, applies
+   era logic only when the visible metric is actually era-adjusted, then ranks the clicked row
+   against the same-age historical pool.
+5. The returned payload drives one callout card under `Career Subtotals`, including:
+   - overall percentile / rank / sample size
+   - skater role split (`forwards` or `defensemen`) when applicable
+   - compact top-5 leaderboard from the same overall comparison pool
+
+Dependencies:
+- `rarity.py` depends on `data_loaders.load_historical_data()` for the historical pool
+- `rarity.py` depends on `data_loaders.get_player_identity_summary()` for top-5 player names
+- `rarity.py` depends on `era.metric_is_era_adjusted()` and `era.apply_era_to_hist()` so the
+  rarity card and chart stay aligned about what `Era` changes
+
+Ranking rules:
+- higher is better for all supported metrics except `GAA`
+- percentile uses a midrank formula, so near-perfect seasons can be `99.96th percentile` without
+  being literally `100.0`
+- the compact top-5 leaderboard follows the same overall pool as the main `#rank of n` line,
+  not the role-split sub-line
+
 SECTION 10 - CACHING STRATEGY
 -----------------------------
 Permanent cache:
@@ -295,9 +336,11 @@ Permanent cache:
 - `load_win_prob_weights()`
 - `get_historical_baselines()`
 - `get_team_baselines()`
+- `get_age_rarity_summary()`
 
 Hourly cache (`ttl=3600`):
 - `get_player_landing()`
+- `get_player_identity_summary()`
 - `load_all_team_seasons()`
 - `get_top_50()`
 - `get_top_50_goalies()`
@@ -319,6 +362,7 @@ Hourly cache (`ttl=3600`):
 - `get_clone_details_map()`
 - `get_featured_players()`
 - `_get_cached_club_stats()`
+- `_resolve_player_name()` in `rarity.py`
 
 Five-minute cache (`ttl=300`):
 - `get_live_or_recent_game()`
@@ -411,6 +455,7 @@ Module responsibilities:
 - `constants.py` - shared URLs, metric lists, caps, floors, league multipliers
 - `era.py` - scoring-era multipliers and historical adjustment helpers
 - `data_loaders.py` - all parquet and network I/O; keep silent fallbacks
+- `rarity.py` - age-rarity ranking payloads, role splits, and top-season leaderboard assembly
 - `baselines.py` - cached historical and team baseline builders
 - `knn_engine.py` - clone matching, hybrid-delta projection, stat caps, fallback projection
 - `win_prob.py` - leak-safe pregame team features, artifact validation, and dot-product scoring
@@ -419,6 +464,7 @@ Module responsibilities:
 - `controls.py` - top control surface; returns `(metric, do_cumul)`
 - `sidebar.py` - player/team add flows plus sidebar status widgets
 - `dialog.py` - player clicks, team game snapshot clicks, matchup-history modal, projection, and baseline dialogs
+- `dialog.py` now inserts the rarity callout directly under `Career Subtotals` in player age snapshots
 - `chart.py` - figure assembly, baseline overlay, share-link button, player/team click dispatch
 - `comparison.py` - season-aware Overview / Current Standings tabs plus the right-rail chart-season picker, JS click bridge, and clickable predictions panel
 - `url_params.py` - compact share-link encoder/decoder with legacy link support
@@ -437,5 +483,7 @@ Key integration notes:
 - Team chart-season options now come from `load_all_team_seasons()` history for the selected franchises, not from player landing payloads.
 - Team selected-season share links now rely on the same forced-games-mode URL logic as skater and goalie season mode.
 - `url_params.py` supports compact ID-only links, legacy `id|name` / `abbr|name` links, and the right-rail `chart_season` selector without redundantly encoding forced games mode
+- `scraper.py` must keep the historical parquet additive-only; `Shots` and `TotalTOIMins` are now required for full rarity coverage, but old baseline / KNN columns must keep their meaning
+- age-rarity top-5 names intentionally reuse cached player landing data through `get_player_identity_summary()` instead of scraping a second historical names artifact
 
 That is the architecture. No magic, just disciplined pandas.

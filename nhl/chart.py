@@ -31,6 +31,7 @@ from nhl.constants import (
     RATE_STATS, TEAM_RATE_STATS,
 )
 from nhl.dialog import show_season_details, show_team_game_details
+from nhl.era import metric_is_era_adjusted
 
 
 X_AXIS_TICK_COLOR = "rgba(255, 255, 255, 0.80)"
@@ -397,17 +398,12 @@ def _metric_is_era_adjusted(metric: str, stat_category: str, do_era: bool, team_
     Returns:
         bool: True only when the rendered metric reflects era-adjusted values.
     """
-    if team_mode or not do_era:
-        return False
-
-    skater_era_metrics = {"Points", "Goals", "Assists", "PPG", "SH%"}
-    goalie_era_metrics = {"Save %", "GAA", "Shutouts"}
-
-    if stat_category == "Skater":
-        return metric in skater_era_metrics
-    if stat_category == "Goalie":
-        return metric in goalie_era_metrics
-    return False
+    return metric_is_era_adjusted(
+        metric=metric,
+        stat_category=stat_category,
+        do_era=do_era,
+        team_mode=team_mode,
+    )
 
 
 def _get_chart_era_label(metric: str, stat_category: str, do_era: bool, team_mode: bool) -> str:
@@ -1880,6 +1876,7 @@ def render_chart(
             ml_clones_dict       = ml_clones_dict,
             historical_baselines = historical_baselines,
             stat_category        = stat_category,
+            do_era               = do_era,
             game_id              = clicked_game_id,
             game_date            = clicked_game_date,
             clicked_game_type    = clicked_game_type,

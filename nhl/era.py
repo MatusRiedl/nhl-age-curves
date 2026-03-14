@@ -80,6 +80,26 @@ def get_goalie_era_sv_offset(year: int) -> float:
     return 0.0  # 2018+ — modern baseline, no adjustment needed
 
 
+def metric_is_era_adjusted(
+    metric: str,
+    stat_category: str,
+    do_era: bool,
+    team_mode: bool = False,
+) -> bool:
+    """Return whether the active metric is actually era-adjusted."""
+    if team_mode or not do_era:
+        return False
+
+    skater_era_metrics = {"Points", "Goals", "Assists", "PPG", "SH%"}
+    goalie_era_metrics = {"Save %", "GAA", "Shutouts"}
+
+    if stat_category == "Skater":
+        return metric in skater_era_metrics
+    if stat_category == "Goalie":
+        return metric in goalie_era_metrics
+    return False
+
+
 def apply_era_to_hist(
     df: pd.DataFrame,
     do_era: bool,

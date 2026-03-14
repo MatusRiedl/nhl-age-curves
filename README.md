@@ -28,6 +28,8 @@ https://nhl-age-curves.streamlit.app/
 
 * **Season Snapshot:** In single-season mode, click any game to see the exact matchup card with both teams, logos, final score, venue/time when available, plus the player or team one-game stat line. Age-mode and projection clicks still keep the broader season/career context.
 
+* **Age Rarity in Season Snapshot:** Historical NHL regular-season age clicks now show percentile, exact rank, optional skater role split, and a compact top-5 leaderboard from the same comparison pool, so fans can see how unusual that season was at that exact age.
+
 * **Upcoming Games Predictions Panel:** A dedicated right-rail panel lists the next 5 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and keeps the cards focused on matchup context instead of a quick-add workflow.
 
 * **Pregame Win Probability:** The right-rail predictions panel also shows a pregame away/home win estimate for each upcoming matchup. The base probability comes from an offline-trained logistic regression on the last 5 completed NHL regular seasons, then a capped goalie Save% proxy is layered on top at runtime.
@@ -47,7 +49,7 @@ https://nhl-age-curves.streamlit.app/
 * **Data & ML:** Pandas, PyArrow, custom hybrid KNN implementation, offline scikit-learn logistic regression for pregame win probability
 * **Visualization:** Plotly
 * **Networking:** Requests (REST API)
-* **Local Artifacts:** Parquet (`nhl_historical_seasons.parquet`) and exported win-probability weights (`win_prob_weights.json`)
+* **Local Artifacts:** Parquet (`nhl_historical_seasons.parquet`, including additive `Shots` and `TotalTOIMins` support for rarity / `SH%` / `TOI`) and exported win-probability weights (`win_prob_weights.json`)
 
 ## Code Structure
 
@@ -61,6 +63,7 @@ nhl/
     styles.py            CSS injection
     era.py               era-adjustment math (no Streamlit dependency)
     data_loaders.py      cached API fetch, season discovery, game-log, and parquet loaders
+    rarity.py            age-rarity percentile/rank engine plus top-season leaderboard payloads
     baselines.py         aggregate historical baseline builders
     knn_engine.py        hybrid KNN projection engine
     win_prob.py          shared pregame win-probability feature engineering and runtime scoring
@@ -74,7 +77,7 @@ nhl/
     url_params.py        URL query param encode/decode for shareable links and chart season state
     schedule.py          live defaults, upcoming games, featured-player helpers, matchup history, and runtime matchup inference
     async_preloader.py   background cache warming for Goalie/Team categories
-scraper.py               standalone script to refresh the parquet file
+scraper.py               standalone script to refresh the parquet file, including additive Shots / TotalTOIMins columns
 train_win_prob.py        standalone script to train and export pregame win-probability weights
 nhl_historical_seasons.parquet   ML backbone (generate with scraper.py)
 win_prob_weights.json    offline-trained logistic-regression weights used at runtime

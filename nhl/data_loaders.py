@@ -269,6 +269,13 @@ def load_historical_data() -> pd.DataFrame:
             df = pd.read_parquet("nhl_historical_seasons.parquet")
             if "Position" not in df.columns:
                 df["Position"] = "S"
+            for col in ("GP", "Points", "Goals", "SavePct"):
+                if col not in df.columns:
+                    df[col] = 0.0
+            if "Shots" not in df.columns:
+                df["Shots"] = 0.0
+            if "TotalTOIMins" not in df.columns:
+                df["TotalTOIMins"] = 0.0
 
             # Some historical parquet variants label all rows as skaters.
             # When no explicit goalie rows exist, infer goalies from
@@ -284,8 +291,17 @@ def load_historical_data() -> pd.DataFrame:
 
             df = _normalize_historical_goalie_rates(df)
 
-            df['PPG'] = df['Points'] / df['GP']
-            df['Save %'] = df['SavePct'] * 100
+            gp_denom = pd.to_numeric(df.get('GP', 0), errors='coerce').replace(0, float('nan'))
+            shots_denom = pd.to_numeric(df.get('Shots', 0), errors='coerce').replace(0, float('nan'))
+            df['PPG'] = pd.to_numeric(df.get('Points', 0), errors='coerce').div(gp_denom).fillna(0.0)
+            df['Save %'] = pd.to_numeric(df.get('SavePct', 0), errors='coerce').mul(100.0).fillna(0.0)
+            df['SH%'] = (
+                pd.to_numeric(df.get('Goals', 0), errors='coerce')
+                .div(shots_denom)
+                .mul(100.0)
+                .fillna(0.0)
+            )
+            df['TOI'] = pd.to_numeric(df.get('TotalTOIMins', 0), errors='coerce').div(gp_denom).fillna(0.0)
             return df
     except Exception:
         pass
@@ -2002,6 +2018,8 @@ def get_player_season_game_log(
             return pd.DataFrame(), base_name, position
 
         df = pd.DataFrame(data).sort_values(['GameDate', 'GameId']).reset_index(drop=True)
+        df["PlayerID"] = int(player_id)
+        df["PositionCode"] = str(position or "S")
         return df, base_name, position
     except Exception:
         return pd.DataFrame(), base_name, 'S'
@@ -2052,6 +2070,8 @@ def get_player_raw_stats(
                     calc_saves = max(0, sa - ga) if sa > 0 else 0
 
                 data.append({
+                    "PlayerID":   int(player_id),
+                    "PositionCode": str(position or 'S'),
                     "League":     league_raw,
                     "Age":        age,
                     "SeasonYear": season_year,
