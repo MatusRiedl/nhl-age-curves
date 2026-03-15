@@ -83,6 +83,8 @@ _TEAM_SHORT_NAMES = {
     "WPG": "Jets",
     "WSH": "Caps",
 }
+_DEFAULT_PLAYER_DIALOG_ACCENT = "#4F8FFF"
+_DEFAULT_DIALOG_VALUE_COLOR = "#EAF1FF"
 
 
 def _get_team_short_name(team_abbr: str, fallback_name: str) -> str:
@@ -1236,7 +1238,13 @@ def show_team_game_details(
     )
 
 
-def _render_identity_rows(rows: list[tuple[str, str]], *, columns: int = 2) -> bool:
+def _render_identity_rows(
+    rows: list[tuple[str, str]],
+    *,
+    columns: int = 2,
+    label_color: str = "#FFFFFF",
+    value_color: str = "#FFFFFF",
+) -> bool:
     """Render compact label/value rows for identity dialogs."""
     clean_rows = [
         (str(label or "").strip(), str(value or "").strip())
@@ -1249,14 +1257,99 @@ def _render_identity_rows(rows: list[tuple[str, str]], *, columns: int = 2) -> b
     column_count = max(1, min(int(columns), len(clean_rows)))
     if column_count == 1:
         for label, value in clean_rows:
-            st.markdown(f"**{label}**  \n{value}")
+            st.markdown(
+                _build_identity_row_html(
+                    label,
+                    value,
+                    label_color=label_color,
+                    value_color=value_color,
+                ),
+                unsafe_allow_html=True,
+            )
         return True
 
     layout_columns = st.columns(column_count)
     for idx, (label, value) in enumerate(clean_rows):
         with layout_columns[idx % column_count]:
-            st.markdown(f"**{label}**  \n{value}")
+            st.markdown(
+                _build_identity_row_html(
+                    label,
+                    value,
+                    label_color=label_color,
+                    value_color=value_color,
+                ),
+                unsafe_allow_html=True,
+            )
     return True
+
+
+def _get_player_chart_colors() -> dict[str, str | None]:
+    """Return the active chart colors saved for the current comparison view."""
+    session_state = getattr(st, "session_state", None)
+    if session_state is None:
+        return {}
+    if hasattr(session_state, "get"):
+        player_colors = session_state.get("player_chart_colors", {})
+    else:
+        player_colors = getattr(session_state, "player_chart_colors", {})
+    return player_colors if isinstance(player_colors, dict) else {}
+
+
+def _resolve_dialog_color(color: str | None, *, fallback: str) -> str:
+    """Return a safe CSS color string for dialog markup."""
+    clean_color = str(color or "").strip() or fallback
+    return escape(clean_color, quote=True)
+
+
+def _get_player_identity_accent_color(player_name: str) -> str:
+    """Return the active chart color for one player identity dialog."""
+    clean_name = str(player_name or "").strip()
+    player_colors = _get_player_chart_colors()
+    accent_color = player_colors.get(clean_name)
+
+    if not accent_color and clean_name:
+        target_name = clean_name.casefold()
+        for candidate_name, candidate_color in player_colors.items():
+            if str(candidate_name or "").strip().casefold() == target_name:
+                accent_color = candidate_color
+                break
+
+    return _resolve_dialog_color(accent_color, fallback=_DEFAULT_PLAYER_DIALOG_ACCENT)
+
+
+def _build_identity_row_html(
+    label: str,
+    value: str,
+    *,
+    label_color: str,
+    value_color: str,
+) -> str:
+    """Return one compact dialog row with clearer label/value contrast."""
+    safe_label = escape(str(label or "").strip())
+    safe_value = escape(str(value or "").strip()).replace("\n", "<br>")
+    safe_label_color = _resolve_dialog_color(label_color, fallback="#FFFFFF")
+    safe_value_color = _resolve_dialog_color(value_color, fallback=_DEFAULT_DIALOG_VALUE_COLOR)
+    return (
+        "<div style='margin:0 0 1.15rem 0;'>"
+        f"<div style='font-weight:700;font-size:1.02rem;color:{safe_label_color};"
+        "margin-bottom:0.2rem;line-height:1.25;'>"
+        f"{safe_label}</div>"
+        f"<div style='color:{safe_value_color};line-height:1.45;'>{safe_value}</div>"
+        "</div>"
+    )
+
+
+def _render_identity_section(title: str, body: str, *, accent_color: str) -> None:
+    """Render a titled identity section using the active player accent color."""
+    st.markdown(
+        _build_identity_row_html(
+            title,
+            body,
+            label_color=accent_color,
+            value_color=_DEFAULT_DIALOG_VALUE_COLOR,
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 @st.dialog("Player Details")
@@ -1267,7 +1360,17 @@ def show_player_identity_details(player_id: int) -> None:
         st.info("Player details unavailable right now.")
         return
 
-    st.markdown(f"### {summary.get('name', 'Player')}")
+    player_name = str(summary.get("name", "Player") or "Player").strip() or "Player"
+    accent_color = _get_player_identity_accent_color(player_name)
+    st.markdown(
+        (
+            "<div style='margin:0 0 0.95rem 0;'>"
+            f"<div style='font-size:1.72rem;font-weight:800;line-height:1.15;"
+            f"color:{accent_color};'>{escape(player_name)}</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
     born_bits: list[str] = []
     birth_date = str(summary.get("birth_date", "") or "").strip()
@@ -1287,14 +1390,19 @@ def show_player_identity_details(player_id: int) -> None:
         ("First NHL season", str(summary.get("first_nhl_season_label", "") or "").strip()),
         ("Debut team", str(summary.get("debut_team", "") or "").strip()),
     ]
-    has_content = _render_identity_rows(rows, columns=2)
+    has_content = _render_identity_rows(
+        rows,
+        columns=2,
+        label_color=accent_color,
+        value_color=_DEFAULT_DIALOG_VALUE_COLOR,
+    )
 
     honors = summary.get("honors", []) or []
     honors_text = " | ".join(str(item or "").strip() for item in honors if str(item or "").strip())
     if honors_text:
         if has_content:
             st.markdown("---")
-        st.markdown(f"**Honors**  \n{honors_text}")
+        _render_identity_section("Honors", honors_text, accent_color=accent_color)
         has_content = True
 
     trophy_lines: list[str] = []
@@ -1316,7 +1424,7 @@ def show_player_identity_details(player_id: int) -> None:
     if trophy_lines:
         if has_content:
             st.markdown("---")
-        st.markdown("**Trophies**  \n" + "  \n".join(trophy_lines))
+        _render_identity_section("Trophies", "\n".join(trophy_lines), accent_color=accent_color)
         has_content = True
 
     if not has_content:
