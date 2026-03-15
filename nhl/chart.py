@@ -108,7 +108,6 @@ CHART_HOVER_DISTANCE = 32
 CHART_CLICK_BRIDGE_JS = f"""
 export default function(component) {{
     const {{ data, setTriggerValue }} = component;
-    console.log('[BRIDGE] JS loaded, component:', !!component, 'data:', data);
 
     const parseBridgeData = () => {{
         if (!data) {{
@@ -155,53 +154,49 @@ export default function(component) {{
     const DEBOUNCE_MS = 500;
     function emitClick(payload) {{
         const now = Date.now();
-        if (now - lastEmittedAt < DEBOUNCE_MS) {{
-            console.log('[BRIDGE] emitClick debounced');
-            return;
-        }}
+        if (now - lastEmittedAt < DEBOUNCE_MS) return;
         lastEmittedAt = now;
-        console.log('[BRIDGE] emitClick calling setTriggerValue, payload:', payload);
         setTriggerValue('clicked', JSON.stringify(payload));
     }}
 
     let cleanup = null;
     let retryTimer = null;
 
-    function bind(attemptsLeft) {{
-        const parent = window.parent;
-        if (!chartInstanceId) {{
-            console.log('[BRIDGE] No chartInstanceId, aborting bind');
-            return;
-        }}
-
-        // Diagnostic: understand the frame/DOM structure on Cloud
-        if (attemptsLeft === bindAttempts) {{
-            const isIframe = window !== window.parent;
-            const allElems = parent.document.querySelectorAll('*').length;
-            const plots = parent.document.querySelectorAll('.js-plotly-plot').length;
-            const iframes = parent.document.querySelectorAll('iframe').length;
-            let loc = 'unknown';
-            try {{ loc = parent.location.href; }} catch(e) {{ loc = 'cross-origin'; }}
-            console.log('[BRIDGE] DIAG isIframe:', isIframe, 'parentElems:', allElems, 'plots:', plots, 'iframes:', iframes, 'parentLoc:', loc);
-
-            // Try to find plots through shadow roots
-            let shadowPlots = 0;
-            parent.document.querySelectorAll('*').forEach(function(el) {{
-                if (el.shadowRoot) {{
-                    shadowPlots += el.shadowRoot.querySelectorAll('.js-plotly-plot').length;
-                }}
-            }});
-            console.log('[BRIDGE] DIAG shadowPlots:', shadowPlots);
-        }}
-
-        let plot;
+    // Resolve the window that contains the Plotly chart.
+    // On localhost the chart lives in window.parent; on Streamlit Cloud
+    // the bridge iframe is a *sibling* of the app iframe, so we must
+    // search through the parent's child iframes.
+    let _appWindow = null;
+    function getAppWindow() {{
+        if (_appWindow) return _appWindow;
+        const p = window.parent;
         try {{
-            plot = getCurrentTargetPlot(parent);
-        }} catch (err) {{
-            console.error('[BRIDGE] getCurrentTargetPlot threw:', err);
-            return;
-        }}
-        console.log('[BRIDGE] bind attempt', bindAttempts - attemptsLeft + 1, 'plot:', !!plot, 'plot.on:', typeof (plot && plot.on));
+            if (p.document.querySelectorAll('.js-plotly-plot').length) {{
+                _appWindow = p;
+                return p;
+            }}
+        }} catch(e) {{}}
+        try {{
+            const iframes = p.document.querySelectorAll('iframe');
+            for (let i = 0; i < iframes.length; i++) {{
+                try {{
+                    const fw = iframes[i].contentWindow;
+                    if (fw && fw !== window &&
+                        fw.document.querySelectorAll('.js-plotly-plot').length) {{
+                        _appWindow = fw;
+                        return fw;
+                    }}
+                }} catch(e) {{}}
+            }}
+        }} catch(e) {{}}
+        return p;
+    }}
+
+    function bind(attemptsLeft) {{
+        const parent = getAppWindow();
+        if (!chartInstanceId) return;
+
+        const plot = getCurrentTargetPlot(parent);
         if (!plot || typeof plot.on !== 'function') {{
             if (attemptsLeft > 0) {{
                 retryTimer = parent.setTimeout(function() {{
@@ -221,10 +216,8 @@ export default function(component) {{
         }}
 
         const handler = function(event) {{
-            console.log('[BRIDGE] plotly_click fired, event:', event);
             const points = event && Array.isArray(event.points) ? event.points : [];
             if (!points.length) {{
-                console.log('[BRIDGE] No points in click event');
                 return;
             }}
 
@@ -248,7 +241,6 @@ export default function(component) {{
         }};
 
         plot.on('plotly_click', handler);
-        console.log('[BRIDGE] Successfully bound plotly_click handler to plot');
 
         // ---- Touch-tap proxy for mobile ----
         // Neither plotly_click nor plotly_hover fire reliably on mobile
@@ -341,9 +333,8 @@ export default function(component) {{
     bind(bindAttempts);
 
     return () => {{
-        const parent = window.parent;
         if (retryTimer) {{
-            parent.clearTimeout(retryTimer);
+            try {{ getAppWindow().clearTimeout(retryTimer); }} catch(e) {{}}
             retryTimer = null;
         }}
         if (cleanup) {{

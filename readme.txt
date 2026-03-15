@@ -322,6 +322,11 @@ Chart duties handled in `chart.py`:
   directly: passive touch listeners on `.nsewdrag` detect taps (< 15 px, < 400 ms) and
   touchend reads Plotly's internal hover state to emit the click payload.  Desktop is
   unaffected (`plotly_click` still fires directly).  A 500 ms JS debounce prevents double-fires.
+- the bridge uses `getAppWindow()` to locate the frame containing the Plotly chart.
+  On localhost the chart lives in `window.parent`; on Streamlit Cloud the v2 component
+  iframe is a *sibling* of the app iframe (both children of a thin shell page), so the
+  bridge searches the parent's child iframes for the one with `.js-plotly-plot` elements.
+  The discovered window is cached after first hit.
 - emit one nonce-tagged click payload with `trace_name`, `x`, `y`, and `customdata`
 - dispatch bridge click data into `show_season_details()` or `show_team_game_details()`
 - offer a Copy link control using compact URL params
