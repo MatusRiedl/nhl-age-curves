@@ -6,7 +6,7 @@ from html import escape
 import pandas as pd
 import streamlit as st
 
-from nhl.constants import ACTIVE_TEAMS, NHLE_DEFAULT_MULTIPLIER, NHLE_MULTIPLIERS
+from nhl.constants import ACTIVE_TEAMS, NHLE_DEFAULT_MULTIPLIER, NHLE_MULTIPLIERS, TEAM_BRAND_COLORS
 from nhl.data_loaders import (
     get_all_time_rank,
     get_player_identity_summary,
@@ -1317,6 +1317,49 @@ def _get_player_identity_accent_color(player_name: str) -> str:
     return _resolve_dialog_color(accent_color, fallback=_DEFAULT_PLAYER_DIALOG_ACCENT)
 
 
+def _get_team_identity_accent_color(team_abbr: str, team_name: str) -> str:
+    """Return the accent color for one team identity dialog.
+
+    Checks the active chart session state first (keyed by full team name), then
+    falls back to the team's primary brand color, then to the default accent.
+
+    Args:
+        team_abbr: Three-letter NHL abbreviation used for brand-color lookup.
+        team_name: Full display name used to match chart session state.
+
+    Returns:
+        CSS-safe hex color string.
+    """
+    player_colors = _get_player_chart_colors()
+    clean_name = str(team_name or "").strip()
+    accent_color = player_colors.get(clean_name)
+    if not accent_color and clean_name:
+        target_name = clean_name.casefold()
+        for candidate_name, candidate_color in player_colors.items():
+            if str(candidate_name or "").strip().casefold() == target_name:
+                accent_color = candidate_color
+                break
+    if not accent_color:
+        brand = TEAM_BRAND_COLORS.get(str(team_abbr or "").strip().upper())
+        if brand:
+            accent_color = brand[0]
+    return _resolve_dialog_color(accent_color, fallback=_DEFAULT_PLAYER_DIALOG_ACCENT)
+
+
+def _get_team_brand_color(team_abbr: str, fallback: str = _DEFAULT_PLAYER_DIALOG_ACCENT) -> str:
+    """Return the primary brand color for a team abbreviation.
+
+    Args:
+        team_abbr: Three-letter NHL abbreviation.
+        fallback: Color used when the team is unknown.
+
+    Returns:
+        CSS-safe hex color string.
+    """
+    brand = TEAM_BRAND_COLORS.get(str(team_abbr or "").strip().upper())
+    return escape(brand[0] if brand else fallback, quote=True)
+
+
 def _build_identity_row_html(
     label: str,
     value: str,
@@ -1439,7 +1482,17 @@ def show_team_identity_details(team_abbr: str) -> None:
         st.info("Team details unavailable right now.")
         return
 
-    st.markdown(f"### {summary.get('team_name', team_abbr)}")
+    team_name = str(summary.get("team_name", team_abbr) or team_abbr).strip()
+    accent_color = _get_team_identity_accent_color(team_abbr, team_name)
+    st.markdown(
+        (
+            "<div style='margin:0 0 0.95rem 0;'>"
+            f"<div style='font-size:1.72rem;font-weight:800;line-height:1.15;"
+            f"color:{accent_color};'>{escape(team_name)}</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
     joined_label = str(summary.get("joined_nhl_label", "") or "").strip()
     if not joined_label:
@@ -1466,7 +1519,12 @@ def show_team_identity_details(team_abbr: str) -> None:
         ("Total NHL seasons", total_nhl_seasons_label),
         ("Stanley Cups", stanley_cup_count_label),
     ]
-    rendered_rows = _render_identity_rows(rows, columns=2)
+    rendered_rows = _render_identity_rows(
+        rows,
+        columns=2,
+        label_color=accent_color,
+        value_color=_DEFAULT_DIALOG_VALUE_COLOR,
+    )
 
     lineage_label = str(summary.get("lineage_label", "") or "").strip()
     stanley_cup_labels = [
@@ -1478,13 +1536,13 @@ def show_team_identity_details(team_abbr: str) -> None:
     if lineage_label:
         if rendered_rows:
             st.markdown("---")
-        st.markdown(f"**Franchise lineage**  \n{lineage_label}")
+        _render_identity_section("Franchise lineage", lineage_label, accent_color=accent_color)
         rendered_rows = True
 
     if stanley_cup_years_text:
         if rendered_rows:
             st.markdown("---")
-        st.markdown(f"**Stanley Cup wins**  \n{stanley_cup_years_text}")
+        _render_identity_section("Stanley Cup wins", stanley_cup_years_text, accent_color=accent_color)
         rendered_rows = True
 
     if not rendered_rows and not lineage_label and not stanley_cup_years_text:
@@ -1500,7 +1558,20 @@ def show_matchup_history(
     """Render the latest head-to-head meetings for one upcoming matchup."""
     clean_away_abbr = str(away_abbr or "").strip().upper()
     clean_home_abbr = str(home_abbr or "").strip().upper()
-    st.markdown(f"### {clean_away_abbr} at {clean_home_abbr} - Last {int(limit)} meetings")
+    away_color = _get_team_brand_color(clean_away_abbr)
+    home_color = _get_team_brand_color(clean_home_abbr)
+    st.markdown(
+        (
+            "<div style='font-size:1.45rem;font-weight:800;line-height:1.2;margin:0 0 0.85rem 0;'>"
+            f"<span style='color:{away_color};'>{escape(clean_away_abbr)}</span>"
+            "<span style='color:#8b949e;font-weight:600;'> at </span>"
+            f"<span style='color:{home_color};'>{escape(clean_home_abbr)}</span>"
+            f"<span style='color:#8b949e;font-size:1rem;font-weight:500;'>"
+            f" — Last {int(limit)} meetings</span>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
     history_games = get_matchup_history(
         away_abbr=clean_away_abbr,
