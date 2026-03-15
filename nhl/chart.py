@@ -108,6 +108,7 @@ CHART_HOVER_DISTANCE = 32
 CHART_CLICK_BRIDGE_JS = f"""
 export default function(component) {{
     const {{ data, setTriggerValue }} = component;
+    console.log('[BRIDGE] JS loaded, component:', !!component, 'data:', data);
 
     const parseBridgeData = () => {{
         if (!data) {{
@@ -154,8 +155,12 @@ export default function(component) {{
     const DEBOUNCE_MS = 500;
     function emitClick(payload) {{
         const now = Date.now();
-        if (now - lastEmittedAt < DEBOUNCE_MS) return;
+        if (now - lastEmittedAt < DEBOUNCE_MS) {{
+            console.log('[BRIDGE] emitClick debounced');
+            return;
+        }}
         lastEmittedAt = now;
+        console.log('[BRIDGE] emitClick calling setTriggerValue, payload:', payload);
         setTriggerValue('clicked', JSON.stringify(payload));
     }}
 
@@ -164,9 +169,19 @@ export default function(component) {{
 
     function bind(attemptsLeft) {{
         const parent = window.parent;
-        if (!chartInstanceId) return;
+        if (!chartInstanceId) {{
+            console.log('[BRIDGE] No chartInstanceId, aborting bind');
+            return;
+        }}
 
-        const plot = getCurrentTargetPlot(parent);
+        let plot;
+        try {{
+            plot = getCurrentTargetPlot(parent);
+        }} catch (err) {{
+            console.error('[BRIDGE] getCurrentTargetPlot threw:', err);
+            return;
+        }}
+        console.log('[BRIDGE] bind attempt', bindAttempts - attemptsLeft + 1, 'plot:', !!plot, 'plot.on:', typeof (plot && plot.on));
         if (!plot || typeof plot.on !== 'function') {{
             if (attemptsLeft > 0) {{
                 retryTimer = parent.setTimeout(function() {{
@@ -186,8 +201,10 @@ export default function(component) {{
         }}
 
         const handler = function(event) {{
+            console.log('[BRIDGE] plotly_click fired, event:', event);
             const points = event && Array.isArray(event.points) ? event.points : [];
             if (!points.length) {{
+                console.log('[BRIDGE] No points in click event');
                 return;
             }}
 
@@ -211,6 +228,7 @@ export default function(component) {{
         }};
 
         plot.on('plotly_click', handler);
+        console.log('[BRIDGE] Successfully bound plotly_click handler to plot');
 
         // ---- Touch-tap proxy for mobile ----
         // Neither plotly_click nor plotly_hover fire reliably on mobile
@@ -526,7 +544,6 @@ def _mount_chart_click_bridge(chart_instance_id: str) -> str | None:
         ),
         key=CHART_CLICK_BRIDGE_MOUNT_KEY,
         on_clicked_change=_noop_chart_click_change,
-        height=1,
     )
     return getattr(result, "clicked", None)
 
