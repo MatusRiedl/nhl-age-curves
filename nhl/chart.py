@@ -1705,9 +1705,35 @@ def render_chart(
         }});
     }}
 
-    function bindShareButton(parent) {{
+    function resolveLiveShareButton(parent) {{
         var btn = parent.document.getElementById(SHARE_BUTTON_ID);
-        if (!btn) return;
+        if (btn) return btn;
+
+        var toolbar = parent.document.getElementById(TOOLBAR_ID);
+        if (toolbar) {{
+            var toolbarBtn = toolbar.querySelector('.nhl-chart-share-btn');
+            if (toolbarBtn) return toolbarBtn;
+        }}
+
+        var buttons = parent.document.querySelectorAll('.nhl-chart-share-btn');
+        if (buttons && buttons.length) {{
+            return buttons[buttons.length - 1];
+        }}
+
+        return null;
+    }}
+
+    function bindShareButton(parent, attemptsLeft) {{
+        var remainingAttempts = typeof attemptsLeft === 'number' ? attemptsLeft : 12;
+        var btn = resolveLiveShareButton(parent);
+        if (!btn) {{
+            if (remainingAttempts > 0) {{
+                setTimeout(function() {{
+                    bindShareButton(parent, remainingAttempts - 1);
+                }}, 150);
+            }}
+            return;
+        }}
         var label = btn.querySelector('.nhl-chart-share-btn__label');
 
         function buildShareUrl(parent) {{
@@ -1946,7 +1972,7 @@ def render_chart(
         var plots = parent.document.querySelectorAll('.js-plotly-plot');
         if (!plots.length) {{ setTimeout(init, 200); return; }}
         plots.forEach(function(p) {{ applySettings(p, Plotly); }});
-        bindShareButton(parent);
+        bindShareButton(parent, 12);
         var targetPlot = getCurrentTargetPlot(parent);
         if (!targetPlot) {{ setTimeout(init, 200); return; }}
         patchHoverLabelRects(targetPlot);
