@@ -1,5 +1,5 @@
 """
-nhl.styles — CSS injection and UI asset helpers for the NHL Age Curves page.
+nhl.styles — CSS injection and UI asset helpers for the Puck Peak page.
 
 Contains the CSS injection helpers plus a small favicon path resolver so app.py
 can keep page chrome configuration simple and robust across local and deployed
@@ -1865,7 +1865,7 @@ def get_header_logo_data_uri() -> str:
 
 
 def inject_css() -> None:
-    """Inject the NHL Age Curves custom CSS into the Streamlit page.
+    """Inject the Puck Peak custom CSS into the Streamlit page.
 
     Covers: sidebar brand logo styling, tighter top spacing, sidebar compact/overlay layout,
     blue Add-Legend button override, compact controls toolbar styling,

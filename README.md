@@ -1,4 +1,4 @@
-# NHL Player Age Curves & Career Projections 🏒
+# Puck Peak 🏒
 Hockey analytics & projections
 
 ## Available online here

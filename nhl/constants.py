@@ -1,5 +1,5 @@
 """
-nhl.constants — Shared configuration constants for the NHL Age Curves app.
+nhl.constants — Shared configuration constants for the Puck Peak app.
 
 All URL strings, lookup tables, rate-stat sets, NHLe multipliers, stat caps/floors,
 and the dynamic current-season year live here.  Nothing in this module imports from

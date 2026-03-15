@@ -1,4 +1,4 @@
-NHL AGE CURVES - TECHNICAL HANDOVER DOCUMENT
+PUCK PEAK - TECHNICAL HANDOVER DOCUMENT
 
 For the next AI or human who has to touch this thing at 2am.
 Entry point: `app.py`. Most logic lives in `nhl/`.

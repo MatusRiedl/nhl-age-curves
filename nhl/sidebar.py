@@ -1,5 +1,5 @@
 """
-nhl.sidebar — Player and team sidebar UI for the NHL Age Curves app.
+nhl.sidebar — Player and team sidebar UI for the Puck Peak app.
 
 Renders the full sidebar, switching between player mode and team mode based on
 st.session_state.stat_category.  Reads and writes session state directly (standard

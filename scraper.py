@@ -7,7 +7,7 @@ from datetime import datetime
 SKATER_RECORDS_URL  = "https://records.nhl.com/site/api/skater-career-scoring-regular-season"
 GOALIE_RECORDS_URL  = "https://records.nhl.com/site/api/goalie-career-stats"
 PLAYER_API_URL      = "https://api-web.nhle.com/v1/player/{}/landing"
-REQUEST_HEADERS     = {"User-Agent": "nhl-age-curves/1.0"}
+REQUEST_HEADERS     = {"User-Agent": "puck-peak/1.0"}
 REQUEST_TIMEOUT     = 15
 PLAYER_FETCH_WORKERS = 10
 

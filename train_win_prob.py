@@ -25,7 +25,7 @@ from nhl.win_prob import (
 
 OUTPUT_PATH = Path("win_prob_weights.json")
 REQUEST_TIMEOUT = 20
-REQUEST_HEADERS = {"User-Agent": "nhl-age-curves/1.0"}
+REQUEST_HEADERS = {"User-Agent": "puck-peak/1.0"}
 TRAINING_SEASONS = [2020, 2021, 2022, 2023, 2024]
 VALIDATION_SEASON = 2024
 C_CANDIDATES = [0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0]

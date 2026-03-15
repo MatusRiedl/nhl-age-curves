@@ -1,4 +1,4 @@
-"""Streamlit entry point for NHL Age Curves.
+"""Streamlit entry point for Puck Peak.
 
 Keeps orchestration in one place and delegates data loading, processing,
 charting, and comparison rendering to `nhl/` modules.
