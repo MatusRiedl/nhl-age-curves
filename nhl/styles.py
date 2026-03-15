@@ -1481,9 +1481,10 @@ _CSS = """
             div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] button[role="tab"] {
                 padding: 3px 8px !important;  /* adjust inner padding of each tab pill */
             }
-            /* right-rail: predictions panel top offset (stacked — predictions sit below chart) */
+            /* right-rail: "Next matches prediction" top offset on mobile.
+               Negative = pulls panel UP (less space above heading); positive = pushes DOWN. */
             div.element-container:has(#comparison-right-rail) + div {
-                margin-top: 1rem !important;
+                margin-top: -3rem !important;  /* ← adjust to move "Next matches prediction" up/down */
             }
         }
 
@@ -1758,6 +1759,65 @@ _CSS = """
         /* Keep the spinner icon itself hidden since we have our own animation */
         [data-testid="stSpinner"] > div:first-child {
             display: none !important;
+        }
+
+        /* BAND D (600–768px) — overrides problematic mobile rules for this range.
+           CSS cascade: this block appears AFTER all @media (max-width: 768px) blocks
+           so it wins for 600–768px. True mobile (≤599px) is completely unaffected.
+           To shift the lower boundary: change the 600px min-width value below.
+           Band C upper bound (1024px) and the mobile threshold (768px) stay unchanged. */
+        @media (min-width: 600px) and (max-width: 768px) {
+            /* chart-toolbar top margin: pushes the toolbar (title + Copy link) below the
+               Streamlit header bar. Increase if the toolbar is hidden under the header;
+               decrease if there is too much empty space above the chart.
+               Reference: true mobile uses 3.75rem; desktop uses 0. */
+            .nhl-chart-toolbar {
+                margin: 3.3rem 0 0.1rem 0;  /* ← adjust first value to move toolbar up/down */
+            }
+            /* chart-toolbar block-container top padding: extra lever if margin alone isn't
+               enough to clear the header. Increase to push everything down, 0 to reset. */
+            .block-container {
+                padding-top: 0.5rem !important;  /* ← adjust to shift entire page content down */
+            }
+            /* controls-panel column: cancel the -1.7rem mobile pull that causes
+               Metric Selections to fly off-screen at this viewport width. */
+            [data-testid="stColumn"]:has(#comparison-controls-panel) {
+                margin-top: 0 !important;
+            }
+            /* Metric Selections button: force single line — prevents text wrapping to two
+               lines at this viewport width. If you want it to wrap instead, remove this. */
+            [data-testid="stPopover"] button {
+                white-space: nowrap !important;
+            }
+            /* Metric Selections button font size: shrink if button is still too wide.
+               Default Streamlit size is ~0.875rem; go lower to squeeze it smaller. */
+            [data-testid="stPopover"] button p {
+                font-size: 1rem !important;  /* ← adjust to shrink/grow button label */
+            }
+            /* controls-row: "Whole career / Metric Selections" gap from chart bottom */
+            [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
+                margin-top: -3.35rem !important;
+            }
+            /* controls-panel: Metric Selections button fine-offset within the row */
+            div:has(> #comparison-controls-panel) + div {
+                margin-top: 0 !important;
+            }
+            /* detail-layout: pulls Overview / Current Standings section up toward chart */
+            div.element-container:has(#comparison-detail-layout) {
+                margin-top: -3.7rem !important;
+            }
+            /* tabs anchor: gap above the invisible tab-anchor div (above pill row) */
+            div.element-container:has(#comparison-tabs) {
+                margin-top: -0.6rem !important;
+            }
+            /* tabs + div: gap above the visible tab-pill bar */
+            div.element-container:has(#comparison-tabs) + div.element-container {
+                margin-top: -0.45rem !important;
+            }
+            /* right-rail: predictions panel top offset (stacked layout) */
+            div.element-container:has(#comparison-right-rail) + div {
+                margin-top: 1rem !important;
+            }
         }
     </style>
 """
