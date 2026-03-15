@@ -1251,23 +1251,128 @@ _CSS = """
                 padding-right: 0rem !important;
             }
         }
-        /* WIDE TABLET (1281px–1400px) — columns still side by side, sidebar is fixed overlay.
-           Reduce desktop -3.4rem pull to -2rem; enough to close the gap without overlapping. */
+        /* ══════════════════════════════════════════════════════════════════════════
+           INTERMEDIATE BREAKPOINT BANDS  (between mobile ≤768px and desktop ≥1401px)
+           ──────────────────────────────────────────────────────────────────────────
+           Three independently-tunable bands. Edit ONLY the property values; do NOT
+           change the min-width/max-width numbers (that shifts the band boundaries).
+
+           KNOB REFERENCE — which CSS property controls what on screen:
+           ┌──────────────────────────────────────────────────────────────────────┐
+           │ controls-row margin-top   │ gap between chart bottom edge and the   │
+           │                           │ "Whole career / Metric Selections" row. │
+           │                           │ More negative → row moves UP (less gap).│
+           ├──────────────────────────────────────────────────────────────────────┤
+           │ controls-panel margin-top │ Metric Selections button vertical offset │
+           │                           │ relative to the controls-row pull.       │
+           ├──────────────────────────────────────────────────────────────────────┤
+           │ detail-layout margin-top  │ pulls the Overview/Standings block up.  │
+           │                           │ More negative → tabs section moves UP.  │
+           ├──────────────────────────────────────────────────────────────────────┤
+           │ tabs anchor margin-top    │ gap above the invisible tab-anchor div  │
+           │                           │ (sits just above the tab-pill bar).     │
+           ├──────────────────────────────────────────────────────────────────────┤
+           │ tabs + div margin-top     │ gap above the visible tab-pill bar row. │
+           ├──────────────────────────────────────────────────────────────────────┤
+           │ right-rail margin-top     │ top offset of the predictions panel.    │
+           │                           │ Only visible in STACKED layout          │
+           │                           │ (Bands B & C); ignored when columns are │
+           │                           │ still side-by-side (Band A).            │
+           └──────────────────────────────────────────────────────────────────────┘
+
+           BANDS:
+             Band A │ 1281–1400px │ sidebar overlay │ columns SIDE-BY-SIDE
+             Band B │ 1025–1280px │ sidebar overlay │ columns STACKED
+             Band C │  769–1024px │ sidebar overlay │ columns STACKED
+           ════════════════════════════════════════════════════════════════════════ */
+
+        /* BAND A (1281–1400px) — sidebar is a fixed overlay, main columns still SIDE-BY-SIDE.
+           Chart is in the left column; predictions panel is in the right column.
+           right-rail margin-top has no visible effect here (columns are not stacked). */
         @media (min-width: 1281px) and (max-width: 1400px) {
+            /* controls-row: pulls "Whole career / Metric Selections" row up under the chart */
             [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
-                margin-top: -2rem !important;
+                margin-top: -3.4rem !important;
             }
+            /* controls-panel: Metric Selections button fine-offset within the controls row */
             div:has(> #comparison-controls-panel) + div {
                 margin-top: 0 !important;
+            }
+            /* detail-layout: pulls Overview / Current Standings section up toward chart bottom */
+            div.element-container:has(#comparison-detail-layout) {
+                margin-top: -3.7rem !important;
+            }
+            /* tabs anchor: gap above the invisible tab-anchor div (above the pill row) */
+            div.element-container:has(#comparison-tabs) {
+                margin-top: -0.6rem !important;
+            }
+            /* tabs + div: gap above the actual visible tab-pill bar */
+            div.element-container:has(#comparison-tabs) + div.element-container {
+                margin-top: -0.45rem !important;
+            }
+            /* right-rail: predictions panel offset (columns side-by-side — matches desktop pull) */
+            div.element-container:has(#comparison-right-rail) + div {
+                margin-top: -2.4rem !important;
             }
         }
-        /* NARROW TABLET (769px–1280px) — columns stacked, controls row is in normal flow below chart. */
-        @media (min-width: 769px) and (max-width: 1280px) {
+
+        /* BAND B (1025–1280px) — sidebar overlay, columns now STACKED (chart spans full width).
+           Chart is full-width; controls row, tabs, and predictions panel stack below it.
+           right-rail margin-top now matters: positive = space above the predictions heading. */
+        @media (min-width: 1025px) and (max-width: 1280px) {
+            /* controls-row: pulls "Whole career / Metric Selections" row up under the chart */
             [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
-                margin-top: -3.35rem !important;
+                margin-top: -3.4rem !important;
             }
+            /* controls-panel: Metric Selections button fine-offset within the controls row */
             div:has(> #comparison-controls-panel) + div {
                 margin-top: 0 !important;
+            }
+            /* detail-layout: pulls Overview / Current Standings section up toward chart bottom */
+            div.element-container:has(#comparison-detail-layout) {
+                margin-top: -3.7rem !important;
+            }
+            /* tabs anchor: gap above the invisible tab-anchor div (above the pill row) */
+            div.element-container:has(#comparison-tabs) {
+                margin-top: -0.6rem !important;
+            }
+            /* tabs + div: gap above the actual visible tab-pill bar */
+            div.element-container:has(#comparison-tabs) + div.element-container {
+                margin-top: -0.45rem !important;
+            }
+            /* right-rail: predictions panel top offset (stacked — predictions sit below chart) */
+            div.element-container:has(#comparison-right-rail) + div {
+                margin-top: 1rem !important;
+            }
+        }
+
+        /* BAND C (769–1024px) — sidebar overlay, columns STACKED, narrower viewport.
+           Structurally identical to Band B but narrower; tune these values independently
+           if Band B and Band C need to diverge. */
+        @media (min-width: 769px) and (max-width: 1024px) {
+            /* controls-row: pulls "Whole career / Metric Selections" row up under the chart */
+            [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
+                margin-top: -3.4rem !important;
+            }
+            /* controls-panel: Metric Selections button fine-offset within the controls row */
+            div:has(> #comparison-controls-panel) + div {
+                margin-top: 0 !important;
+            }
+            /* detail-layout: pulls Overview / Current Standings section up toward chart bottom */
+            div.element-container:has(#comparison-detail-layout) {
+                margin-top: -3.7rem !important;
+            }
+            /* tabs anchor: gap above the invisible tab-anchor div (above the pill row) */
+            div.element-container:has(#comparison-tabs) {
+                margin-top: -0.6rem !important;
+            }
+            /* tabs + div: gap above the actual visible tab-pill bar */
+            div.element-container:has(#comparison-tabs) + div.element-container {
+                margin-top: -0.45rem !important;
+            }
+            /* right-rail: predictions panel top offset (stacked — predictions sit below chart) */
+            div.element-container:has(#comparison-right-rail) + div {
+                margin-top: 1rem !important;
             }
         }
         /* DESKTOP — predictions panel anchor: collapses zero-height anchor spacing */
@@ -1285,13 +1390,6 @@ _CSS = """
         }
         div.element-container:has(#comparison-right-rail) + div {
             margin-top: -2.4rem !important;
-        }
-        /* TABLET/MOBILE (≤1280px) — columns stacked so right rail is in normal flow below chart.
-           Cancel the desktop -2.4rem pull or the predictions heading flies under the top bar. */
-        @media (max-width: 1280px) {
-            div.element-container:has(#comparison-right-rail) + div {
-                margin-top: 1rem !important;
-            }
         }
         /* DESKTOP — main Plotly chart anchor: collapses anchor + removes bottom gap under chart */
         div.element-container:has(#comparison-main-plotly) {
@@ -1382,6 +1480,10 @@ _CSS = """
             }
             div.element-container:has(#comparison-tabs) + div.element-container [data-testid="stTabs"] button[role="tab"] {
                 padding: 3px 8px !important;  /* adjust inner padding of each tab pill */
+            }
+            /* right-rail: predictions panel top offset (stacked — predictions sit below chart) */
+            div.element-container:has(#comparison-right-rail) + div {
+                margin-top: 1rem !important;
             }
         }
 
