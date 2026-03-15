@@ -108,6 +108,10 @@ CHART_HOVER_DISTANCE = 32
 CHART_CLICK_BRIDGE_JS = f"""
 export default function(component) {{
     const {{ data, setTriggerValue }} = component;
+    const iframeWindow = window;
+    const isMobileTouch = ('ontouchstart' in parent) ||
+        (parent.navigator && (parent.navigator.maxTouchPoints > 0));
+    const triggerDelayMs = isMobileTouch ? 350 : 0;
 
     const parseBridgeData = () => {{
         if (!data) {{
@@ -198,7 +202,10 @@ export default function(component) {{
                 curve_number: Number.isInteger(point.curveNumber) ? point.curveNumber : null,
                 point_number: Number.isInteger(point.pointNumber) ? point.pointNumber : null,
             }};
-            setTriggerValue('clicked', JSON.stringify(payload));
+            const payloadStr = JSON.stringify(payload);
+            iframeWindow.setTimeout(function() {{
+                setTriggerValue('clicked', payloadStr);
+            }}, triggerDelayMs);
         }};
 
         plot.on('plotly_click', handler);
@@ -454,6 +461,7 @@ def _mount_chart_click_bridge(chart_instance_id: str) -> str | None:
         ),
         key=CHART_CLICK_BRIDGE_MOUNT_KEY,
         on_clicked_change=_noop_chart_click_change,
+        height=1,
     )
     return getattr(result, "clicked", None)
 
