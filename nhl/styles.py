@@ -18,7 +18,7 @@ import streamlit as st
 _CSS = """
     <style>
         /* DESKTOP — main content area: top/bottom/left/right edge padding */
-        .block-container { padding-top: 3.75rem !important; padding-bottom: 0rem !important; padding-left: 2rem !important; padding-right: 2rem !important; }
+        .block-container { padding-top: 3.85rem !important; padding-bottom: 0rem !important; padding-left: 2rem !important; padding-right: 2rem !important; }
 
         /* DESKTOP — sidebar logo container: centers the brand image horizontally */
         [data-testid="stSidebar"] .sidebar-brand {
@@ -1352,7 +1352,7 @@ _CSS = """
         @media (min-width: 769px) and (max-width: 1024px) {
             /* controls-row: pulls "Whole career / Metric Selections" row up under the chart */
             [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
-                margin-top: -3.4rem !important;
+                margin-top: -3.2rem !important;
             }
             /* controls-panel: Metric Selections button fine-offset within the controls row */
             div:has(> #comparison-controls-panel) + div {
