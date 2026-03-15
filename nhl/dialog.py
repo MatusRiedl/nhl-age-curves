@@ -341,7 +341,7 @@ def _build_matchup_context(game_row, score_details: dict) -> dict:
     }
 
 
-def _build_matchup_card_html(game: dict) -> str:
+def _build_matchup_card_html_legacy_v1(game: dict) -> str:
     """Render a compact matchup card with logos, score, and venue/time details."""
     away_abbr = escape(str(game.get('away_abbr', '') or ''))
     home_abbr = escape(str(game.get('home_abbr', '') or ''))
@@ -393,7 +393,7 @@ def _build_matchup_card_html(game: dict) -> str:
     )
 
 
-def _build_matchup_card_html(game: dict, compact_layout: bool = False) -> str:
+def _build_matchup_card_html_legacy_v2(game: dict, compact_layout: bool = False) -> str:
     """Render one matchup card, with an optional tighter history layout."""
     away_abbr_raw = str(game.get('away_abbr', '') or '')
     home_abbr_raw = str(game.get('home_abbr', '') or '')
@@ -465,7 +465,6 @@ def _build_matchup_card_html(game: dict, compact_layout: bool = False) -> str:
         f"<div style='margin-top:10px;font-size:13px;color:#b7bcc2;'>{detail_html}</div>"
         "</div>"
     )
-
 
 def _build_matchup_card_html(game: dict, compact_layout: bool = False) -> str:
     """Render one matchup card, with an optional tighter history layout."""
@@ -910,7 +909,7 @@ def show_app_guide() -> None:
         _render_smoothing_guide_tab()
 
 
-@st.dialog("Season Snapshot")
+@st.dialog("Season Snapshot", on_dismiss="rerun")
 def show_season_details(
     player_name: str,
     age: int,
@@ -1163,7 +1162,7 @@ def show_season_details(
             st.markdown(table_html, unsafe_allow_html=True)
 
 
-@st.dialog("Team Game Snapshot")
+@st.dialog("Team Game Snapshot", on_dismiss="rerun")
 def show_team_game_details(
     team_name: str,
     team_abbr: str,
