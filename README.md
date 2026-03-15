@@ -30,6 +30,8 @@ https://nhl-age-curves.streamlit.app/
 
 * **Season Snapshot:** In single-season mode, click any game to see the exact matchup card with both teams, logos, final score, venue/time when available, plus the player or team one-game stat line. Age-mode and projection clicks still keep the broader season/career context.
 
+* **First-Click Chart Modals:** Chart dialogs now use a dedicated Plotly `plotly_click` bridge instead of Streamlit selection state, so closing one chart modal and opening another feels much closer to a true first-click interaction on both desktop and mobile.
+
 * **Age Rarity in Season Snapshot:** Historical NHL regular-season age clicks now show percentile, exact rank, optional skater role split, and a compact top-5 leaderboard from the same comparison pool, so fans can see how unusual that season was at that exact age.
 
 * **Upcoming Games Predictions Panel:** A dedicated right-rail panel lists up to the next 8 upcoming games, shows venue, converts puck drop into Central European local time (CET/CEST), and keeps the cards focused on matchup context instead of a quick-add workflow.
@@ -74,7 +76,7 @@ nhl/
     controls.py          Category/Metric and View Options expanders
     sidebar.py           player and team sidebar UI
     dialog.py            season-detail and matchup-history dialogs
-    chart.py             Plotly chart rendering, share link, and JS pan-clamp
+    chart.py             Plotly chart rendering, share link, JS pan-clamp, and chart click bridge
     comparison.py        Overview/Current Standings detail tabs, chart-season picker helper, clickable predictions panel, and live standings wrapper
     ui_state.py          shared Streamlit session-state guards for modal orchestration
     stanley_cup.py       standings-board and Cup-pick builder

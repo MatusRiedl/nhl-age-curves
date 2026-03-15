@@ -65,9 +65,9 @@ Top level:
 - `controls.py` - top controls expander
 - `sidebar.py` - sidebar UI and add/remove flows
 - `dialog.py` - chart click dialogs and matchup-history modal
-- `chart.py` - Plotly render, baseline overlay, share link, click dispatch
+- `chart.py` - Plotly render, baseline overlay, share link, chart click bridge, and dialog dispatch
 - `comparison.py` - Overview / Current Standings tabs, the chart-season picker renderer, clickable predictions panel, and live standings board markup
-- `ui_state.py` - shared session-state helpers for modal-slot guards and chart selection reset
+- `ui_state.py` - shared session-state helpers for modal-slot guards
 - `stanley_cup.py` - current-standings / Cup-pick board builder
 - `url_params.py` - compact share-link encode/decode with legacy-link sanitization and canonicalization
 - `schedule.py` - live defaults, upcoming games, featured players, matchup-history loading, and runtime win-prob inference
@@ -317,10 +317,13 @@ Chart duties handled in `chart.py`:
 - link each player's projected trace to the same legend toggle so one click hides or shows both
 - render compact chart header text
 - inject JS pan / zoom clamping
-- dispatch click data into `show_season_details()`
+- mount a `st.components.v2.component()` bridge that listens for `plotly_click`
+- emit one nonce-tagged click payload with `trace_name`, `x`, `y`, and `customdata`
+- dispatch bridge click data into `show_season_details()` or `show_team_game_details()`
 - offer a Copy link control using compact URL params
-- suppress stale Plotly dialog replays when another modal is already queued
-- bump a chart-remount nonce after handled or suppressed clicks so sticky Plotly selection clears on the next rerun
+- tune `hovermode='closest'` and a larger `hoverdistance` so taps near the visible line resolve to the nearest point more reliably
+- suppress queued chart clicks when another modal is already reserved for the rerun
+- deduplicate bridge payloads by nonce instead of relying on Plotly selection state or chart remount resets
 
 `comparison.py` defines `render_chart_season_picker()` and keeps it synced with the canonical
 `st.session_state["chart_season"]` value, but `app.py` places that picker in the left chart column
@@ -509,7 +512,7 @@ Module responsibilities:
 - `sidebar.py` - player/team add flows plus sidebar status widgets
 - `dialog.py` - player clicks, team game snapshot clicks, matchup-history modal, projection, and baseline dialogs
 - `dialog.py` now inserts the rarity callout directly under `Career Subtotals` in player age snapshots
-- `chart.py` - figure assembly, baseline overlay, share-link button, player/team click dispatch
+- `chart.py` - figure assembly, baseline overlay, share-link button, Plotly click bridge, and player/team click dispatch
 - `comparison.py` - season-aware Overview / Current Standings tabs, the chart-season picker renderer, JS click bridge, clickable predictions panel, and live standings board wrapper
 - `stanley_cup.py` - standings-board assembly and Cup-pick summarization
 - `url_params.py` - compact share-link encoder/decoder with legacy-link sanitization and canonicalization
@@ -521,9 +524,10 @@ Key integration notes:
 - `comparison.py` stores tab memory per category via `panel_tab_skater`, `panel_tab_goalie`, and `panel_tab_team`
 - `comparison.py` now prefers a JS trigger from `st.components.v2.component()` for prediction-card
   clicks and falls back to the `mh` query param only when the JS bridge does not fire
-- `comparison.py` and `chart.py` now share a per-rerun dialog guard through `ui_state.py` so a
-  stale Plotly selection cannot reopen an old chart modal in the same rerun as a player-card or
-  matchup-history modal
+- `chart.py` now uses its own `plotly_click` bridge instead of Streamlit selection state, while
+  `comparison.py` keeps the prediction-card and identity-card bridges on the same `st.components.v2.component()` pattern
+- `comparison.py` and `chart.py` still share a per-rerun dialog guard through `ui_state.py` so
+  chart dialogs, player-card dialogs, and matchup-history dialogs do not collide in one rerun
 - `comparison.py` renders the predictions rail, but `app.py` owns the visible placement of the
   chart-season picker above the main chart
 - Team all-time cards and team season discovery must use franchise lineage (`TEAM_LINEAGES` /

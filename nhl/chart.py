@@ -1,10 +1,10 @@
 """
-nhl.chart — Plotly chart rendering and JS pan-clamp injection.
+nhl.chart — Plotly chart rendering and JS bridge orchestration.
 
 Assembles the final DataFrame from all processed pipelines, optionally adds
 baseline data, builds the Plotly figure, renders a real toolbar row above the
-chart, injects a JS snippet for responsive dtick / share-link handling, and
-fires the season-detail dialog on point click.
+chart, injects JS for responsive dtick / share-link handling, mounts a
+Plotly-click bridge, and dispatches chart dialogs from first-click events.
 
 Visual conventions (from CLAUDE.md):
     Real data:   solid colored line, filled markers
@@ -32,15 +32,7 @@ from nhl.constants import (
 )
 from nhl.dialog import show_season_details, show_team_game_details
 from nhl.era import metric_is_era_adjusted
-from nhl.ui_state import (
-    LAST_HANDLED_CHART_SELECTION_SIGNATURE_SESSION_KEY,
-    bump_chart_selection_reset_nonce,
-    dialog_slot_available,
-    get_chart_selection_reset_nonce,
-    mark_dialog_opened_this_run,
-    session_state_get,
-    session_state_set,
-)
+from nhl.ui_state import dialog_slot_available, mark_dialog_opened_this_run, session_state_get, session_state_set
 
 
 X_AXIS_TICK_COLOR = "rgba(255, 255, 255, 0.80)"
@@ -106,6 +98,154 @@ CATEGORY_TRACE_STARTERS = {
         "#FF97C7",
     ],
 }
+CHART_CLICK_BRIDGE_COMPONENT_NAME = "comparison_chart_click_bridge"
+CHART_CLICK_BRIDGE_MOUNT_KEY = "comparison_chart_click_bridge"
+CHART_CLICK_BRIDGE_ANCHOR_ID = "comparison-main-plotly"
+LAST_HANDLED_CHART_CLICK_NONCE_SESSION_KEY = "_last_handled_chart_click_nonce"
+CHART_CLICK_BRIDGE_BIND_ATTEMPTS = 20
+CHART_CLICK_BRIDGE_BIND_DELAY_MS = 150
+CHART_HOVER_DISTANCE = 32
+CHART_CLICK_BRIDGE_JS = f"""
+export default function(component) {{
+    const {{ data, setTriggerValue }} = component;
+
+    const parseBridgeData = () => {{
+        if (!data) {{
+            return {{}};
+        }}
+        if (typeof data === 'string') {{
+            try {{
+                return JSON.parse(data);
+            }} catch (err) {{
+                return {{}};
+            }}
+        }}
+        return (typeof data === 'object' && data !== null) ? data : {{}};
+    }};
+
+    const bridgeData = parseBridgeData();
+    const chartInstanceId = String(bridgeData.chart_instance_id || '').trim();
+    const anchorId = String(bridgeData.anchor_id || '').trim();
+    const bindAttempts = Number(bridgeData.bind_attempts || 0) || {CHART_CLICK_BRIDGE_BIND_ATTEMPTS};
+    const bindDelayMs = Number(bridgeData.bind_delay_ms || 0) || {CHART_CLICK_BRIDGE_BIND_DELAY_MS};
+
+    function getCurrentTargetPlot(parent) {{
+        const plots = Array.prototype.slice.call(parent.document.querySelectorAll('.js-plotly-plot'));
+        if (!plots.length) return null;
+
+        const anchor = anchorId ? parent.document.getElementById(anchorId) : null;
+        if (!anchor || !anchor.compareDocumentPosition || !parent.Node) {{
+            return plots[plots.length - 1];
+        }}
+
+        for (let i = 0; i < plots.length; i += 1) {{
+            if (anchor.compareDocumentPosition(plots[i]) & parent.Node.DOCUMENT_POSITION_FOLLOWING) {{
+                return plots[i];
+            }}
+        }}
+        return plots[plots.length - 1];
+    }}
+
+    function normalizeCustomData(value) {{
+        return Array.isArray(value) ? value : [];
+    }}
+
+    let cleanup = null;
+    let retryTimer = null;
+
+    function bind(attemptsLeft) {{
+        const parent = window.parent;
+        if (!chartInstanceId) return;
+
+        const plot = getCurrentTargetPlot(parent);
+        if (!plot || typeof plot.on !== 'function') {{
+            if (attemptsLeft > 0) {{
+                retryTimer = parent.setTimeout(function() {{
+                    bind(attemptsLeft - 1);
+                }}, bindDelayMs);
+            }}
+            return;
+        }}
+
+        if (plot.__nhlChartClickBridgeCleanup && plot.__nhlChartClickBridgeInstanceId !== chartInstanceId) {{
+            plot.__nhlChartClickBridgeCleanup();
+        }}
+
+        if (plot.__nhlChartClickBridgeInstanceId === chartInstanceId && plot.__nhlChartClickBridgeCleanup) {{
+            cleanup = plot.__nhlChartClickBridgeCleanup;
+            return;
+        }}
+
+        const handler = function(event) {{
+            const points = event && Array.isArray(event.points) ? event.points : [];
+            if (!points.length) {{
+                return;
+            }}
+
+            const point = points[0] || {{}};
+            const traceName = String(
+                (point.fullData && point.fullData.name)
+                || (point.data && point.data.name)
+                || ''
+            ).trim();
+            const payload = {{
+                nonce: `${{Date.now()}}-${{Math.floor(Math.random() * 1000000)}}`,
+                chart_instance_id: chartInstanceId,
+                trace_name: traceName,
+                x: point.x ?? null,
+                y: point.y ?? null,
+                customdata: normalizeCustomData(point.customdata),
+                curve_number: Number.isInteger(point.curveNumber) ? point.curveNumber : null,
+                point_number: Number.isInteger(point.pointNumber) ? point.pointNumber : null,
+            }};
+            setTriggerValue('clicked', JSON.stringify(payload));
+        }};
+
+        plot.on('plotly_click', handler);
+
+        const localCleanup = function() {{
+            if (retryTimer) {{
+                parent.clearTimeout(retryTimer);
+                retryTimer = null;
+            }}
+            try {{
+                if (typeof plot.removeListener === 'function') {{
+                    plot.removeListener('plotly_click', handler);
+                }} else if (typeof plot.off === 'function') {{
+                    plot.off('plotly_click', handler);
+                }}
+            }} catch (err) {{
+                // Ignore teardown races when Streamlit replaces the plot DOM.
+            }}
+            if (plot.__nhlChartClickBridgeCleanup === localCleanup) {{
+                delete plot.__nhlChartClickBridgeCleanup;
+                delete plot.__nhlChartClickBridgeInstanceId;
+            }}
+        }};
+
+        plot.__nhlChartClickBridgeCleanup = localCleanup;
+        plot.__nhlChartClickBridgeInstanceId = chartInstanceId;
+        cleanup = localCleanup;
+    }}
+
+    bind(bindAttempts);
+
+    return () => {{
+        const parent = window.parent;
+        if (retryTimer) {{
+            parent.clearTimeout(retryTimer);
+            retryTimer = null;
+        }}
+        if (cleanup) {{
+            cleanup();
+        }}
+    }};
+}}
+"""
+CHART_CLICK_BRIDGE = st.components.v2.component(
+    CHART_CLICK_BRIDGE_COMPONENT_NAME,
+    js=CHART_CLICK_BRIDGE_JS,
+)
 
 
 def _palette_for_category(stat_category: str) -> list[str]:
@@ -289,57 +429,308 @@ def _store_player_chart_colors(player_colors: dict[str, str | None]) -> None:
     setattr(st.session_state, PLAYER_COLOR_STATE_KEY, dict(player_colors))
 
 
-def _extract_selected_points(event) -> list[dict]:
-    """Return Plotly point selections from Streamlit's chart event payload."""
-    selection = getattr(event, "selection", None)
-    if not isinstance(selection, dict):
-        return []
-    points = selection.get("points")
-    return points if isinstance(points, list) else []
+def _noop_chart_click_change() -> None:
+    """Provide a stable callback for the chart click bridge."""
 
 
-def _coerce_selection_signature_part(value) -> str:
-    """Normalize one chart-selection signature part into a stable string."""
-    return str("" if value is None else value).strip()
+def _mount_chart_click_bridge(chart_instance_id: str) -> str | None:
+    """Mount the chart click bridge and return its latest payload.
+
+    Args:
+        chart_instance_id: Stable identity for the visible chart instance.
+
+    Returns:
+        Latest serialized click payload, if the bridge has emitted one.
+    """
+    result = CHART_CLICK_BRIDGE(
+        data=json.dumps(
+            {
+                "chart_instance_id": chart_instance_id,
+                "anchor_id": CHART_CLICK_BRIDGE_ANCHOR_ID,
+                "bind_attempts": CHART_CLICK_BRIDGE_BIND_ATTEMPTS,
+                "bind_delay_ms": CHART_CLICK_BRIDGE_BIND_DELAY_MS,
+            },
+            separators=(",", ":"),
+        ),
+        key=CHART_CLICK_BRIDGE_MOUNT_KEY,
+        on_clicked_change=_noop_chart_click_change,
+    )
+    return getattr(result, "clicked", None)
 
 
-def _build_chart_selection_signature(
-    chart_key: str,
+def _parse_chart_click_trigger(value, expected_chart_instance_id: str) -> dict | None:
+    """Validate one bridge payload and normalize its point fields.
+
+    Args:
+        value: Raw bridge payload returned by the v2 component.
+        expected_chart_instance_id: Active chart identity for this rerun.
+
+    Returns:
+        Normalized payload dict, or ``None`` when the trigger is invalid.
+    """
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return None
+
+    try:
+        payload = json.loads(raw_value)
+    except Exception:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    chart_instance_id = str(payload.get("chart_instance_id", "") or "").strip()
+    nonce = str(payload.get("nonce", "") or "").strip()
+    if chart_instance_id != str(expected_chart_instance_id or "").strip() or not nonce:
+        return None
+
+    custom_data = payload.get("customdata", [])
+    if isinstance(custom_data, tuple):
+        custom_data = list(custom_data)
+    if not isinstance(custom_data, list):
+        custom_data = []
+
+    return {
+        "nonce": nonce,
+        "trace_name": str(payload.get("trace_name", "") or "").strip(),
+        "point": {
+            "x": payload.get("x"),
+            "y": payload.get("y"),
+            "customdata": custom_data,
+            "curve_number": payload.get("curve_number"),
+            "point_number": payload.get("point_number"),
+        },
+    }
+
+
+def _dispatch_chart_click_point(
     point: dict,
     *,
+    trace_name: str,
     team_mode: bool,
     games_mode: bool,
     is_single_season_team_games: bool,
     has_exact_game_custom_data: bool,
-) -> str | None:
-    """Return a stable identity for one selected chart point."""
+    metric: str,
+    final_df: pd.DataFrame,
+    raw_dfs_cache: list,
+    season_type: str,
+    selected_season: str | int,
+    do_cumul: bool,
+    ml_clones_dict: dict,
+    historical_baselines: dict,
+    stat_category: str,
+    do_era: bool,
+) -> bool:
+    """Open the matching chart dialog for one validated Plotly click.
+
+    Args:
+        point: Normalized point payload from the JS bridge.
+        trace_name: Plotly trace label for the clicked point.
+        team_mode: Whether the chart is rendering team traces.
+        games_mode: Whether the x-axis uses games played.
+        is_single_season_team_games: Whether team selected-season game mode is active.
+        has_exact_game_custom_data: Whether player game rows carry exact game metadata.
+        metric: Active chart metric.
+        final_df: Concatenated chart dataframe.
+        raw_dfs_cache: Raw player frames used by dialogs.
+        season_type: Active season scope.
+        selected_season: Active chart season.
+        do_cumul: Whether cumulative view is active.
+        ml_clones_dict: Cached projection clone payloads.
+        historical_baselines: Cached baseline payloads.
+        stat_category: Active stat category.
+        do_era: Whether era adjustment is active for the visible metric.
+
+    Returns:
+        True when a dialog was opened, else False.
+    """
+    clean_trace_name = str(trace_name or "").strip()
+    if clean_trace_name.startswith("_"):
+        return False
+
     custom_data = point.get("customdata", [])
-    if not isinstance(custom_data, (list, tuple)):
+    if isinstance(custom_data, tuple):
+        custom_data = list(custom_data)
+    if not isinstance(custom_data, list):
         custom_data = []
 
     if team_mode:
         if not is_single_season_team_games:
-            return None
-        team_abbr = _coerce_selection_signature_part(custom_data[0] if len(custom_data) > 0 else "")
-        game_date = _coerce_selection_signature_part(custom_data[2] if len(custom_data) > 2 else "")
-        game_id = _coerce_selection_signature_part(custom_data[10] if len(custom_data) > 10 else "")
-        game_number = _coerce_selection_signature_part(point.get("x"))
-        return f"{chart_key}|team-season|{team_abbr}|{game_id}|{game_date}|{game_number}"
+            return False
+        try:
+            clicked_game_number = int(point.get("x"))
+        except Exception:
+            return False
 
-    player_name = _coerce_selection_signature_part(custom_data[1] if len(custom_data) > 1 else "")
-    if not player_name or _is_baseline_trace(player_name):
-        return None
+        clicked_team_abbr = str(custom_data[0]) if len(custom_data) > 0 else ""
+        clicked_team_name = str(custom_data[1]) if len(custom_data) > 1 else ""
+        clicked_game_date = str(custom_data[2]) if len(custom_data) > 2 else ""
+        clicked_game_type = str(custom_data[3]) if len(custom_data) > 3 else ""
+        clicked_opponent_abbr = str(custom_data[4]) if len(custom_data) > 4 else ""
+        clicked_opponent_name = str(custom_data[5]) if len(custom_data) > 5 else ""
+        clicked_home_road = str(custom_data[6]) if len(custom_data) > 6 else ""
+        clicked_result = str(custom_data[7]) if len(custom_data) > 7 else ""
+        try:
+            clicked_goals_for = float(custom_data[8]) if len(custom_data) > 8 else 0.0
+        except Exception:
+            clicked_goals_for = 0.0
+        try:
+            clicked_goals_against = float(custom_data[9]) if len(custom_data) > 9 else 0.0
+        except Exception:
+            clicked_goals_against = 0.0
+        try:
+            clicked_game_id = int(custom_data[10]) if len(custom_data) > 10 and custom_data[10] not in (None, "") else None
+        except Exception:
+            clicked_game_id = None
+        clicked_record_label = str(custom_data[11]) if len(custom_data) > 11 else ""
 
-    if games_mode and has_exact_game_custom_data and len(custom_data) >= 6:
-        game_id = _coerce_selection_signature_part(custom_data[3] if len(custom_data) > 3 else "")
-        game_date = _coerce_selection_signature_part(custom_data[4] if len(custom_data) > 4 else "")
-        game_number = _coerce_selection_signature_part(point.get("x"))
-        return f"{chart_key}|player-season|{player_name}|{game_id}|{game_date}|{game_number}"
+        show_team_game_details(
+            team_name=clicked_team_name,
+            team_abbr=clicked_team_abbr,
+            metric=metric,
+            val=point.get("y"),
+            full_df=final_df,
+            s_type=season_type,
+            selected_season=selected_season,
+            game_number=clicked_game_number,
+            game_id=clicked_game_id,
+            game_date=clicked_game_date,
+            clicked_game_type=clicked_game_type,
+            opponent_abbr=clicked_opponent_abbr,
+            opponent_name=clicked_opponent_name,
+            home_road_flag=clicked_home_road,
+            result_label=clicked_result,
+            goals_for=clicked_goals_for,
+            goals_against=clicked_goals_against,
+            record_label=clicked_record_label,
+        )
+        mark_dialog_opened_this_run()
+        return True
 
-    age_value = _coerce_selection_signature_part(custom_data[2] if len(custom_data) > 2 else point.get("x"))
-    x_value = _coerce_selection_signature_part(point.get("x"))
-    click_kind = "player-games" if games_mode else "player-age"
-    return f"{chart_key}|{click_kind}|{player_name}|{age_value}|{x_value}"
+    clicked_player_name = str(custom_data[1]) if len(custom_data) > 1 else clean_trace_name
+    if _is_baseline_trace(clean_trace_name) or _is_baseline_trace(clicked_player_name):
+        return False
+
+    try:
+        age_for_detail = int(custom_data[2]) if games_mode else point.get("x")
+    except Exception:
+        return False
+    clicked_game_id = None
+    clicked_game_date = None
+    clicked_game_type = None
+    clicked_game_number = None
+
+    if has_exact_game_custom_data and len(custom_data) >= 6:
+        try:
+            clicked_game_number = int(point.get("x"))
+        except Exception:
+            clicked_game_number = None
+        try:
+            clicked_game_id = int(custom_data[3]) if custom_data[3] not in (None, "") else None
+        except Exception:
+            clicked_game_id = None
+        clicked_game_date = str(custom_data[4] or "")
+        clicked_game_type = str(custom_data[5] or "")
+
+    show_season_details(
+        player_name=clicked_player_name,
+        age=age_for_detail,
+        raw_dfs_list=raw_dfs_cache,
+        metric=metric,
+        val=point.get("y"),
+        is_cumul=do_cumul,
+        full_df=final_df,
+        s_type=season_type,
+        ml_clones_dict=ml_clones_dict,
+        historical_baselines=historical_baselines,
+        stat_category=stat_category,
+        do_era=do_era,
+        game_id=clicked_game_id,
+        game_date=clicked_game_date,
+        clicked_game_type=clicked_game_type,
+        game_number=clicked_game_number,
+    )
+    mark_dialog_opened_this_run()
+    return True
+
+
+def _show_chart_dialog_from_trigger(
+    trigger_value,
+    chart_instance_id: str,
+    *,
+    suppress_dialogs: bool,
+    team_mode: bool,
+    games_mode: bool,
+    is_single_season_team_games: bool,
+    has_exact_game_custom_data: bool,
+    metric: str,
+    final_df: pd.DataFrame,
+    raw_dfs_cache: list,
+    season_type: str,
+    selected_season: str | int,
+    do_cumul: bool,
+    ml_clones_dict: dict,
+    historical_baselines: dict,
+    stat_category: str,
+    do_era: bool,
+) -> bool:
+    """Consume one chart-click bridge payload and open at most one dialog.
+
+    Args:
+        trigger_value: Latest bridge payload returned from the mounted component.
+        chart_instance_id: Active chart identity for this rerun.
+        suppress_dialogs: Whether chart dialogs must be dropped for this rerun.
+        team_mode: Whether the chart is rendering team traces.
+        games_mode: Whether the x-axis uses games played.
+        is_single_season_team_games: Whether team selected-season game mode is active.
+        has_exact_game_custom_data: Whether player game rows carry exact game metadata.
+        metric: Active chart metric.
+        final_df: Concatenated chart dataframe.
+        raw_dfs_cache: Raw player frames used by dialogs.
+        season_type: Active season scope.
+        selected_season: Active chart season.
+        do_cumul: Whether cumulative view is active.
+        ml_clones_dict: Cached projection clone payloads.
+        historical_baselines: Cached baseline payloads.
+        stat_category: Active stat category.
+        do_era: Whether era adjustment is active for the visible metric.
+
+    Returns:
+        True when a dialog was opened, else False.
+    """
+    parsed_trigger = _parse_chart_click_trigger(trigger_value, chart_instance_id)
+    if parsed_trigger is None:
+        return False
+
+    nonce = parsed_trigger["nonce"]
+    if session_state_get(LAST_HANDLED_CHART_CLICK_NONCE_SESSION_KEY) == nonce:
+        return False
+    session_state_set(LAST_HANDLED_CHART_CLICK_NONCE_SESSION_KEY, nonce)
+
+    if suppress_dialogs or not dialog_slot_available():
+        return False
+
+    # The JS bridge emits one normalized point payload; Python keeps dialog routing centralized here.
+    return _dispatch_chart_click_point(
+        parsed_trigger["point"],
+        trace_name=parsed_trigger["trace_name"],
+        team_mode=team_mode,
+        games_mode=games_mode,
+        is_single_season_team_games=is_single_season_team_games,
+        has_exact_game_custom_data=has_exact_game_custom_data,
+        metric=metric,
+        final_df=final_df,
+        raw_dfs_cache=raw_dfs_cache,
+        season_type=season_type,
+        selected_season=selected_season,
+        do_cumul=do_cumul,
+        ml_clones_dict=ml_clones_dict,
+        historical_baselines=historical_baselines,
+        stat_category=stat_category,
+        do_era=do_era,
+    )
 
 
 def _build_chart_glow_style(player_colors: dict) -> str:
@@ -930,18 +1321,16 @@ def render_chart(
         ml_clones_dict: Cached projection clone payloads for dialogs.
         season_type: Active season scope (`Regular`, `Playoffs`, `Both`).
         sidebar_keys: Sidebar cache-busting values that feed the chart widget
-            key so Streamlit remounts the chart when the visible board changes.
+            key so the JS click bridge stays aligned with the visible board.
         peak_info: Optional player peak-highlight payloads.
         do_prime: Whether prime-year highlighting is enabled.
         do_era: Whether era adjustment is active for the visible metric.
         selected_season: Canonical chart-season selection.
         share_params: Compact share-link params for the Copy link control.
-        suppress_dialogs: When True, the chart absorbs the current Plotly
-            selection, records it as handled, and bumps an internal remount
-            nonce instead of opening a dialog. This is the guardrail that
-            prevents Streamlit's sticky chart selection from reopening an old
-            chart modal in the same rerun as a player-card or matchup-history
-            modal.
+        suppress_dialogs: When True, the chart consumes the current bridge
+            click, records its nonce as handled, and skips opening a dialog.
+            This guardrail keeps queued player-card or matchup-history modals
+            from colliding with chart dialogs in the same rerun.
     """
     _store_player_chart_colors({})
     if peak_info is None:
@@ -1084,23 +1473,18 @@ def render_chart(
     is_clickable_age_chart = not team_mode and not games_mode
 
     # ------------------------------------------------------------------
-    # Chart widget key + sticky-selection reset nonce.
-    # Streamlit stores Plotly point selection by widget key, so we append a
-    # small session-state nonce that can be bumped after handled or suppressed
-    # clicks. That remount clears the old selection without changing the rest
-    # of the visible chart state.
+    # Chart widget key.
+    # Keep the key stable for the visible board state so the JS click bridge
+    # can use the same chart identity for nonce-tagged click payloads.
     # ------------------------------------------------------------------
     if team_mode:
-        chart_reset_nonce = get_chart_selection_reset_nonce()
         chart_key = (
             f"chart_team_{hash(str(st.session_state.teams))}"
             f"_{metric}_{st.session_state.do_smooth}_{st.session_state.x_axis_mode}"
             f"_{selected_season}_{season_type}"
-            f"_{chart_reset_nonce}"
         )
     else:
         player_names = [df['BaseName'].iloc[0] for df in processed_dfs if not df.empty]
-        chart_reset_nonce = get_chart_selection_reset_nonce()
         chart_key = (
             f"chart_{hash(str(player_names))}"
             f"_{metric}_{st.session_state.do_predict}_{st.session_state.do_smooth}"
@@ -1110,7 +1494,6 @@ def render_chart(
             f"_{sidebar_keys.get('roster_player', '')}"
             f"_{st.session_state.x_axis_mode}"
             f"_{selected_season}"
-            f"_{chart_reset_nonce}"
         )
 
     # ------------------------------------------------------------------
@@ -1300,13 +1683,15 @@ def render_chart(
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor  = "rgba(0,0,0,0)",
         showlegend  = False,
+        hovermode   = "closest",
+        hoverdistance = CHART_HOVER_DISTANCE,
         legend      = dict(
             title=None, orientation="h",
             yanchor="top", y=-0.20,
             xanchor="center", x=0.5,
             groupclick="togglegroup",
         ),
-        clickmode   = 'event+select',
+        clickmode   = 'event',
     )
 
     _val_fmt = (
@@ -1502,11 +1887,9 @@ def render_chart(
         unsafe_allow_html=True,
     )
 
-    event = st.plotly_chart(
+    st.plotly_chart(
         fig,
         use_container_width = True,
-        on_select           = "rerun",
-        selection_mode      = "points",
         key                 = chart_key,
         config              = plotly_config,
     )
@@ -2006,117 +2389,23 @@ def render_chart(
 }})();
 </script>""", height=0)
 
-    # ------------------------------------------------------------------
-    # Click handler: fire season-detail dialog on point selection
-    # ------------------------------------------------------------------
-    selected_points = _extract_selected_points(event)
-    if not selected_points:
-        return
-
-    point = selected_points[0]
-    selection_signature = _build_chart_selection_signature(
+    chart_click_trigger_value = _mount_chart_click_bridge(chart_key)
+    _show_chart_dialog_from_trigger(
+        chart_click_trigger_value,
         chart_key,
-        point,
+        suppress_dialogs=suppress_dialogs,
         team_mode=team_mode,
         games_mode=games_mode,
         is_single_season_team_games=is_single_season_team_games,
         has_exact_game_custom_data=has_exact_game_custom_data,
+        metric=metric,
+        final_df=final_df,
+        raw_dfs_cache=raw_dfs_cache,
+        season_type=season_type,
+        selected_season=selected_season,
+        do_cumul=do_cumul,
+        ml_clones_dict=ml_clones_dict,
+        historical_baselines=historical_baselines,
+        stat_category=stat_category,
+        do_era=do_era,
     )
-    if selection_signature is not None:
-        if session_state_get(LAST_HANDLED_CHART_SELECTION_SIGNATURE_SESSION_KEY) == selection_signature:
-            return
-        if suppress_dialogs or not dialog_slot_available():
-            session_state_set(LAST_HANDLED_CHART_SELECTION_SIGNATURE_SESSION_KEY, selection_signature)
-            bump_chart_selection_reset_nonce()
-            return
-
-    if team_mode and is_single_season_team_games:
-        cd = point.get("customdata", [])
-        clicked_team_abbr = str(cd[0]) if len(cd) > 0 else ""
-        clicked_team_name = str(cd[1]) if len(cd) > 1 else ""
-        clicked_game_date = str(cd[2]) if len(cd) > 2 else ""
-        clicked_game_type = str(cd[3]) if len(cd) > 3 else ""
-        clicked_opponent_abbr = str(cd[4]) if len(cd) > 4 else ""
-        clicked_opponent_name = str(cd[5]) if len(cd) > 5 else ""
-        clicked_home_road = str(cd[6]) if len(cd) > 6 else ""
-        clicked_result = str(cd[7]) if len(cd) > 7 else ""
-        try:
-            clicked_goals_for = float(cd[8]) if len(cd) > 8 else 0.0
-        except Exception:
-            clicked_goals_for = 0.0
-        try:
-            clicked_goals_against = float(cd[9]) if len(cd) > 9 else 0.0
-        except Exception:
-            clicked_goals_against = 0.0
-        try:
-            clicked_game_id = int(cd[10]) if len(cd) > 10 and cd[10] not in (None, "") else None
-        except Exception:
-            clicked_game_id = None
-        clicked_record_label = str(cd[11]) if len(cd) > 11 else ""
-
-        show_team_game_details(
-            team_name=clicked_team_name,
-            team_abbr=clicked_team_abbr,
-            metric=metric,
-            val=point["y"],
-            full_df=final_df,
-            s_type=season_type,
-            selected_season=selected_season,
-            game_number=int(point["x"]),
-            game_id=clicked_game_id,
-            game_date=clicked_game_date,
-            clicked_game_type=clicked_game_type,
-            opponent_abbr=clicked_opponent_abbr,
-            opponent_name=clicked_opponent_name,
-            home_road_flag=clicked_home_road,
-            result_label=clicked_result,
-            goals_for=clicked_goals_for,
-            goals_against=clicked_goals_against,
-            record_label=clicked_record_label,
-        )
-        if selection_signature is not None:
-            session_state_set(LAST_HANDLED_CHART_SELECTION_SIGNATURE_SESSION_KEY, selection_signature)
-        mark_dialog_opened_this_run()
-        bump_chart_selection_reset_nonce()
-    elif not team_mode:
-        cd = point.get("customdata", [])
-        clicked_player_name = str(cd[1]) if len(cd) > 1 else ""
-        if _is_baseline_trace(clicked_player_name):
-            return
-        age_for_detail = int(cd[2]) if games_mode else point["x"]
-        clicked_game_id = None
-        clicked_game_date = None
-        clicked_game_type = None
-        clicked_game_number = None
-
-        if has_exact_game_custom_data and len(cd) >= 6:
-            clicked_game_number = int(point["x"])
-            try:
-                clicked_game_id = int(cd[3]) if cd[3] not in (None, "") else None
-            except Exception:
-                clicked_game_id = None
-            clicked_game_date = str(cd[4] or "")
-            clicked_game_type = str(cd[5] or "")
-
-        show_season_details(
-            player_name          = clicked_player_name,
-            age                  = age_for_detail,
-            raw_dfs_list         = raw_dfs_cache,
-            metric               = metric,
-            val                  = point["y"],
-            is_cumul             = do_cumul,
-            full_df              = final_df,
-            s_type               = season_type,
-            ml_clones_dict       = ml_clones_dict,
-            historical_baselines = historical_baselines,
-            stat_category        = stat_category,
-            do_era               = do_era,
-            game_id              = clicked_game_id,
-            game_date            = clicked_game_date,
-            clicked_game_type    = clicked_game_type,
-            game_number          = clicked_game_number,
-        )
-        if selection_signature is not None:
-            session_state_set(LAST_HANDLED_CHART_SELECTION_SIGNATURE_SESSION_KEY, selection_signature)
-        mark_dialog_opened_this_run()
-        bump_chart_selection_reset_nonce()
