@@ -18,7 +18,7 @@ import streamlit as st
 _CSS = """
     <style>
         /* DESKTOP — main content area: top/bottom/left/right edge padding */
-        .block-container { padding-top: 2.65rem !important; padding-bottom: 0rem !important; padding-left: 2rem !important; padding-right: 2rem !important; }
+        .block-container { padding-top: 3.75rem !important; padding-bottom: 0rem !important; padding-left: 2rem !important; padding-right: 2rem !important; }
 
         /* DESKTOP — sidebar logo container: centers the brand image horizontally */
         [data-testid="stSidebar"] .sidebar-brand {
@@ -1241,14 +1241,33 @@ _CSS = """
         }
         /* DESKTOP — Whole career / Metric Selections row: negative pull closes gap below chart */
         [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
-            margin-top: -2.2rem !important;
+            margin-top: -3.4rem !important;
         }
         /* MOBILE — Whole career / Metric Selections row: stronger pull + removes side padding */
         @media (max-width: 768px) {
             [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
-                margin-top: -2.7rem !important;
+                margin-top: -3.7rem !important;
                 padding-left: 0rem !important;
                 padding-right: 0rem !important;
+            }
+        }
+        /* WIDE TABLET (1281px–1400px) — columns still side by side, sidebar is fixed overlay.
+           Reduce desktop -3.4rem pull to -2rem; enough to close the gap without overlapping. */
+        @media (min-width: 1281px) and (max-width: 1400px) {
+            [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
+                margin-top: -2rem !important;
+            }
+            div:has(> #comparison-controls-panel) + div {
+                margin-top: 0 !important;
+            }
+        }
+        /* NARROW TABLET (769px–1280px) — columns stacked, controls row is in normal flow below chart. */
+        @media (min-width: 769px) and (max-width: 1280px) {
+            [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
+                margin-top: -3.35rem !important;
+            }
+            div:has(> #comparison-controls-panel) + div {
+                margin-top: 0 !important;
             }
         }
         /* DESKTOP — predictions panel anchor: collapses zero-height anchor spacing */
@@ -1266,6 +1285,13 @@ _CSS = """
         }
         div.element-container:has(#comparison-right-rail) + div {
             margin-top: -2.4rem !important;
+        }
+        /* TABLET/MOBILE (≤1280px) — columns stacked so right rail is in normal flow below chart.
+           Cancel the desktop -2.4rem pull or the predictions heading flies under the top bar. */
+        @media (max-width: 1280px) {
+            div.element-container:has(#comparison-right-rail) + div {
+                margin-top: 1rem !important;
+            }
         }
         /* DESKTOP — main Plotly chart anchor: collapses anchor + removes bottom gap under chart */
         div.element-container:has(#comparison-main-plotly) {
@@ -1300,7 +1326,7 @@ _CSS = """
 
         /* DESKTOP — Overview / Current Standings tab row: styles, spacing, pill tab buttons */
         div.element-container:has(#comparison-tabs) {
-            margin: -0.3rem 0 0 0 !important;
+            margin: -0.6rem 0 0 0 !important;
             line-height: 0 !important;
         }
         div.element-container:has(#comparison-tabs) + div.element-container {

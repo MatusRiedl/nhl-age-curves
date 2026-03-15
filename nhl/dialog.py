@@ -540,50 +540,6 @@ def _build_matchup_card_html(game: dict, compact_layout: bool = False) -> str:
     )
 
 
-def _build_matchup_history_summary(
-    away_abbr: str,
-    home_abbr: str,
-    history_games: list[dict],
-) -> str | None:
-    """Return a plain-text summary of wins across the displayed matchup history."""
-    clean_away_abbr = str(away_abbr or "").strip().upper()
-    clean_home_abbr = str(home_abbr or "").strip().upper()
-    away_wins = 0
-    home_wins = 0
-    ties = 0
-
-    for game in history_games:
-        away_score = game.get("away_score")
-        home_score = game.get("home_score")
-        try:
-            away_score_int = int(away_score)
-            home_score_int = int(home_score)
-        except Exception:
-            continue
-
-        if away_score_int > home_score_int:
-            if str(game.get("away_abbr", "") or "").strip().upper() == clean_away_abbr:
-                away_wins += 1
-            elif str(game.get("away_abbr", "") or "").strip().upper() == clean_home_abbr:
-                home_wins += 1
-        elif home_score_int > away_score_int:
-            if str(game.get("home_abbr", "") or "").strip().upper() == clean_away_abbr:
-                away_wins += 1
-            elif str(game.get("home_abbr", "") or "").strip().upper() == clean_home_abbr:
-                home_wins += 1
-        else:
-            ties += 1
-
-    total_counted = away_wins + home_wins + ties
-    if total_counted == 0:
-        return None
-
-    summary = f"{clean_away_abbr} won {away_wins}, {clean_home_abbr} won {home_wins}"
-    if ties:
-        summary += f", with {ties} tie" if ties == 1 else f", with {ties} ties"
-    summary += f" in the last {total_counted} meetings shown."
-    return summary
-
 
 def _format_game_toi(total_toi_mins: float) -> str:
     """Convert stored total TOI minutes into a mm:ss display string."""
@@ -1560,33 +1516,70 @@ def show_matchup_history(
     clean_home_abbr = str(home_abbr or "").strip().upper()
     away_color = _get_team_brand_color(clean_away_abbr)
     home_color = _get_team_brand_color(clean_home_abbr)
-    st.markdown(
-        (
-            "<div style='font-size:1.45rem;font-weight:800;line-height:1.2;margin:0 0 0.85rem 0;'>"
-            f"<span style='color:{away_color};'>{escape(clean_away_abbr)}</span>"
-            "<span style='color:#8b949e;font-weight:600;'> at </span>"
-            f"<span style='color:{home_color};'>{escape(clean_home_abbr)}</span>"
-            f"<span style='color:#8b949e;font-size:1rem;font-weight:500;'>"
-            f" — Last {int(limit)} meetings</span>"
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
 
     history_games = get_matchup_history(
         away_abbr=clean_away_abbr,
         home_abbr=clean_home_abbr,
         limit=limit,
     )
+    if history_games:
+        history_games = sorted(history_games, key=_matchup_history_sort_key, reverse=True)
+
+    # Tally wins for the header sub-block.
+    away_wins = home_wins = ties = 0
+    for game in (history_games or []):
+        away_score = game.get("away_score")
+        home_score = game.get("home_score")
+        try:
+            a, h = int(away_score), int(home_score)
+        except Exception:
+            continue
+        if a > h:
+            if str(game.get("away_abbr", "") or "").strip().upper() == clean_away_abbr:
+                away_wins += 1
+            elif str(game.get("away_abbr", "") or "").strip().upper() == clean_home_abbr:
+                home_wins += 1
+        elif h > a:
+            if str(game.get("home_abbr", "") or "").strip().upper() == clean_away_abbr:
+                away_wins += 1
+            elif str(game.get("home_abbr", "") or "").strip().upper() == clean_home_abbr:
+                home_wins += 1
+        else:
+            ties += 1
+
+    total = away_wins + home_wins + ties
+    if total > 0:
+        ties_line = (
+            f"<br><span style='color:#8b949e;'>{ties} tie{'s' if ties != 1 else ''}</span>"
+            if ties else ""
+        )
+        sub_html = (
+            f"<div style='font-size:0.9rem;color:#8b949e;margin:0.35rem 0 0.85rem 0;line-height:1.7;'>"
+            f"In the last {total} matchups:<br>"
+            f"<span style='color:#ffffff;font-weight:700;'>{escape(clean_away_abbr)} won {away_wins}</span><br>"
+            f"<span style='color:#ffffff;font-weight:700;'>{escape(clean_home_abbr)} won {home_wins}</span>"
+            f"{ties_line}</div>"
+        )
+    else:
+        sub_html = (
+            f"<div style='font-size:0.9rem;color:#8b949e;margin:0.35rem 0 0.85rem 0;'>"
+            f"Last {int(limit)} meetings</div>"
+        )
+
+    st.markdown(
+        (
+            "<div style='font-size:1.45rem;font-weight:800;line-height:1.2;margin:0 0 0 0;'>"
+            f"<span style='color:{away_color};'>{escape(clean_away_abbr)}</span>"
+            "<span style='color:#8b949e;font-weight:600;'> vs </span>"
+            f"<span style='color:{home_color};'>{escape(clean_home_abbr)}</span>"
+            "</div>"
+        ) + sub_html,
+        unsafe_allow_html=True,
+    )
+
     if not history_games:
         st.info("No completed matchup history available right now.")
         return
-
-    history_games = sorted(history_games, key=_matchup_history_sort_key, reverse=True)
-
-    summary = _build_matchup_history_summary(clean_away_abbr, clean_home_abbr, history_games)
-    if summary:
-        st.markdown(summary)
 
     for game in history_games:
         st.markdown(_build_matchup_card_html(game, compact_layout=True), unsafe_allow_html=True)
