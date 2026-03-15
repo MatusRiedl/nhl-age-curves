@@ -318,6 +318,10 @@ Chart duties handled in `chart.py`:
 - render compact chart header text
 - inject JS pan / zoom clamping
 - mount a `st.components.v2.component()` bridge that listens for `plotly_click`
+- on touch devices, supplement `plotly_click` with a `plotly_hover` tap-proxy: passive
+  touch listeners on the `.nsewdrag` overlay detect taps (< 15 px, < 400 ms) and the
+  next `plotly_hover` event emits the click payload.  Desktop is unaffected (`plotly_click`
+  still fires directly).  A 500 ms JS-level debounce guard prevents double-fires.
 - emit one nonce-tagged click payload with `trace_name`, `x`, `y`, and `customdata`
 - dispatch bridge click data into `show_season_details()` or `show_team_game_details()`
 - offer a Copy link control using compact URL params

@@ -150,6 +150,15 @@ export default function(component) {{
         return Array.isArray(value) ? value : [];
     }}
 
+    let lastEmittedAt = 0;
+    const DEBOUNCE_MS = 500;
+    function emitClick(payload) {{
+        const now = Date.now();
+        if (now - lastEmittedAt < DEBOUNCE_MS) return;
+        lastEmittedAt = now;
+        setTriggerValue('clicked', JSON.stringify(payload));
+    }}
+
     let cleanup = null;
     let retryTimer = null;
 
@@ -198,10 +207,100 @@ export default function(component) {{
                 curve_number: Number.isInteger(point.curveNumber) ? point.curveNumber : null,
                 point_number: Number.isInteger(point.pointNumber) ? point.pointNumber : null,
             }};
-            setTriggerValue('clicked', JSON.stringify(payload));
+            emitClick(payload);
         }};
 
         plot.on('plotly_click', handler);
+
+        // ---- Touch-tap proxy for mobile ----
+        // plotly_click does not fire reliably on mobile because Plotly's
+        // drag handler (dragmode='zoom') consumes touch events.  Instead
+        // we track taps via touch listeners and use the plotly_hover event
+        // (which always fires on tap) as a click proxy.
+        let isTouchDevice = false;
+        let touchState = null;
+        let lastHoverPayload = null;
+        const TAP_MAX_DISTANCE = 15;
+        const TAP_MAX_DURATION = 400;
+
+        const plotArea = plot.querySelector('.nsewdrag') || plot;
+
+        plotArea.addEventListener('touchstart', function(e) {{
+            isTouchDevice = true;
+            if (e.touches.length === 1) {{
+                touchState = {{
+                    startX: e.touches[0].clientX,
+                    startY: e.touches[0].clientY,
+                    startTime: Date.now(),
+                }};
+            }} else {{
+                touchState = null;
+            }}
+        }}, {{ passive: true }});
+
+        plotArea.addEventListener('touchmove', function(e) {{
+            if (!touchState || e.touches.length !== 1) {{
+                touchState = null;
+                return;
+            }}
+            var dx = e.touches[0].clientX - touchState.startX;
+            var dy = e.touches[0].clientY - touchState.startY;
+            if (Math.sqrt(dx * dx + dy * dy) > TAP_MAX_DISTANCE) {{
+                touchState = null;
+            }}
+        }}, {{ passive: true }});
+
+        plotArea.addEventListener('touchend', function() {{
+            if (!touchState) return;
+            var elapsed = Date.now() - touchState.startTime;
+            if (elapsed > TAP_MAX_DURATION) {{
+                touchState = null;
+                return;
+            }}
+            if (lastHoverPayload) {{
+                var payload = lastHoverPayload;
+                lastHoverPayload = null;
+                touchState = null;
+                emitClick(payload);
+            }} else {{
+                touchState.isTap = true;
+                parent.setTimeout(function() {{
+                    if (touchState && touchState.isTap) {{
+                        touchState = null;
+                    }}
+                }}, 300);
+            }}
+        }}, {{ passive: true }});
+
+        const hoverHandler = function(event) {{
+            if (!isTouchDevice) return;
+            var points = event && Array.isArray(event.points) ? event.points : [];
+            if (!points.length) return;
+            var point = points[0] || {{}};
+            var traceName = String(
+                (point.fullData && point.fullData.name)
+                || (point.data && point.data.name)
+                || ''
+            ).trim();
+            var hoverPayload = {{
+                nonce: `${{Date.now()}}-${{Math.floor(Math.random() * 1000000)}}`,
+                chart_instance_id: chartInstanceId,
+                trace_name: traceName,
+                x: point.x ?? null,
+                y: point.y ?? null,
+                customdata: normalizeCustomData(point.customdata),
+                curve_number: Number.isInteger(point.curveNumber) ? point.curveNumber : null,
+                point_number: Number.isInteger(point.pointNumber) ? point.pointNumber : null,
+            }};
+            if (touchState && touchState.isTap) {{
+                touchState = null;
+                emitClick(hoverPayload);
+            }} else {{
+                lastHoverPayload = hoverPayload;
+            }}
+        }};
+
+        plot.on('plotly_hover', hoverHandler);
 
         const localCleanup = function() {{
             if (retryTimer) {{
@@ -211,8 +310,10 @@ export default function(component) {{
             try {{
                 if (typeof plot.removeListener === 'function') {{
                     plot.removeListener('plotly_click', handler);
+                    plot.removeListener('plotly_hover', hoverHandler);
                 }} else if (typeof plot.off === 'function') {{
                     plot.off('plotly_click', handler);
+                    plot.off('plotly_hover', hoverHandler);
                 }}
             }} catch (err) {{
                 // Ignore teardown races when Streamlit replaces the plot DOM.
