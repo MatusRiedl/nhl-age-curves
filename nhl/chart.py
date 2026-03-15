@@ -213,20 +213,18 @@ export default function(component) {{
         plot.on('plotly_click', handler);
 
         // ---- Touch-tap proxy for mobile ----
-        // plotly_click does not fire reliably on mobile because Plotly's
-        // drag handler (dragmode='zoom') consumes touch events.  Instead
-        // we track taps via touch listeners and use the plotly_hover event
-        // (which always fires on tap) as a click proxy.
-        let isTouchDevice = false;
+        // Neither plotly_click nor plotly_hover fire reliably on mobile
+        // because Plotly's drag handler consumes touch events.  The hover
+        // tooltip DOES appear though, and Plotly always sets plot._hoverdata
+        // when it shows the tooltip.  We detect taps via touch listeners and
+        // read _hoverdata directly on touchend.
         let touchState = null;
-        let lastHoverPayload = null;
         const TAP_MAX_DISTANCE = 15;
         const TAP_MAX_DURATION = 400;
 
         const plotArea = plot.querySelector('.nsewdrag') || plot;
 
         plotArea.addEventListener('touchstart', function(e) {{
-            isTouchDevice = true;
             if (e.touches.length === 1) {{
                 touchState = {{
                     startX: e.touches[0].clientX,
@@ -253,36 +251,19 @@ export default function(component) {{
         plotArea.addEventListener('touchend', function() {{
             if (!touchState) return;
             var elapsed = Date.now() - touchState.startTime;
-            if (elapsed > TAP_MAX_DURATION) {{
-                touchState = null;
-                return;
-            }}
-            if (lastHoverPayload) {{
-                var payload = lastHoverPayload;
-                lastHoverPayload = null;
-                touchState = null;
-                emitClick(payload);
-            }} else {{
-                touchState.isTap = true;
-                parent.setTimeout(function() {{
-                    if (touchState && touchState.isTap) {{
-                        touchState = null;
-                    }}
-                }}, 300);
-            }}
-        }}, {{ passive: true }});
+            touchState = null;
+            if (elapsed > TAP_MAX_DURATION) return;
 
-        const hoverHandler = function(event) {{
-            if (!isTouchDevice) return;
-            var points = event && Array.isArray(event.points) ? event.points : [];
-            if (!points.length) return;
-            var point = points[0] || {{}};
+            // Read Plotly's internal hover state (set when tooltip appears)
+            var hoverData = plot._hoverdata;
+            if (!hoverData || !hoverData.length) return;
+            var point = hoverData[0];
             var traceName = String(
                 (point.fullData && point.fullData.name)
                 || (point.data && point.data.name)
                 || ''
             ).trim();
-            var hoverPayload = {{
+            emitClick({{
                 nonce: `${{Date.now()}}-${{Math.floor(Math.random() * 1000000)}}`,
                 chart_instance_id: chartInstanceId,
                 trace_name: traceName,
@@ -291,16 +272,8 @@ export default function(component) {{
                 customdata: normalizeCustomData(point.customdata),
                 curve_number: Number.isInteger(point.curveNumber) ? point.curveNumber : null,
                 point_number: Number.isInteger(point.pointNumber) ? point.pointNumber : null,
-            }};
-            if (touchState && touchState.isTap) {{
-                touchState = null;
-                emitClick(hoverPayload);
-            }} else {{
-                lastHoverPayload = hoverPayload;
-            }}
-        }};
-
-        plot.on('plotly_hover', hoverHandler);
+            }});
+        }}, {{ passive: true }});
 
         const localCleanup = function() {{
             if (retryTimer) {{
@@ -310,10 +283,8 @@ export default function(component) {{
             try {{
                 if (typeof plot.removeListener === 'function') {{
                     plot.removeListener('plotly_click', handler);
-                    plot.removeListener('plotly_hover', hoverHandler);
                 }} else if (typeof plot.off === 'function') {{
                     plot.off('plotly_click', handler);
-                    plot.off('plotly_hover', hoverHandler);
                 }}
             }} catch (err) {{
                 // Ignore teardown races when Streamlit replaces the plot DOM.
@@ -555,6 +526,7 @@ def _mount_chart_click_bridge(chart_instance_id: str) -> str | None:
         ),
         key=CHART_CLICK_BRIDGE_MOUNT_KEY,
         on_clicked_change=_noop_chart_click_change,
+        height=1,
     )
     return getattr(result, "clicked", None)
 

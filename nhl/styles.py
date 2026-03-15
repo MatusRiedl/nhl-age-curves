@@ -52,7 +52,7 @@ _CSS = """
         /* MOBILE — tighter block-container padding (top/left/right); logo width override */
         @media (max-width: 768px) {
             .block-container {
-                padding-top: 0.7rem !important;
+                padding-top: 2rem !important;
                 padding-left: 0.5rem !important;
                 padding-right: 0.5rem !important;
             }
@@ -710,11 +710,11 @@ _CSS = """
                 gap: 0.5rem;
             }
             .nhl-chart-toolbar__title {
-                font-size: 0.92rem;
+                font-size: 0.90rem;
             }
             .nhl-chart-share-btn {
-                padding: 0.32rem 0.62rem;
-                font-size: 0.76rem;
+                padding: 0.30rem 0.60rem;
+                font-size: 0.70rem;
             }
         }
         /* MOBILE — chart toolbar: even tighter sizing; top margin pushes toolbar below Streamlit header */
@@ -1236,7 +1236,7 @@ _CSS = """
         /* MOBILE — Metric Selections: pulls the whole stacked column up toward the chart */
         @media (max-width: 768px) {
             [data-testid="stColumn"]:has(#comparison-controls-panel) {
-                margin-top: -1.7rem !important;
+                margin-top: -1.5rem !important;
             }
         }
         /* DESKTOP — Whole career / Metric Selections row: negative pull closes gap below chart */
@@ -1246,7 +1246,7 @@ _CSS = """
         /* MOBILE — Whole career / Metric Selections row: stronger pull + removes side padding */
         @media (max-width: 768px) {
             [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
-                margin-top: -3.7rem !important;
+                margin-top: -3.6rem !important;
                 padding-left: 0rem !important;
                 padding-right: 0rem !important;
             }
@@ -1470,7 +1470,7 @@ _CSS = """
         /* MOBILE — tabs section: stronger pull on detail-layout anchor; tighter tab spacing + padding */
         @media (max-width: 768px) {
             div.element-container:has(#comparison-detail-layout) {
-                margin-top: -4.4rem !important;  /* adjust to move Overview/Current Standings up/down */
+                margin-top: -4.1rem !important;  /* adjust to move Overview/Current Standings up/down */
             }
             div.element-container:has(#comparison-tabs) {
                 margin-top: -0.12rem !important;  /* adjust gap above the tab anchor itself */
@@ -1772,7 +1772,7 @@ _CSS = """
                decrease if there is too much empty space above the chart.
                Reference: true mobile uses 3.75rem; desktop uses 0. */
             .nhl-chart-toolbar {
-                margin: 3.3rem 0 0.1rem 0;  /* ← adjust first value to move toolbar up/down */
+                margin: 3.5rem 0 0.1rem 0;  /* ← adjust first value to move toolbar up/down */
             }
             /* chart-toolbar block-container top padding: extra lever if margin alone isn't
                enough to clear the header. Increase to push everything down, 0 to reset. */
@@ -1816,7 +1816,7 @@ _CSS = """
             }
             /* right-rail: predictions panel top offset (stacked layout) */
             div.element-container:has(#comparison-right-rail) + div {
-                margin-top: 1rem !important;
+                margin-top: 0.5rem !important;
             }
         }
     </style>
