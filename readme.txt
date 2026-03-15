@@ -165,8 +165,8 @@ One-shot guards:
 - `_dialog_opened_this_run`
 - `_pending_matchup_history`
 - `_last_matchup_history_trigger_nonce`
-- `_last_handled_chart_selection_signature`
-- `_chart_selection_reset_nonce`
+- `_last_identity_card_trigger_nonce`
+- `_last_handled_chart_click_nonce`
 
 Season-mode memory:
 - `_pre_season_chart_x_axis_mode`
@@ -513,7 +513,7 @@ Module responsibilities:
 - `dialog.py` - player clicks, team game snapshot clicks, matchup-history modal, projection, and baseline dialogs
 - `dialog.py` now inserts the rarity callout directly under `Career Subtotals` in player age snapshots
 - `chart.py` - figure assembly, baseline overlay, share-link button, Plotly click bridge, and player/team click dispatch
-- `comparison.py` - season-aware Overview / Current Standings tabs, the chart-season picker renderer, JS click bridge, clickable predictions panel, and live standings board wrapper
+- `comparison.py` - season-aware Overview / Current Standings tabs, the chart-season picker renderer, JS click bridges (prediction-card and identity-card), clickable predictions panel, and live standings board wrapper
 - `stanley_cup.py` - standings-board assembly and Cup-pick summarization
 - `url_params.py` - compact share-link encoder/decoder with legacy-link sanitization and canonicalization
 - `schedule.py` - live/recent matchup detection, upcoming games, featured players, matchup history, and runtime pregame win-prob inference
