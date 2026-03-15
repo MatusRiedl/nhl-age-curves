@@ -174,6 +174,26 @@ export default function(component) {{
             return;
         }}
 
+        // Diagnostic: understand the frame/DOM structure on Cloud
+        if (attemptsLeft === bindAttempts) {{
+            const isIframe = window !== window.parent;
+            const allElems = parent.document.querySelectorAll('*').length;
+            const plots = parent.document.querySelectorAll('.js-plotly-plot').length;
+            const iframes = parent.document.querySelectorAll('iframe').length;
+            let loc = 'unknown';
+            try {{ loc = parent.location.href; }} catch(e) {{ loc = 'cross-origin'; }}
+            console.log('[BRIDGE] DIAG isIframe:', isIframe, 'parentElems:', allElems, 'plots:', plots, 'iframes:', iframes, 'parentLoc:', loc);
+
+            // Try to find plots through shadow roots
+            let shadowPlots = 0;
+            parent.document.querySelectorAll('*').forEach(function(el) {{
+                if (el.shadowRoot) {{
+                    shadowPlots += el.shadowRoot.querySelectorAll('.js-plotly-plot').length;
+                }}
+            }});
+            console.log('[BRIDGE] DIAG shadowPlots:', shadowPlots);
+        }}
+
         let plot;
         try {{
             plot = getCurrentTargetPlot(parent);
