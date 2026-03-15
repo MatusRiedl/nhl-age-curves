@@ -76,6 +76,7 @@ nhl/
     dialog.py            season-detail and matchup-history dialogs
     chart.py             Plotly chart rendering, share link, and JS pan-clamp
     comparison.py        Overview/Current Standings detail tabs, chart-season picker helper, clickable predictions panel, and live standings wrapper
+    ui_state.py          shared Streamlit session-state guards for modal orchestration
     stanley_cup.py       standings-board and Cup-pick builder
     url_params.py        URL query param encode/decode for shareable links and chart season state
     schedule.py          live defaults, upcoming games, featured-player helpers, matchup history, and runtime matchup inference

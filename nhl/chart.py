@@ -32,6 +32,15 @@ from nhl.constants import (
 )
 from nhl.dialog import show_season_details, show_team_game_details
 from nhl.era import metric_is_era_adjusted
+from nhl.ui_state import (
+    LAST_HANDLED_CHART_SELECTION_SIGNATURE_SESSION_KEY,
+    bump_chart_selection_reset_nonce,
+    dialog_slot_available,
+    get_chart_selection_reset_nonce,
+    mark_dialog_opened_this_run,
+    session_state_get,
+    session_state_set,
+)
 
 
 X_AXIS_TICK_COLOR = "rgba(255, 255, 255, 0.80)"
@@ -278,6 +287,59 @@ def _store_player_chart_colors(player_colors: dict[str, str | None]) -> None:
         None.
     """
     setattr(st.session_state, PLAYER_COLOR_STATE_KEY, dict(player_colors))
+
+
+def _extract_selected_points(event) -> list[dict]:
+    """Return Plotly point selections from Streamlit's chart event payload."""
+    selection = getattr(event, "selection", None)
+    if not isinstance(selection, dict):
+        return []
+    points = selection.get("points")
+    return points if isinstance(points, list) else []
+
+
+def _coerce_selection_signature_part(value) -> str:
+    """Normalize one chart-selection signature part into a stable string."""
+    return str("" if value is None else value).strip()
+
+
+def _build_chart_selection_signature(
+    chart_key: str,
+    point: dict,
+    *,
+    team_mode: bool,
+    games_mode: bool,
+    is_single_season_team_games: bool,
+    has_exact_game_custom_data: bool,
+) -> str | None:
+    """Return a stable identity for one selected chart point."""
+    custom_data = point.get("customdata", [])
+    if not isinstance(custom_data, (list, tuple)):
+        custom_data = []
+
+    if team_mode:
+        if not is_single_season_team_games:
+            return None
+        team_abbr = _coerce_selection_signature_part(custom_data[0] if len(custom_data) > 0 else "")
+        game_date = _coerce_selection_signature_part(custom_data[2] if len(custom_data) > 2 else "")
+        game_id = _coerce_selection_signature_part(custom_data[10] if len(custom_data) > 10 else "")
+        game_number = _coerce_selection_signature_part(point.get("x"))
+        return f"{chart_key}|team-season|{team_abbr}|{game_id}|{game_date}|{game_number}"
+
+    player_name = _coerce_selection_signature_part(custom_data[1] if len(custom_data) > 1 else "")
+    if not player_name or _is_baseline_trace(player_name):
+        return None
+
+    if games_mode and has_exact_game_custom_data and len(custom_data) >= 6:
+        game_id = _coerce_selection_signature_part(custom_data[3] if len(custom_data) > 3 else "")
+        game_date = _coerce_selection_signature_part(custom_data[4] if len(custom_data) > 4 else "")
+        game_number = _coerce_selection_signature_part(point.get("x"))
+        return f"{chart_key}|player-season|{player_name}|{game_id}|{game_date}|{game_number}"
+
+    age_value = _coerce_selection_signature_part(custom_data[2] if len(custom_data) > 2 else point.get("x"))
+    x_value = _coerce_selection_signature_part(point.get("x"))
+    click_kind = "player-games" if games_mode else "player-age"
+    return f"{chart_key}|{click_kind}|{player_name}|{age_value}|{x_value}"
 
 
 def _build_chart_glow_style(player_colors: dict) -> str:
@@ -849,8 +911,38 @@ def render_chart(
     do_era: bool = False,
     selected_season: str | int = "All",
     share_params: dict | None = None,
+    suppress_dialogs: bool = False,
 ) -> None:
-    """Build the Plotly chart, optional baseline overlays, and click handling."""
+    """Build the Plotly chart, optional baseline overlays, and click handling.
+
+    Args:
+        processed_dfs: Visible processed series ready for chart rendering.
+        metric: Active y-axis metric.
+        team_mode: Whether the chart is rendering team data instead of players.
+        games_mode: Whether the x-axis is game number / games played.
+        do_cumul: Whether cumulative counting stats are active.
+        do_base: Whether baseline overlays should be rendered.
+        do_smooth: Whether smoothing is active for eligible traces.
+        stat_category: Active category (`Skater`, `Goalie`, or `Team`).
+        historical_baselines: Cached historical baseline payloads.
+        team_baselines: Cached team baseline payloads.
+        raw_dfs_cache: Raw player dataframes used by Season Snapshot dialogs.
+        ml_clones_dict: Cached projection clone payloads for dialogs.
+        season_type: Active season scope (`Regular`, `Playoffs`, `Both`).
+        sidebar_keys: Sidebar cache-busting values that feed the chart widget
+            key so Streamlit remounts the chart when the visible board changes.
+        peak_info: Optional player peak-highlight payloads.
+        do_prime: Whether prime-year highlighting is enabled.
+        do_era: Whether era adjustment is active for the visible metric.
+        selected_season: Canonical chart-season selection.
+        share_params: Compact share-link params for the Copy link control.
+        suppress_dialogs: When True, the chart absorbs the current Plotly
+            selection, records it as handled, and bumps an internal remount
+            nonce instead of opening a dialog. This is the guardrail that
+            prevents Streamlit's sticky chart selection from reopening an old
+            chart modal in the same rerun as a player-card or matchup-history
+            modal.
+    """
     _store_player_chart_colors({})
     if peak_info is None:
         peak_info = {}
@@ -992,16 +1084,23 @@ def render_chart(
     is_clickable_age_chart = not team_mode and not games_mode
 
     # ------------------------------------------------------------------
-    # Chart widget key + persisted point selection
+    # Chart widget key + sticky-selection reset nonce.
+    # Streamlit stores Plotly point selection by widget key, so we append a
+    # small session-state nonce that can be bumped after handled or suppressed
+    # clicks. That remount clears the old selection without changing the rest
+    # of the visible chart state.
     # ------------------------------------------------------------------
     if team_mode:
+        chart_reset_nonce = get_chart_selection_reset_nonce()
         chart_key = (
             f"chart_team_{hash(str(st.session_state.teams))}"
             f"_{metric}_{st.session_state.do_smooth}_{st.session_state.x_axis_mode}"
             f"_{selected_season}_{season_type}"
+            f"_{chart_reset_nonce}"
         )
     else:
         player_names = [df['BaseName'].iloc[0] for df in processed_dfs if not df.empty]
+        chart_reset_nonce = get_chart_selection_reset_nonce()
         chart_key = (
             f"chart_{hash(str(player_names))}"
             f"_{metric}_{st.session_state.do_predict}_{st.session_state.do_smooth}"
@@ -1011,6 +1110,7 @@ def render_chart(
             f"_{sidebar_keys.get('roster_player', '')}"
             f"_{st.session_state.x_axis_mode}"
             f"_{selected_season}"
+            f"_{chart_reset_nonce}"
         )
 
     # ------------------------------------------------------------------
@@ -1883,8 +1983,28 @@ def render_chart(
     # ------------------------------------------------------------------
     # Click handler: fire season-detail dialog on point selection
     # ------------------------------------------------------------------
-    if team_mode and is_single_season_team_games and event and event.selection.get("points"):
-        point = event.selection["points"][0]
+    selected_points = _extract_selected_points(event)
+    if not selected_points:
+        return
+
+    point = selected_points[0]
+    selection_signature = _build_chart_selection_signature(
+        chart_key,
+        point,
+        team_mode=team_mode,
+        games_mode=games_mode,
+        is_single_season_team_games=is_single_season_team_games,
+        has_exact_game_custom_data=has_exact_game_custom_data,
+    )
+    if selection_signature is not None:
+        if session_state_get(LAST_HANDLED_CHART_SELECTION_SIGNATURE_SESSION_KEY) == selection_signature:
+            return
+        if suppress_dialogs or not dialog_slot_available():
+            session_state_set(LAST_HANDLED_CHART_SELECTION_SIGNATURE_SESSION_KEY, selection_signature)
+            bump_chart_selection_reset_nonce()
+            return
+
+    if team_mode and is_single_season_team_games:
         cd = point.get("customdata", [])
         clicked_team_abbr = str(cd[0]) if len(cd) > 0 else ""
         clicked_team_name = str(cd[1]) if len(cd) > 1 else ""
@@ -1928,8 +2048,11 @@ def render_chart(
             goals_against=clicked_goals_against,
             record_label=clicked_record_label,
         )
-    elif not team_mode and event and event.selection.get("points"):
-        point = event.selection["points"][0]
+        if selection_signature is not None:
+            session_state_set(LAST_HANDLED_CHART_SELECTION_SIGNATURE_SESSION_KEY, selection_signature)
+        mark_dialog_opened_this_run()
+        bump_chart_selection_reset_nonce()
+    elif not team_mode:
         cd = point.get("customdata", [])
         clicked_player_name = str(cd[1]) if len(cd) > 1 else ""
         if _is_baseline_trace(clicked_player_name):
@@ -1967,3 +2090,7 @@ def render_chart(
             clicked_game_type    = clicked_game_type,
             game_number          = clicked_game_number,
         )
+        if selection_signature is not None:
+            session_state_set(LAST_HANDLED_CHART_SELECTION_SIGNATURE_SESSION_KEY, selection_signature)
+        mark_dialog_opened_this_run()
+        bump_chart_selection_reset_nonce()

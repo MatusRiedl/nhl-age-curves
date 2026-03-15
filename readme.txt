@@ -67,6 +67,7 @@ Top level:
 - `dialog.py` - chart click dialogs and matchup-history modal
 - `chart.py` - Plotly render, baseline overlay, share link, click dispatch
 - `comparison.py` - Overview / Current Standings tabs, the chart-season picker renderer, clickable predictions panel, and live standings board markup
+- `ui_state.py` - shared session-state helpers for modal-slot guards and chart selection reset
 - `stanley_cup.py` - current-standings / Cup-pick board builder
 - `url_params.py` - compact share-link encode/decode with legacy-link sanitization and canonicalization
 - `schedule.py` - live defaults, upcoming games, featured players, matchup-history loading, and runtime win-prob inference
@@ -161,8 +162,11 @@ One-shot guards:
 - `_url_loaded`
 - `_default_loaded`
 - `_preloaded`
+- `_dialog_opened_this_run`
 - `_pending_matchup_history`
 - `_last_matchup_history_trigger_nonce`
+- `_last_handled_chart_selection_signature`
+- `_chart_selection_reset_nonce`
 
 Season-mode memory:
 - `_pre_season_chart_x_axis_mode`
@@ -315,6 +319,8 @@ Chart duties handled in `chart.py`:
 - inject JS pan / zoom clamping
 - dispatch click data into `show_season_details()`
 - offer a Copy link control using compact URL params
+- suppress stale Plotly dialog replays when another modal is already queued
+- bump a chart-remount nonce after handled or suppressed clicks so sticky Plotly selection clears on the next rerun
 
 `comparison.py` defines `render_chart_season_picker()` and keeps it synced with the canonical
 `st.session_state["chart_season"]` value, but `app.py` places that picker in the left chart column
@@ -430,6 +436,9 @@ Matchup-history runtime rules:
 - the modal shows the latest 10 meetings across regular season and playoffs, newest first
 - `comparison.py` mounts a JS click bridge with `st.components.v2.component()` and intercepts
   prediction-card clicks before navigation so the modal feels in-app instead of like a full refresh
+- `app.py` pre-mounts that bridge once before the chart render; the predictions rail receives both
+  the latest payload and an explicit "already mounted" flag so Streamlit never mounts the same
+  bridge key twice in one rerun
 - the old `mh=AWY,HOME` query-param contract remains as a no-JS fallback
 - `dialog.show_matchup_history()` adds a plain-text summary of wins by each team above the cards
 
@@ -512,6 +521,9 @@ Key integration notes:
 - `comparison.py` stores tab memory per category via `panel_tab_skater`, `panel_tab_goalie`, and `panel_tab_team`
 - `comparison.py` now prefers a JS trigger from `st.components.v2.component()` for prediction-card
   clicks and falls back to the `mh` query param only when the JS bridge does not fire
+- `comparison.py` and `chart.py` now share a per-rerun dialog guard through `ui_state.py` so a
+  stale Plotly selection cannot reopen an old chart modal in the same rerun as a player-card or
+  matchup-history modal
 - `comparison.py` renders the predictions rail, but `app.py` owns the visible placement of the
   chart-season picker above the main chart
 - Team all-time cards and team season discovery must use franchise lineage (`TEAM_LINEAGES` /

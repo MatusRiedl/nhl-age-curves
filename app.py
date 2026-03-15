@@ -10,7 +10,13 @@ import streamlit as st
 from nhl.async_preloader import preload_all_categories
 from nhl.baselines import get_historical_baselines, get_team_baselines
 from nhl.chart import render_chart
-from nhl.comparison import render_chart_season_picker, render_detail_tabs, render_predictions_panel
+from nhl.comparison import (
+    _mount_matchup_history_click_bridge,
+    has_pending_matchup_history_dialog_request,
+    render_chart_season_picker,
+    render_detail_tabs,
+    render_predictions_panel,
+)
 from nhl.constants import ACTIVE_TEAMS
 from nhl.controls import render_controls
 from nhl.data_loaders import (
@@ -126,6 +132,7 @@ if '_pre_season_league_filter' not in st.session_state:
     st.session_state._pre_season_league_filter = None
 if '_pre_season_do_era' not in st.session_state:
     st.session_state._pre_season_do_era = None
+st.session_state["_dialog_opened_this_run"] = False
 
 if st.session_state.stat_category not in {"Skater", "Goalie", "Team"}:
     st.session_state.stat_category = "Skater"
@@ -217,6 +224,12 @@ with col_stats:
 with sub_col2:
     st.markdown("<div id='comparison-controls-panel'></div>", unsafe_allow_html=True)
     metric, do_cumul = render_controls()
+
+with predictions_slot:
+    # Mount the matchup-history bridge before the chart. The returned payload
+    # may be None even when the component is already mounted, so the panel gets
+    # an explicit mounted flag later to avoid double-mounting the same key.
+    matchup_history_trigger_value = _mount_matchup_history_click_bridge()
 
 # =============================================================================
 # Sidebar — renders player/team board and returns keys for chart cache-busting.
@@ -361,6 +374,7 @@ with chart_placeholder:
         do_era               = st.session_state.do_era,
         selected_season      = st.session_state.chart_season,
         share_params         = share_params,
+        suppress_dialogs     = has_pending_matchup_history_dialog_request(matchup_history_trigger_value),
     )
 
 with detail_placeholder:
@@ -379,7 +393,11 @@ with detail_placeholder:
     )
 
 with predictions_slot:
-    render_predictions_panel(share_params=share_params)
+    render_predictions_panel(
+        share_params=share_params,
+        matchup_history_trigger_value=matchup_history_trigger_value,
+        matchup_history_bridge_mounted=True,
+    )
 
 # =============================================================================
 # Footer
@@ -388,7 +406,7 @@ st.markdown("---")
 # Keep this visible version synced with the newest changelog entry
 st.markdown(
     "<p style='text-align:center;color:gray;font-size:14px;'>"
-    "Created by Iksperial. v0.99.4 -- 9,994 lines of Python<br>"
+    "Created by Iksperial. v0.99.5 -- 10,176 lines of Python<br>"
     "<em>Data is the only religion that strictly punishes you for ignoring it.</em>"
     "</p>",
     unsafe_allow_html=True,

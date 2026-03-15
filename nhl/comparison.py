@@ -29,6 +29,13 @@ from nhl.dialog import (
 )
 from nhl.schedule import get_upcoming_games
 from nhl.stanley_cup import build_stanley_cup_board
+from nhl.ui_state import (
+    dialog_slot_available,
+    mark_dialog_opened_this_run,
+    session_state_get,
+    session_state_pop,
+    session_state_set,
+)
 
 _TEAM_LOGO_URL = "https://assets.nhle.com/logos/nhl/svg/{abbr}_light.svg"
 _TEAM_SHORT_NAMES = {
@@ -903,7 +910,14 @@ def _noop_matchup_history_click_change() -> None:
 
 
 def _mount_matchup_history_click_bridge():
-    """Mount the JS click bridge and return the latest trigger payload."""
+    """Mount the prediction-card JS bridge once and return the latest payload.
+
+    The component's Streamlit key must stay unique per script run. `app.py`
+    pre-mounts this bridge before the chart renders, then passes both the
+    latest payload and an explicit "already mounted" flag into
+    `render_predictions_panel()` so the predictions rail does not try to mount
+    the same component a second time when no click has happened yet.
+    """
     result = _MATCHUP_HISTORY_CLICK_BRIDGE(
         key="comparison_matchup_history_click_bridge",
         on_clicked_change=_noop_matchup_history_click_change,
@@ -950,17 +964,19 @@ def _show_matchup_history_from_trigger(value) -> bool:
         return False
 
     away_abbr, home_abbr, nonce = parsed_trigger
-    try:
-        if st.session_state.get(_LAST_MATCHUP_HISTORY_TRIGGER_NONCE_SESSION_KEY) == nonce:
-            return False
-        st.session_state[_LAST_MATCHUP_HISTORY_TRIGGER_NONCE_SESSION_KEY] = nonce
-    except Exception:
-        pass
+    if session_state_get(_LAST_MATCHUP_HISTORY_TRIGGER_NONCE_SESSION_KEY) == nonce:
+        return False
+    session_state_set(_LAST_MATCHUP_HISTORY_TRIGGER_NONCE_SESSION_KEY, nonce)
+
+    if not dialog_slot_available():
+        session_state_set(_PENDING_MATCHUP_HISTORY_SESSION_KEY, (away_abbr, home_abbr))
+        return False
 
     show_matchup_history(
         away_abbr=away_abbr,
         home_abbr=home_abbr,
     )
+    mark_dialog_opened_this_run()
     return True
 
 
@@ -976,10 +992,7 @@ def _consume_matchup_history_request() -> None:
 
     parsed_request = _parse_matchup_history_request(raw_value)
     if parsed_request is not None:
-        try:
-            st.session_state[_PENDING_MATCHUP_HISTORY_SESSION_KEY] = parsed_request
-        except Exception:
-            pass
+        session_state_set(_PENDING_MATCHUP_HISTORY_SESSION_KEY, parsed_request)
 
     try:
         del st.query_params[_MATCHUP_HISTORY_QUERY_KEY]
@@ -987,14 +1000,33 @@ def _consume_matchup_history_request() -> None:
         pass
 
 
+def has_pending_matchup_history_dialog_request(matchup_history_trigger_value: str | None = None) -> bool:
+    """Return whether a matchup-history dialog is queued before chart rendering."""
+    parsed_trigger = _parse_matchup_history_trigger(matchup_history_trigger_value)
+    if parsed_trigger is not None:
+        _, _, nonce = parsed_trigger
+        if session_state_get(_LAST_MATCHUP_HISTORY_TRIGGER_NONCE_SESSION_KEY) != nonce:
+            return True
+
+    if session_state_get(_PENDING_MATCHUP_HISTORY_SESSION_KEY):
+        return True
+
+    try:
+        raw_value = dict(st.query_params).get(_MATCHUP_HISTORY_QUERY_KEY)
+    except Exception:
+        raw_value = None
+    return _parse_matchup_history_request(raw_value) is not None
+
+
 def _show_pending_matchup_history_dialog() -> None:
     """Open the pending matchup-history dialog exactly once."""
-    try:
-        pending_request = st.session_state.pop(_PENDING_MATCHUP_HISTORY_SESSION_KEY, None)
-    except Exception:
-        pending_request = None
+    pending_request = session_state_pop(_PENDING_MATCHUP_HISTORY_SESSION_KEY, None)
 
     if not pending_request:
+        return
+
+    if not dialog_slot_available():
+        session_state_set(_PENDING_MATCHUP_HISTORY_SESSION_KEY, pending_request)
         return
 
     away_abbr, home_abbr = pending_request
@@ -1002,6 +1034,7 @@ def _show_pending_matchup_history_dialog() -> None:
         away_abbr=away_abbr,
         home_abbr=home_abbr,
     )
+    mark_dialog_opened_this_run()
 
 
 def _noop_identity_card_click_change() -> None:
@@ -1067,25 +1100,46 @@ def _show_identity_card_from_trigger(value) -> bool:
         return False
 
     entity_kind, entity_value, nonce = parsed_trigger
-    try:
-        if st.session_state.get(_LAST_IDENTITY_CARD_TRIGGER_NONCE_SESSION_KEY) == nonce:
-            return False
-        st.session_state[_LAST_IDENTITY_CARD_TRIGGER_NONCE_SESSION_KEY] = nonce
-    except Exception:
-        pass
+    if session_state_get(_LAST_IDENTITY_CARD_TRIGGER_NONCE_SESSION_KEY) == nonce:
+        return False
+    session_state_set(_LAST_IDENTITY_CARD_TRIGGER_NONCE_SESSION_KEY, nonce)
+
+    if not dialog_slot_available():
+        return False
 
     if entity_kind == "player":
         show_player_identity_details(int(entity_value))
+        mark_dialog_opened_this_run()
         return True
     if entity_kind == "team":
         show_team_identity_details(entity_value)
+        mark_dialog_opened_this_run()
         return True
     return False
 
 
-def render_predictions_panel(share_params: dict | None = None) -> None:
-    """Render the dedicated Predictions panel in the desktop right rail."""
-    trigger_value = _mount_matchup_history_click_bridge()
+def render_predictions_panel(
+    share_params: dict | None = None,
+    matchup_history_trigger_value: str | None = None,
+    matchup_history_bridge_mounted: bool = False,
+) -> None:
+    """Render the dedicated Predictions panel in the desktop right rail.
+
+    Args:
+        share_params: Canonical URL params used to keep prediction-card links
+            shareable without mutating the visible board state.
+        matchup_history_trigger_value: Latest click payload from the JS bridge.
+            This can legitimately be `None` even when the bridge is already
+            mounted and idle.
+        matchup_history_bridge_mounted: Whether the JS bridge was already
+            mounted earlier in the same rerun. This prevents duplicate
+            component-key errors when `app.py` pre-mounts the bridge so the
+            chart can suppress stale Plotly dialogs while a matchup modal is
+            pending.
+    """
+    trigger_value = matchup_history_trigger_value
+    if not matchup_history_bridge_mounted:
+        trigger_value = _mount_matchup_history_click_bridge()
     st.markdown("<div id='comparison-predictions-panel'></div>", unsafe_allow_html=True)
     st.markdown(
         "<div class='comparison-panel-heading comparison-panel-heading--rail-title comparison-panel-heading--predictions'>Next matches prediction</div>",
