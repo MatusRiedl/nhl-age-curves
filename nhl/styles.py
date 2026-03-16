@@ -1241,12 +1241,12 @@ _CSS = """
         }
         /* DESKTOP — Whole career / Metric Selections row: negative pull closes gap below chart */
         [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
-            margin-top: -3.4rem !important;
+            margin-top: -2.4rem !important;
         }
         /* MOBILE — Whole career / Metric Selections row: stronger pull + removes side padding */
         @media (max-width: 768px) {
             [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
-                margin-top: -3.6rem !important;
+                margin-top: -2.4rem !important;
                 padding-left: 0rem !important;
                 padding-right: 0rem !important;
             }
@@ -1292,7 +1292,7 @@ _CSS = """
         @media (min-width: 1281px) and (max-width: 1400px) {
             /* controls-row: pulls "Whole career / Metric Selections" row up under the chart */
             [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
-                margin-top: -3.4rem !important;
+                margin-top: -2.4rem !important;
             }
             /* controls-panel: Metric Selections button fine-offset within the controls row */
             div:has(> #comparison-controls-panel) + div {
@@ -1322,7 +1322,7 @@ _CSS = """
         @media (min-width: 1025px) and (max-width: 1280px) {
             /* controls-row: pulls "Whole career / Metric Selections" row up under the chart */
             [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
-                margin-top: -3.4rem !important;
+                margin-top: -2.4rem !important;
             }
             /* controls-panel: Metric Selections button fine-offset within the controls row */
             div:has(> #comparison-controls-panel) + div {
@@ -1352,7 +1352,7 @@ _CSS = """
         @media (min-width: 769px) and (max-width: 1024px) {
             /* controls-row: pulls "Whole career / Metric Selections" row up under the chart */
             [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
-                margin-top: -3.2rem !important;
+                margin-top: -2.4rem !important;
             }
             /* controls-panel: Metric Selections button fine-offset within the controls row */
             div:has(> #comparison-controls-panel) + div {
@@ -1796,7 +1796,7 @@ _CSS = """
             }
             /* controls-row: "Whole career / Metric Selections" gap from chart bottom */
             [data-testid="stHorizontalBlock"]:has(#comparison-season-filter) {
-                margin-top: -3.35rem !important;
+                margin-top: -2.4rem !important;
             }
             /* controls-panel: Metric Selections button fine-offset within the row */
             div:has(> #comparison-controls-panel) + div {

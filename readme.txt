@@ -65,7 +65,7 @@ Top level:
 - `controls.py` - top controls expander
 - `sidebar.py` - sidebar UI and add/remove flows
 - `dialog.py` - chart click dialogs and matchup-history modal
-- `chart.py` - Plotly render, baseline overlay, share link, chart click bridge, and dialog dispatch
+- `chart.py` - Plotly render, baseline overlay, share link, native point-click dispatch, and dialog routing
 - `comparison.py` - Overview / Current Standings tabs, the chart-season picker renderer, clickable predictions panel, and live standings board markup
 - `ui_state.py` - shared session-state helpers for modal-slot guards
 - `stanley_cup.py` - current-standings / Cup-pick board builder
@@ -317,22 +317,18 @@ Chart duties handled in `chart.py`:
 - link each player's projected trace to the same legend toggle so one click hides or shows both
 - render compact chart header text
 - inject JS pan / zoom clamping
-- mount a `st.components.v2.component()` bridge that listens for `plotly_click`
-- on touch devices, supplement `plotly_click` with a tap proxy that reads `plot._hoverdata`
-  directly: passive touch listeners on `.nsewdrag` detect taps (< 15 px, < 400 ms) and
-  touchend reads Plotly's internal hover state to emit the click payload.  Desktop is
-  unaffected (`plotly_click` still fires directly).  A 500 ms JS debounce prevents double-fires.
-- the bridge uses `getAppWindow()` to locate the frame containing the Plotly chart.
-  On localhost the chart lives in `window.parent`; on Streamlit Cloud the v2 component
-  iframe is a *sibling* of the app iframe (both children of a thin shell page), so the
-  bridge searches the parent's child iframes for the one with `.js-plotly-plot` elements.
-  The discovered window is cached after first hit.
-- emit one nonce-tagged click payload with `trace_name`, `x`, `y`, and `customdata`
-- dispatch bridge click data into `show_season_details()` or `show_team_game_details()`
+- use Streamlit's native `on_select="rerun"` with `selection_mode="points"` to capture point
+  clicks; works in both localhost and Streamlit Cloud sandboxed iframes without any JS bridge
+- `_handle_native_chart_selection()` consumes the selection event, resolves the trace name
+  from `fig.data[curve_number].name`, and calls `_dispatch_chart_click_point()` directly
+- dispatch routes into `show_season_details()` or `show_team_game_details()`
 - offer a Copy link control using compact URL params
 - tune `hovermode='closest'` and a larger `hoverdistance` so taps near the visible line resolve to the nearest point more reliably
-- suppress queued chart clicks when another modal is already reserved for the rerun
-- deduplicate bridge payloads by nonce instead of relying on Plotly selection state or chart remount resets
+- suppress chart clicks when another modal is already reserved for the rerun (gate check runs
+  before the dedup key is written, so a suppressed rerun does not poison the click)
+- deduplicate by a `curve|point|x|y` selection key in `_last_handled_chart_click_nonce`;
+  deselection (empty points payload) clears the key so the same point is re-clickable without
+  a chart remount — click background to reset, then click the point again
 
 `comparison.py` defines `render_chart_season_picker()` and keeps it synced with the canonical
 `st.session_state["chart_season"]` value, but `app.py` places that picker in the left chart column
@@ -533,8 +529,8 @@ Key integration notes:
 - `comparison.py` stores tab memory per category via `panel_tab_skater`, `panel_tab_goalie`, and `panel_tab_team`
 - `comparison.py` now prefers a JS trigger from `st.components.v2.component()` for prediction-card
   clicks and falls back to the `mh` query param only when the JS bridge does not fire
-- `chart.py` now uses its own `plotly_click` bridge instead of Streamlit selection state, while
-  `comparison.py` keeps the prediction-card and identity-card bridges on the same `st.components.v2.component()` pattern
+- `chart.py` uses Streamlit's native `on_select="rerun"` for point clicks; `comparison.py` keeps
+  the prediction-card and identity-card bridges on the `st.components.v2.component()` pattern
 - `comparison.py` and `chart.py` still share a per-rerun dialog guard through `ui_state.py` so
   chart dialogs, player-card dialogs, and matchup-history dialogs do not collide in one rerun
 - `comparison.py` renders the predictions rail, but `app.py` owns the visible placement of the
