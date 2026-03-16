@@ -17,10 +17,12 @@ import streamlit as st
 
 _CSS = """
     <style>
-        /* GLOBAL — header toolbar: hide Share and Deploy buttons, keep three-dot menu */
+        /* GLOBAL — header: hide Share/Deploy toolbar buttons and Manage App widget */
         [data-testid="stToolbarActionButton"],
+        [data-testid="stDeployButton"],
         [data-testid="stStatusWidget"],
-        [data-testid="stDecoration"] {
+        [data-testid="stDecoration"],
+        [data-testid="manage-app-button"] {
             display: none !important;
         }
 
