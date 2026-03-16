@@ -20,13 +20,18 @@ _CSS = """
         /* DESKTOP — main content area: top/bottom/left/right edge padding */
         .block-container { padding-top: 3.85rem !important; padding-bottom: 0rem !important; padding-left: 2rem !important; padding-right: 2rem !important; }
 
+        /* DESKTOP — FAQ button: negative margin-top pulls it up without touching the collapse button */
+        div.element-container:has(.faq-btn-anchor) {
+            margin-top: -3rem !important;  /* ← adjust to move FAQ button up/down */
+        }
+
         /* DESKTOP — sidebar logo container: centers the brand image horizontally */
         [data-testid="stSidebar"] .sidebar-brand {
             display: flex;
             align-items: center;
             justify-content: center;
             width: 100%;
-            margin: 0 0 0.65rem 0;
+            margin: rem 0 0.65rem 0;  /* ← first value = top margin (e.g. -1rem pulls logo up) */
         }
 
         /* DESKTOP — sidebar logo image: full-width with glow drop-shadow */
@@ -1862,6 +1867,57 @@ def get_header_logo_data_uri() -> str:
         return f"data:image/png;base64,{base64.b64encode(logo_bytes).decode('ascii')}"
 
     return ""
+
+
+def get_bb_logo_data_uri() -> str:
+    """Return the BB brand logo PNG as an inline image data URI.
+
+    Returns:
+        str: Base64-encoded PNG data URI for embedding the BB logo,
+            or an empty string if the PNG asset is unavailable.
+    """
+    logo_path = Path(__file__).resolve().parent.parent / "assets" / "BB.png"
+    if logo_path.exists():
+        logo_bytes = logo_path.read_bytes()
+        return f"data:image/png;base64,{base64.b64encode(logo_bytes).decode('ascii')}"
+    return ""
+
+
+def inject_header_bb_logo() -> None:
+    """Inject BB.png centered in the Streamlit top header bar via CSS pseudo-element.
+
+    The logo is positioned absolutely at the horizontal center of the sticky
+    header and sized to fit neatly within the bar height.
+    Must be called once per app run, after st.set_page_config().
+    """
+    data_uri = get_bb_logo_data_uri()
+    if not data_uri:
+        return
+    css = f"""
+    <style>
+        /* CENTER — BB logo pinned to the middle of the Streamlit top header bar */
+        [data-testid="stHeader"] {{
+            position: relative;
+            margin-bottom: -5rem;  /* ← negative value pulls page content up (e.g. -1rem) */
+        }}
+        [data-testid="stHeader"]::after {{
+            content: "";
+            display: block;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 270px;
+            height: 48px;
+            background-image: url('{data_uri}');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            pointer-events: none;
+        }}
+    </style>
+    """
+    st.markdown(css, unsafe_allow_html=True)
 
 
 def inject_css() -> None:

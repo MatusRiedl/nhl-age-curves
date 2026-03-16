@@ -30,7 +30,7 @@ from nhl.data_loaders import (
 )
 from nhl.player_pipeline import process_players
 from nhl.sidebar import render_sidebar
-from nhl.styles import get_favicon_path, inject_css, inject_mobile_dropdown_fix
+from nhl.styles import get_favicon_path, inject_css, inject_header_bb_logo, inject_mobile_dropdown_fix
 from nhl.team_pipeline import process_teams
 from nhl.schedule import get_featured_players, get_live_or_recent_game
 from nhl.url_params import (
@@ -97,6 +97,7 @@ st.set_page_config(
 )
 inject_css()
 inject_mobile_dropdown_fix()
+inject_header_bb_logo()
 
 # =============================================================================
 # URL params — load once per session, before session state defaults are applied.
