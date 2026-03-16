@@ -17,6 +17,11 @@ import streamlit as st
 
 _CSS = """
     <style>
+        /* GLOBAL — header toolbar: hide Share and Deploy buttons, keep three-dot menu */
+        [data-testid="stToolbarActions"] > *:not(:last-child) {
+            display: none !important;
+        }
+
         /* DESKTOP — main content area: top/bottom/left/right edge padding */
         .block-container { padding-top: 3.85rem !important; padding-bottom: 0rem !important; padding-left: 2rem !important; padding-right: 2rem !important; }
 
