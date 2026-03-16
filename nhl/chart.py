@@ -834,6 +834,120 @@ def _show_chart_dialog_from_trigger(
     )
 
 
+def _handle_native_chart_selection(
+    selection_event,
+    fig,
+    *,
+    suppress_dialogs: bool,
+    team_mode: bool,
+    games_mode: bool,
+    is_single_season_team_games: bool,
+    has_exact_game_custom_data: bool,
+    metric: str,
+    final_df: pd.DataFrame,
+    raw_dfs_cache: list,
+    season_type: str,
+    selected_season: str | int,
+    do_cumul: bool,
+    ml_clones_dict: dict,
+    historical_baselines: dict,
+    stat_category: str,
+    do_era: bool,
+) -> bool:
+    """Handle a native Plotly on_select event and open at most one dialog.
+
+    Args:
+        selection_event: Return value from st.plotly_chart with on_select="rerun".
+        fig: The active Plotly figure (used to resolve trace names by index).
+        suppress_dialogs: When True chart dialogs are suppressed this rerun.
+        team_mode: Whether the chart is rendering team traces.
+        games_mode: Whether the x-axis uses games played.
+        is_single_season_team_games: Whether team selected-season game mode is active.
+        has_exact_game_custom_data: Whether player game rows carry exact game metadata.
+        metric: Active chart metric.
+        final_df: Concatenated chart dataframe.
+        raw_dfs_cache: Raw player frames used by dialogs.
+        season_type: Active season scope.
+        selected_season: Active chart season.
+        do_cumul: Whether cumulative view is active.
+        ml_clones_dict: Cached projection clone payloads.
+        historical_baselines: Cached baseline payloads.
+        stat_category: Active stat category.
+        do_era: Whether era adjustment is active for the visible metric.
+
+    Returns:
+        True when a dialog was opened, else False.
+    """
+    # Harden payload access — Streamlit docs describe the return as "dict-like"
+    points = []
+    selection = getattr(selection_event, "selection", None) if selection_event else None
+    if selection:
+        points = selection.get("points", []) or []
+
+    if not points:
+        # Deselection (user clicked background): clear nonce so the same point
+        # can be re-opened on the next click without a chart remount.
+        session_state_set(LAST_HANDLED_CHART_CLICK_NONCE_SESSION_KEY, None)
+        return False
+
+    if len(points) != 1:
+        # Unexpected multi-point payload — clear stale dedup state and bail.
+        session_state_set(LAST_HANDLED_CHART_CLICK_NONCE_SESSION_KEY, None)
+        return False
+
+    pt = points[0]
+    curve_number = pt.get("curve_number", 0)
+    selection_key = f"{curve_number}|{pt.get('point_number')}|{pt.get('x')}|{pt.get('y')}"
+
+    # Gate checks BEFORE writing the nonce — don't poison the click as "handled"
+    # if we aren't actually going to handle it.
+    if suppress_dialogs or not dialog_slot_available():
+        return False
+
+    if session_state_get(LAST_HANDLED_CHART_CLICK_NONCE_SESSION_KEY) == selection_key:
+        return False
+    session_state_set(LAST_HANDLED_CHART_CLICK_NONCE_SESSION_KEY, selection_key)
+
+    # Resolve trace name from the figure (more reliable than payload fields)
+    try:
+        trace_name = fig.data[curve_number].name or ""
+    except Exception:
+        trace_name = ""
+
+    custom_data = pt.get("customdata", [])
+    if isinstance(custom_data, tuple):
+        custom_data = list(custom_data)
+    if not isinstance(custom_data, list):
+        custom_data = []
+
+    normalized_point = {
+        "x": pt.get("x"),
+        "y": pt.get("y"),
+        "customdata": custom_data,
+        "curve_number": curve_number,
+        "point_number": pt.get("point_number"),
+    }
+
+    return _dispatch_chart_click_point(
+        normalized_point,
+        trace_name=trace_name,
+        team_mode=team_mode,
+        games_mode=games_mode,
+        is_single_season_team_games=is_single_season_team_games,
+        has_exact_game_custom_data=has_exact_game_custom_data,
+        metric=metric,
+        final_df=final_df,
+        raw_dfs_cache=raw_dfs_cache,
+        season_type=season_type,
+        selected_season=selected_season,
+        do_cumul=do_cumul,
+        ml_clones_dict=ml_clones_dict,
+        historical_baselines=historical_baselines,
+        stat_category=stat_category,
+        do_era=do_era,
+    )
+
+
 def _build_chart_glow_style(player_colors: dict) -> str:
     """Return a <style> block that illuminates the chart center with player trace colors.
 
@@ -1988,11 +2102,13 @@ def render_chart(
         unsafe_allow_html=True,
     )
 
-    st.plotly_chart(
+    _native_selection = st.plotly_chart(
         fig,
-        use_container_width = True,
-        key                 = chart_key,
-        config              = plotly_config,
+        width           = "stretch",
+        key             = chart_key,
+        config          = plotly_config,
+        on_select       = "rerun",
+        selection_mode  = "points",
     )
 
     # ------------------------------------------------------------------
@@ -2490,10 +2606,9 @@ def render_chart(
 }})();
 </script>""", height=0)
 
-    chart_click_trigger_value = _mount_chart_click_bridge(chart_key)
-    _show_chart_dialog_from_trigger(
-        chart_click_trigger_value,
-        chart_key,
+    _handle_native_chart_selection(
+        _native_selection,
+        fig,
         suppress_dialogs=suppress_dialogs,
         team_mode=team_mode,
         games_mode=games_mode,
