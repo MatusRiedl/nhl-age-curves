@@ -18,7 +18,9 @@ import streamlit as st
 _CSS = """
     <style>
         /* GLOBAL — header toolbar: hide Share and Deploy buttons, keep three-dot menu */
-        [data-testid="stToolbarActions"] > *:not(:last-child) {
+        [data-testid="stToolbarActionButton"],
+        [data-testid="stStatusWidget"],
+        [data-testid="stDecoration"] {
             display: none !important;
         }
 
