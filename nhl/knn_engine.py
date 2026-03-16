@@ -37,34 +37,42 @@ def _build_clone_names(
     clone_details_map: dict,
     id_to_name_map: dict,
     stat_category: str,
+    career_years_map: dict | None = None,
 ) -> list:
     """Build the clone detail list for the projection dialog popup.
 
     Args:
-        top_ids:           Index of the 10 nearest-neighbour player IDs.
-        clone_details_map: {playerId: stats_dict} from data_loaders.
-        id_to_name_map:    {playerId: name} from data_loaders.
-        stat_category:     'Skater' or 'Goalie'.
+        top_ids:            Index of the 10 nearest-neighbour player IDs.
+        clone_details_map:  {playerId: stats_dict} from data_loaders.
+        id_to_name_map:     {playerId: name} from data_loaders.
+        stat_category:      'Skater' or 'Goalie'.
+        career_years_map:   {playerId: (first_yy, last_yy)} derived from hist_df SeasonYear.
 
     Returns:
-        List of clone dicts, each containing at minimum: name, team.
+        List of clone dicts, each containing at minimum: name, team, years.
         Skater dicts also have: gp, pts, g, a, pm.
         Goalie dicts also have: gp, w, sv, so.
     """
+    if career_years_map is None:
+        career_years_map = {}
     clone_names = []
     for c_id in top_ids:
         detail = clone_details_map.get(int(c_id))
+        yr_pair = career_years_map.get(int(c_id))
+        years_str = f"'{yr_pair[0]}-'{yr_pair[1]}" if yr_pair else ''
         if detail:
-            clone_names.append(detail.copy())
+            entry = detail.copy()
+            entry['years'] = years_str
+            clone_names.append(entry)
         else:
             c_name = id_to_name_map.get(int(c_id), f"Unknown (ID {c_id})")
             if stat_category == "Skater":
                 clone_names.append(
-                    {'name': c_name, 'team': '—', 'gp': 0, 'pts': 0, 'g': 0, 'a': 0, 'pm': 0}
+                    {'name': c_name, 'team': '—', 'gp': 0, 'pts': 0, 'g': 0, 'a': 0, 'pm': 0, 'years': years_str}
                 )
             else:
                 clone_names.append(
-                    {'name': c_name, 'team': '—', 'gp': 0, 'w': 0, 'sv': 0, 'so': 0}
+                    {'name': c_name, 'team': '—', 'gp': 0, 'w': 0, 'sv': 0, 'so': 0, 'years': years_str}
                 )
     return clone_names
 
@@ -210,6 +218,13 @@ def run_knn_projection(
     if len(valid_hist) == 0:
         return [], []
 
+    # Exclude the current player from their own comparison set
+    current_pid = int(career_df['PlayerID'].iloc[0]) if 'PlayerID' in career_df.columns else None
+    if current_pid is not None and current_pid in valid_hist.index:
+        valid_hist = valid_hist.drop(current_pid)
+    if len(valid_hist) == 0:
+        return [], []
+
     # Tier pre-filter: clones must have career peak >= 50% of live player's peak
     current_peak = max(match_vals) if match_vals else 0
     if current_peak > 0 and metric not in RATE_STATS and metric not in ['+/-', 'GP']:
@@ -227,8 +242,19 @@ def run_knn_projection(
     n_shared = valid_hist[valid_ages].notna().sum(axis=1).clip(lower=1)
     dist     = dist / n_shared
 
+    # Build career year ranges from the raw hist_df (SeasonYear is not era-adjusted)
+    career_years_map: dict = {}
+    if 'SeasonYear' in hist_df.columns and 'PlayerID' in hist_df.columns:
+        yr = hist_df.groupby('PlayerID')['SeasonYear'].agg(['min', 'max'])
+        career_years_map = {
+            int(pid): (str(int(row['min']))[2:], str(int(row['max']))[2:])
+            for pid, row in yr.iterrows()
+        }
+
     top_ids        = dist.nsmallest(10).index
-    clone_names    = _build_clone_names(top_ids, clone_details_map, id_to_name_map, stat_category)
+    clone_names    = _build_clone_names(
+        top_ids, clone_details_map, id_to_name_map, stat_category, career_years_map
+    )
 
     last_avg = (
         valid_hist.loc[top_ids, valid_ages[-1]].dropna().mean()

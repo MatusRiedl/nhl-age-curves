@@ -1099,8 +1099,10 @@ def show_season_details(
 
             for c in clones:
                 tm = f"[{c['team']}] " if c.get('team') and c['team'] != '—' else ""
+                yrs = c.get('years', '')
+                yr_str = f" ({yrs})" if yrs else ""
                 table_html += "<tr style='border-bottom:1px solid #333;'>"
-                table_html += f"<td style='padding:3px 4px; white-space:nowrap;'>{tm}{c['name']}</td>"
+                table_html += f"<td style='padding:3px 4px; white-space:nowrap;'>{tm}{c['name']}{yr_str}</td>"
                 if is_skater_mode:
                     table_html += (
                         f"<td style='text-align:right; padding:3px 4px;'>{c.get('gp', 0)}</td>"
