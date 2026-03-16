@@ -72,15 +72,17 @@ _CSS = """
             margin-top: 0 !important;
         }
 
-        /* MOBILE — tighter block-container padding (top/left/right); logo width override */
+        /* MOBILE — tighter block-container padding (top/left/right); lock sidebar to vertical-only scroll */
         @media (max-width: 768px) {
             .block-container {
                 padding-top: 2rem !important;
                 padding-left: 0.5rem !important;
                 padding-right: 0.5rem !important;
             }
-            [data-testid="stSidebar"] .sidebar-brand__image {
-                width: 500%;
+            section[data-testid="stSidebar"],
+            section[data-testid="stSidebar"] > div:first-child {
+                overflow-x: hidden !important;
+                touch-action: pan-y !important;
             }
         }
 
