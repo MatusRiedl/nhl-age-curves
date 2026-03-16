@@ -1,3 +1,7 @@
+[client]
+showSidebarNavigation = true
+toolbarMode = "minimal"
+
 [theme]
 base                     = "dark"
 primaryColor             = "#2596be"

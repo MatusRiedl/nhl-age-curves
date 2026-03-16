@@ -17,13 +17,22 @@ import streamlit as st
 
 _CSS = """
     <style>
-        /* GLOBAL — header: hide Share/Deploy toolbar buttons and Manage App widget */
-        [data-testid="stToolbarActionButton"],
+        /* GLOBAL — header: hide Deploy button and Manage App widget */
+        .stDeployButton,
         [data-testid="stDeployButton"],
+        #MainMenu > button[kind="header"],
+        header [data-testid="stToolbarActionButton"],
+        .stAppDeployButton,
+        footer,
+        #manage-app-button,
+        [data-testid="manage-app-button"],
         [data-testid="stStatusWidget"],
         [data-testid="stDecoration"],
-        [data-testid="manage-app-button"] {
+        .viewerBadge_container__r5tak,
+        ._profileContainer_gzau3_53,
+        ._container_gzau3_1 {
             display: none !important;
+            visibility: hidden !important;
         }
 
         /* DESKTOP — main content area: top/bottom/left/right edge padding */
